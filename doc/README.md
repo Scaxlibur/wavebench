@@ -91,6 +91,7 @@ RIGOL DG4202 @ 192.168.123.3
 PyVISA + NI-VISA verified
 resource = TCPIP::192.168.123.3::INSTR
 fixed-mode write/readback on DG4202 channel output verified
+source set-frequency settle delay configurable via settle_ms_after_set_frequency
 ```
 
 ### 推荐实机命令

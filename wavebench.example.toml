@@ -91,3 +91,6 @@ check_errors = true
 
 # When setting a fixed frequency, switch SWE -> FIX first if needed.
 ensure_fix_mode_on_set_frequency = true
+
+# Extra wait after setting a fixed source frequency, in milliseconds.
+settle_ms_after_set_frequency = 500

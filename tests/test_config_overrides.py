@@ -1,7 +1,8 @@
 import unittest
+import tempfile
 from pathlib import Path
 
-from wavebench.config import AutoscaleConfig, ConnectionConfig, OutputConfig, ScopeConfig, WaveBenchConfig, WaveformConfig
+from wavebench.config import AutoscaleConfig, ConnectionConfig, OutputConfig, ScopeConfig, WaveBenchConfig, WaveformConfig, load_config
 
 
 class ConfigOverrideTests(unittest.TestCase):
@@ -85,3 +86,50 @@ class ConfigOverrideTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SourceConfigTests(unittest.TestCase):
+    def test_loads_source_settle_delay(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "wavebench.toml"
+            path.write_text("""
+[connection]
+backend = "lan"
+resource = "TCPIP::127.0.0.1::INSTR"
+timeout_ms = 1000
+opc_timeout_ms = 1000
+
+[scope]
+driver = "rtm2032"
+default_channel = 1
+reset_before_run = false
+check_errors = true
+
+[autoscale]
+wait_opc = true
+check_errors = true
+
+[waveform]
+format = "real"
+byte_order = "lsbf"
+points = "def"
+
+[output]
+directory = "data/raw"
+package_naming = "timestamp_label"
+save_csv = true
+save_npy = true
+save_json = true
+save_commands_log = true
+save_screenshot = false
+
+[source]
+driver = "dg4202"
+resource = "TCPIP::192.168.123.3::INSTR"
+default_channel = 2
+settle_ms_after_set_frequency = 500
+""", encoding="utf-8")
+            config = load_config(path)
+            self.assertIsNotNone(config.source)
+            self.assertEqual(config.source.default_channel, 2)
+            self.assertEqual(config.source.settle_ms_after_set_frequency, 500)

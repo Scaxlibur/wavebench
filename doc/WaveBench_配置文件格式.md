@@ -127,6 +127,7 @@ resource = "TCPIP::192.168.123.3::INSTR"
 default_channel = 1
 check_errors = true
 ensure_fix_mode_on_set_frequency = true
+settle_ms_after_set_frequency = 500
 ```
 
 ## `[connection]`
@@ -229,6 +230,7 @@ resource = "TCPIP::192.168.123.3::INSTR"
 default_channel = 1
 check_errors = true
 ensure_fix_mode_on_set_frequency = true
+settle_ms_after_set_frequency = 500
 ```
 
 默认保存：
@@ -304,6 +306,7 @@ resource = "TCPIP::192.168.123.3::INSTR"
 default_channel = 1
 check_errors = true
 ensure_fix_mode_on_set_frequency = true
+settle_ms_after_set_frequency = 500
 ```
 
 当前第二阶段信号源只支持：
@@ -317,3 +320,8 @@ driver = "dg4202"
 - `resource` 是信号发生器的 VISA 资源串。
 - `default_channel` 是 `wavebench source ...` 未显式传 `--channel` 时使用的通道。
 - `ensure_fix_mode_on_set_frequency = true` 表示在执行 `source set-freq` 前，若仪器当前处于 `SWE` 模式，则先切到 `FIX`，避免把 sweep 频率误当成固定频率输出。
+
+
+### `settle_ms_after_set_frequency`
+
+`source set-freq` 鍐欏叆棰戠巼鍚庝細鎸夎閰嶇疆绛夊緟鎸囧畾姣鏁帮紝鍐嶈繑鍥炵姸鎬併€傜鏁ｆ壂鐐瑰缓璁粠 `500` 寮€濮嬶紝閬垮厤淇″彿婧愬垰鍒囨崲棰戠偣鏃剁ず娉㈠櫒璇诲埌杩囨浮鐘舵€併€俓n
