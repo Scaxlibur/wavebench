@@ -208,7 +208,7 @@ UINT 路线需要 `XORigin? / XINCrement? / YORigin? / YINCrement? / YRESolution
 当前实现注意：
 
 - `scope fetch` 已符合本文定义：读取当前波形，不触发新采集。
-- `scope capture` 当前版本（`9c9cc32`）已经能生成采集包，但还没有执行 `SINGle + *OPC?`。
+- `scope capture` 当前版本（`9c9cc32`）已经能生成采集包；后续 `capture-single` 实现改为执行 `SINGle + *OPC?`。
 - 下一步需要决定 `capture` 是否严格按本文定义触发单次采集；如果是，就要补触发超时提示和 failed package。
 
 ## `DATA:POINts` 注意事项

@@ -78,8 +78,16 @@ class ScopeService:
         commands_log_path = package_dir / "commands.log" if self.config.output.save_commands_log else None
         if commands_log_path is not None:
             self.logger.path = commands_log_path
-        instrument_idn = self.idn()
-        waveform = self.fetch_waveform(channel=channel)
+        scope = self._open_scope()
+        try:
+            instrument_idn = scope.idn()
+            waveform = scope.capture_waveform(
+                channel=channel,
+                points=self.config.waveform.points,
+                check_errors=self.config.scope.check_errors,
+            )
+        finally:
+            scope.close()
         times = waveform.times_s
         files: dict[str, str] = {}
         csv_path: Path | None = None
@@ -101,7 +109,7 @@ class ScopeService:
 
         metadata: dict[str, Any] = {
             "instrument": {"idn": instrument_idn, "resource": self.config.connection.resource},
-            "operation": {"command": "scope capture", "channel": channel, "label": label},
+            "operation": {"command": "scope capture", "channel": channel, "label": label, "triggered_single": True},
             "waveform": {
                 "header": {
                     "x_start_s": waveform.header.x_start,

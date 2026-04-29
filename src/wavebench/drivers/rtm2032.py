@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from wavebench.errors import DataError, InstrumentError
+from wavebench.errors import DataError, InstrumentError, OperationTimeout
 from wavebench.transport.base import InstrumentTransport
 
 @dataclass(frozen=True)
@@ -100,20 +100,43 @@ class RTM2032Scope:
         if check_errors:
             self.assert_no_errors()
 
-    def fetch_waveform(self, channel: int, points: str = "dmax", check_errors: bool = True) -> WaveformData:
+    def _setup_real_waveform_transfer(self, channel: int, points: str) -> None:
         if channel < 1:
             raise DataError("channel must be >= 1")
         self.transport.write(f"CHAN{channel}:STAT ON")
         self.transport.write("FORM REAL")
         self.transport.write("FORM:BORD LSBF")
         self.transport.write(f"CHAN:DATA:POIN {points.upper()}")
+
+    def _read_waveform(self, channel: int) -> WaveformData:
         header = parse_waveform_header(self.transport.query(f"CHAN{channel}:DATA:HEAD?"))
         voltages = np.asarray(self.transport.query_float_list(f"CHAN{channel}:DATA?"), dtype=np.float64)
         if voltages.size != header.points:
             raise DataError(f"waveform length mismatch: header says {header.points}, got {voltages.size}")
+        return WaveformData(channel=channel, header=header, voltages_v=voltages)
+
+    def fetch_waveform(self, channel: int, points: str = "dmax", check_errors: bool = True) -> WaveformData:
+        self._setup_real_waveform_transfer(channel=channel, points=points)
+        waveform = self._read_waveform(channel=channel)
         if check_errors:
             self.assert_no_errors()
-        return WaveformData(channel=channel, header=header, voltages_v=voltages)
+        return waveform
+
+    def capture_waveform(self, channel: int, points: str = "dmax", check_errors: bool = True) -> WaveformData:
+        self.transport.write("*CLS")
+        self._setup_real_waveform_transfer(channel=channel, points=points)
+        self.transport.write("SINGle")
+        try:
+            self.transport.query_opc()
+        except Exception as exc:
+            raise OperationTimeout(
+                "single acquisition timed out while waiting for *OPC?. "
+                "Check trigger source/level, or use `scope fetch` to read the current waveform."
+            ) from exc
+        waveform = self._read_waveform(channel=channel)
+        if check_errors:
+            self.assert_no_errors()
+        return waveform
 
     def close(self) -> None:
         self.transport.close()

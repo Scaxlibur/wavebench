@@ -91,7 +91,8 @@ voltage = about -0.5 V .. 0.62 V
 
 ### 下一步
 
-- [ ] 对齐 `scope capture` 语义：决定并实现是否默认执行 `SINGle + *OPC?`，以及触发超时后的提示 / failed package 行为。
+- [x] 对齐 `scope capture` 语义：默认执行 `SINGle + *OPC?`。
+- [ ] 补完整触发超时后的 failed package 行为。
 - [ ] 给采集包增加数据质量检查：频率估计、Vpp、均值、点数与 header 一致性摘要。
 - [ ] 明确多通道策略：先支持 `--channel 2` 单通道，还是直接支持 `--channel 1 --channel 2` 逐通道采集。
 
