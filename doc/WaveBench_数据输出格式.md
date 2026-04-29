@@ -434,3 +434,44 @@ commands.log
 ```
 
 配置错误或连接未建立前的失败不会生成采集包；连接成功后发生的采集/仪器/数据错误会生成 failed package，便于复盘 SCPI 序列和仪器错误队列。
+
+
+## 多通道采集包
+
+当 `scope capture` 接收多个 `--channel` 参数时，WaveBench 会生成一个采集包，并按通道分别写文件：
+
+```text
+<package>/
+  ch1.npy
+  ch2.npy
+  metadata.json
+  commands.log
+```
+
+`metadata.json` 使用 `channels` 字段保存逐通道数据：
+
+```json
+{
+  "operation": {
+    "command": "scope capture",
+    "channels": [1, 2],
+    "trigger_mode": "sequential_per_channel"
+  },
+  "channels": {
+    "1": {
+      "header": {},
+      "summary": {}
+    },
+    "2": {
+      "header": {},
+      "summary": {}
+    }
+  },
+  "files": {
+    "1": {"npy": ".../ch1.npy"},
+    "2": {"npy": ".../ch2.npy"}
+  }
+}
+```
+
+当前多通道语义是逐通道采集，不保证通道间同一时刻采样，也不假设不同通道接入的是同一个信号。频率、幅度和 warning 都按通道独立计算。

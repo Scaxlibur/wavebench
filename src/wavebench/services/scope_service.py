@@ -25,6 +25,14 @@ class CaptureResult:
     npy_path: Path | None
     commands_log_path: Path | None
 
+@dataclass(frozen=True)
+class MultiCaptureResult:
+    package_dir: Path
+    waveforms: dict[int, WaveformData]
+    metadata_path: Path
+    files: dict[str, dict[str, str]]
+    commands_log_path: Path | None
+
 @dataclass
 class ScopeService:
     config: WaveBenchConfig
@@ -73,12 +81,74 @@ class ScopeService:
         finally:
             scope.close()
 
+    def _write_waveform_files(self, package_dir: Path, channel: int, waveform: WaveformData) -> dict[str, str]:
+        times = waveform.times_s
+        files: dict[str, str] = {}
+        if self.config.output.save_csv:
+            csv_path = package_dir / f"ch{channel}.csv"
+            with csv_path.open("w", newline="", encoding="utf-8") as file:
+                writer = csv.writer(file)
+                writer.writerow(["index", "time_s", "voltage_v"])
+                for index, (time_s, voltage_v) in enumerate(zip(times, waveform.voltages_v)):
+                    writer.writerow([index, f"{time_s:.12e}", f"{float(voltage_v):.12e}"])
+            files["csv"] = str(csv_path)
+        if self.config.output.save_npy:
+            npy_path = package_dir / f"ch{channel}.npy"
+            np.save(npy_path, np.column_stack((times, waveform.voltages_v)))
+            files["npy"] = str(npy_path)
+        return files
+
+    def _waveform_metadata(self, waveform: WaveformData) -> dict[str, Any]:
+        return {
+            "header": {
+                "x_start_s": waveform.header.x_start,
+                "x_stop_s": waveform.header.x_stop,
+                "x_increment_s": waveform.header.x_increment,
+                "points": waveform.header.points,
+                "segment": waveform.header.segment,
+            },
+            "summary": waveform.summary(
+                expected_frequency_hz=self.config.waveform.expected_frequency_hz,
+                frequency_tolerance_ratio=self.config.waveform.frequency_tolerance_ratio,
+            ),
+        }
+
+    def _failed_capture_package(
+        self, *, package_dir: Path, operation: dict[str, Any], exc: Exception, commands_log_path: Path | None
+    ) -> None:
+        failed_dir = package_dir.with_name(package_dir.name + "_failed")
+        package_dir.rename(failed_dir)
+        (failed_dir / "error.txt").write_text(
+            f"{type(exc).__name__}: {exc}\n\n{traceback.format_exc()}",
+            encoding="utf-8",
+        )
+        partial = {
+            "instrument": {"resource": self.config.connection.resource},
+            "operation": {**operation, "failed": True},
+            "error": {"type": type(exc).__name__, "message": str(exc)},
+            "files": {"commands": str(failed_dir / "commands.log")} if commands_log_path is not None else {},
+        }
+        (failed_dir / "metadata.partial.json").write_text(
+            json.dumps(partial, indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
+
     def capture_waveform(self, channel: int, label: str) -> CaptureResult:
         package_dir = new_package_dir(self.config.output.directory, label)
         package_dir.mkdir(parents=True, exist_ok=False)
         commands_log_path = package_dir / "commands.log" if self.config.output.save_commands_log else None
         if commands_log_path is not None:
             self.logger.path = commands_log_path
+        operation = {
+            "command": "scope capture",
+            "channel": channel,
+            "label": label,
+            "time_range_s": self.config.waveform.time_range_s,
+            "expected_frequency_hz": self.config.waveform.expected_frequency_hz,
+            "target_cycles": self.config.waveform.target_cycles,
+            "window_frequency_hz": self.config.waveform.window_frequency_hz,
+            "frequency_tolerance_ratio": self.config.waveform.frequency_tolerance_ratio,
+        }
         try:
             scope = self._open_scope()
             try:
@@ -92,80 +162,21 @@ class ScopeService:
             finally:
                 scope.close()
         except Exception as exc:
-            failed_dir = package_dir.with_name(package_dir.name + "_failed")
-            package_dir.rename(failed_dir)
-            (failed_dir / "error.txt").write_text(
-                f"{type(exc).__name__}: {exc}\n\n{traceback.format_exc()}",
-                encoding="utf-8",
-            )
-            partial = {
-                "instrument": {"resource": self.config.connection.resource},
-                "operation": {
-                    "command": "scope capture",
-                    "channel": channel,
-                    "label": label,
-                    "time_range_s": self.config.waveform.time_range_s,
-                    "expected_frequency_hz": self.config.waveform.expected_frequency_hz,
-                    "target_cycles": self.config.waveform.target_cycles,
-                    "window_frequency_hz": self.config.waveform.window_frequency_hz,
-                    "frequency_tolerance_ratio": self.config.waveform.frequency_tolerance_ratio,
-                    "failed": True,
-                },
-                "error": {"type": type(exc).__name__, "message": str(exc)},
-                "files": {"commands": str(failed_dir / "commands.log")} if commands_log_path is not None else {},
-            }
-            (failed_dir / "metadata.partial.json").write_text(
-                json.dumps(partial, indent=2, ensure_ascii=False),
-                encoding="utf-8",
+            self._failed_capture_package(
+                package_dir=package_dir,
+                operation=operation,
+                exc=exc,
+                commands_log_path=commands_log_path,
             )
             if isinstance(exc, WaveBenchError):
                 raise
             raise
-        times = waveform.times_s
-        files: dict[str, str] = {}
-        csv_path: Path | None = None
-        npy_path: Path | None = None
 
-        if self.config.output.save_csv:
-            csv_path = package_dir / f"ch{channel}.csv"
-            with csv_path.open("w", newline="", encoding="utf-8") as file:
-                writer = csv.writer(file)
-                writer.writerow(["index", "time_s", "voltage_v"])
-                for index, (time_s, voltage_v) in enumerate(zip(times, waveform.voltages_v)):
-                    writer.writerow([index, f"{time_s:.12e}", f"{float(voltage_v):.12e}"])
-            files["csv"] = str(csv_path)
-
-        if self.config.output.save_npy:
-            npy_path = package_dir / f"ch{channel}.npy"
-            np.save(npy_path, np.column_stack((times, waveform.voltages_v)))
-            files["npy"] = str(npy_path)
-
+        files = self._write_waveform_files(package_dir, channel, waveform)
         metadata: dict[str, Any] = {
             "instrument": {"idn": instrument_idn, "resource": self.config.connection.resource},
-            "operation": {
-                "command": "scope capture",
-                "channel": channel,
-                "label": label,
-                "triggered_single": True,
-                "time_range_s": self.config.waveform.time_range_s,
-                "expected_frequency_hz": self.config.waveform.expected_frequency_hz,
-                "target_cycles": self.config.waveform.target_cycles,
-                "window_frequency_hz": self.config.waveform.window_frequency_hz,
-                "frequency_tolerance_ratio": self.config.waveform.frequency_tolerance_ratio,
-            },
-            "waveform": {
-                "header": {
-                    "x_start_s": waveform.header.x_start,
-                    "x_stop_s": waveform.header.x_stop,
-                    "x_increment_s": waveform.header.x_increment,
-                    "points": waveform.header.points,
-                    "segment": waveform.header.segment,
-                },
-                "summary": waveform.summary(
-                    expected_frequency_hz=self.config.waveform.expected_frequency_hz,
-                    frequency_tolerance_ratio=self.config.waveform.frequency_tolerance_ratio,
-                ),
-            },
+            "operation": {**operation, "triggered_single": True},
+            "waveform": self._waveform_metadata(waveform),
             "files": files,
         }
         metadata_path = package_dir / "metadata.json"
@@ -175,7 +186,77 @@ class ScopeService:
             package_dir=package_dir,
             waveform=waveform,
             metadata_path=metadata_path,
-            csv_path=csv_path,
-            npy_path=npy_path,
+            csv_path=Path(files["csv"]) if "csv" in files else None,
+            npy_path=Path(files["npy"]) if "npy" in files else None,
+            commands_log_path=commands_log_path,
+        )
+
+    def capture_waveforms(self, channels: list[int], label: str) -> MultiCaptureResult:
+        if not channels:
+            raise ConfigError("at least one channel is required")
+        if len(set(channels)) != len(channels):
+            raise ConfigError("duplicate channels are not allowed")
+        package_dir = new_package_dir(self.config.output.directory, label)
+        package_dir.mkdir(parents=True, exist_ok=False)
+        commands_log_path = package_dir / "commands.log" if self.config.output.save_commands_log else None
+        if commands_log_path is not None:
+            self.logger.path = commands_log_path
+        operation = {
+            "command": "scope capture",
+            "channels": channels,
+            "label": label,
+            "time_range_s": self.config.waveform.time_range_s,
+            "expected_frequency_hz": self.config.waveform.expected_frequency_hz,
+            "target_cycles": self.config.waveform.target_cycles,
+            "window_frequency_hz": self.config.waveform.window_frequency_hz,
+            "frequency_tolerance_ratio": self.config.waveform.frequency_tolerance_ratio,
+        }
+        waveforms: dict[int, WaveformData] = {}
+        try:
+            scope = self._open_scope()
+            try:
+                instrument_idn = scope.idn()
+                for channel in channels:
+                    waveforms[channel] = scope.capture_waveform(
+                        channel=channel,
+                        points=self.config.waveform.points,
+                        check_errors=self.config.scope.check_errors,
+                        time_range_s=self.config.waveform.time_range_s,
+                    )
+            finally:
+                scope.close()
+        except Exception as exc:
+            self._failed_capture_package(
+                package_dir=package_dir,
+                operation=operation,
+                exc=exc,
+                commands_log_path=commands_log_path,
+            )
+            if isinstance(exc, WaveBenchError):
+                raise
+            raise
+
+        files: dict[str, dict[str, str]] = {}
+        channel_metadata: dict[str, Any] = {}
+        for channel in channels:
+            waveform = waveforms[channel]
+            key = str(channel)
+            files[key] = self._write_waveform_files(package_dir, channel, waveform)
+            channel_metadata[key] = self._waveform_metadata(waveform)
+
+        metadata: dict[str, Any] = {
+            "instrument": {"idn": instrument_idn, "resource": self.config.connection.resource},
+            "operation": {**operation, "triggered_single": True, "trigger_mode": "sequential_per_channel"},
+            "channels": channel_metadata,
+            "files": files,
+        }
+        metadata_path = package_dir / "metadata.json"
+        if self.config.output.save_json:
+            metadata_path.write_text(json.dumps(metadata, indent=2, ensure_ascii=False), encoding="utf-8")
+        return MultiCaptureResult(
+            package_dir=package_dir,
+            waveforms=waveforms,
+            metadata_path=metadata_path,
+            files=files,
             commands_log_path=commands_log_path,
         )

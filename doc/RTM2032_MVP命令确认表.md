@@ -331,3 +331,30 @@ x_start=-5 ms, x_stop=4.999 ms, points=10000, dt=1 us
 ```
 
 `--window-frequency` 只用于计算时窗，不判断频率对错；`--expect-frequency` 才用于 metadata 里的频率一致性校验。
+
+
+### 多通道逐通道采集
+
+CLI 示例：
+
+```bash
+python -m wavebench scope capture --config wavebench.toml   --channel 1 --channel 2   --label dual_smoke   --points def   --window-frequency 1000   --target-cycles 10   --no-csv
+```
+
+当前实现不是同步多通道采集，而是按通道重复以下序列：
+
+```text
+*CLS
+TIMebase:RANGe <seconds>
+CHAN<n>:STAT ON
+FORM REAL
+FORM:BORD LSBF
+CHAN:DATA:POIN DEF|MAX|DMAX
+SINGle
+*OPC?
+CHAN<n>:DATA:HEAD?
+CHAN<n>:DATA?
+SYST:ERR?
+```
+
+实机验证：CH1/CH2 均可读取；双通道包中 `commands.log` 能看到 `CHAN1:DATA:HEAD?` / `CHAN1:DATA?` 和 `CHAN2:DATA:HEAD?` / `CHAN2:DATA?`。

@@ -5,7 +5,7 @@ import sys
 
 from .config import load_config
 from .drivers.rtm2032 import WaveformData
-from .errors import WaveBenchError
+from .errors import ConfigError, WaveBenchError
 from .logging import CommandLogger
 from .services.scope_service import ScopeService
 
@@ -40,7 +40,7 @@ def build_parser() -> argparse.ArgumentParser:
     add_runtime_options(fetch)
 
     capture = scope_sub.add_parser("capture", help="Capture waveform data into an acquisition package")
-    capture.add_argument("--channel", type=int, default=None)
+    capture.add_argument("--channel", type=int, action="append", default=None, help="Capture channel; repeat for multiple channels")
     capture.add_argument("--label", default="capture")
     capture.add_argument("--points", default=None, help="Override waveform points: def, max, or dmax")
     capture.add_argument("--time-range", type=float, default=None, help="Set total acquisition time across 10 divisions, in seconds")
@@ -140,14 +140,27 @@ def main(argv: list[str] | None = None) -> int:
                 _print_waveform_summary(waveform)
                 return 0
             if args.command == "capture":
-                channel = args.channel or service.config.scope.default_channel
-                result = service.capture_waveform(channel=channel, label=args.label)
-                _print_waveform_summary(result.waveform)
+                channels = args.channel or [service.config.scope.default_channel]
+                if len(channels) == 1:
+                    result = service.capture_waveform(channel=channels[0], label=args.label)
+                    _print_waveform_summary(result.waveform)
+                    print(f"package={result.package_dir}")
+                    if result.csv_path is not None:
+                        print(f"csv={result.csv_path}")
+                    if result.npy_path is not None:
+                        print(f"npy={result.npy_path}")
+                    if result.commands_log_path is not None:
+                        print(f"commands_log={result.commands_log_path}")
+                    return 0
+                result = service.capture_waveforms(channels=channels, label=args.label)
+                for channel in channels:
+                    _print_waveform_summary(result.waveforms[channel])
+                    files = result.files.get(str(channel), {})
+                    if "csv" in files:
+                        print(f"ch{channel}_csv={files['csv']}")
+                    if "npy" in files:
+                        print(f"ch{channel}_npy={files['npy']}")
                 print(f"package={result.package_dir}")
-                if result.csv_path is not None:
-                    print(f"csv={result.csv_path}")
-                if result.npy_path is not None:
-                    print(f"npy={result.npy_path}")
                 if result.commands_log_path is not None:
                     print(f"commands_log={result.commands_log_path}")
                 return 0
