@@ -113,5 +113,5 @@ voltage = about -0.5 V .. 0.62 V
 - CLI / shell 不直接写 SCPI；SCPI 集中在设备驱动层。
 - Service 层表达实验动作，不表达设备命令。
 - 每次采集生成独立采集包。
-- 第一阶段输出：每通道 CSV、每通道 NPY、metadata.json、commands.log；大数据量实机调试可用 `--no-csv` 跳过 CSV，也可用 `--points def|max|dmax` 临时覆盖点数，用 `--time-range 0.01` 设置总采集时窗。
+- 第一阶段输出：每通道 CSV、每通道 NPY、metadata.json、commands.log；大数据量实机调试可用 `--no-csv` 跳过 CSV，也可用 `--points def|max|dmax` 临时覆盖点数，用 `--time-range 0.01` 设置总采集时窗；也可用 `--window-frequency 1000 --target-cycles 10` 自动计算时窗。
 - 连接成功后失败保留 `*_failed` 采集包。

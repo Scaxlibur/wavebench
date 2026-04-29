@@ -45,6 +45,8 @@ def build_parser() -> argparse.ArgumentParser:
     capture.add_argument("--points", default=None, help="Override waveform points: def, max, or dmax")
     capture.add_argument("--time-range", type=float, default=None, help="Set total acquisition time across 10 divisions, in seconds")
     capture.add_argument("--expect-frequency", type=float, default=None, help="Expected signal frequency in Hz for metadata quality checks")
+    capture.add_argument("--window-frequency", type=float, default=None, help="Frequency in Hz used only to compute target-cycle time range")
+    capture.add_argument("--target-cycles", type=float, default=None, help="Set time range to target_cycles / window_frequency")
     capture.add_argument("--frequency-tolerance", type=float, default=None, help="Relative frequency tolerance, e.g. 0.05 for 5 percent")
     capture.add_argument("--no-csv", action="store_true", help="Do not save CSV waveform output")
     capture.add_argument("--no-npy", action="store_true", help="Do not save NPY waveform output")
@@ -62,12 +64,27 @@ def _load_service(args: argparse.Namespace) -> ScopeService:
         or getattr(args, "time_range", None) is not None
         or getattr(args, "expect_frequency", None) is not None
         or getattr(args, "frequency_tolerance", None) is not None
+        or getattr(args, "target_cycles", None) is not None
+        or getattr(args, "window_frequency", None) is not None
     ):
+        expected_frequency = getattr(args, "expect_frequency", None)
+        window_frequency = getattr(args, "window_frequency", None) or expected_frequency
+        target_cycles = getattr(args, "target_cycles", None)
+        time_range = getattr(args, "time_range", None)
+        if target_cycles is not None:
+            if window_frequency is None or window_frequency <= 0:
+                raise ConfigError("--target-cycles requires --window-frequency or --expect-frequency > 0")
+            if target_cycles <= 0:
+                raise ConfigError("--target-cycles must be > 0")
+            if time_range is None:
+                time_range = target_cycles / window_frequency
         config = config.with_waveform_overrides(
             points=getattr(args, "points", None),
-            time_range_s=getattr(args, "time_range", None),
-            expected_frequency_hz=getattr(args, "expect_frequency", None),
+            time_range_s=time_range,
+            expected_frequency_hz=expected_frequency,
             frequency_tolerance_ratio=getattr(args, "frequency_tolerance", None),
+            target_cycles=target_cycles,
+            window_frequency_hz=window_frequency,
         )
     if getattr(args, "no_csv", False) or getattr(args, "no_npy", False):
         config = config.with_output_overrides(

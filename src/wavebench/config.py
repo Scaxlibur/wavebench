@@ -51,6 +51,8 @@ class WaveformConfig:
     time_range_s: float | None = None
     expected_frequency_hz: float | None = None
     frequency_tolerance_ratio: float = 0.05
+    target_cycles: float | None = None
+    window_frequency_hz: float | None = None
 
 @dataclass(frozen=True)
 class OutputConfig:
@@ -111,6 +113,8 @@ class WaveBenchConfig:
         time_range_s: float | None = None,
         expected_frequency_hz: float | None = None,
         frequency_tolerance_ratio: float | None = None,
+        target_cycles: float | None = None,
+        window_frequency_hz: float | None = None,
     ) -> "WaveBenchConfig":
         return WaveBenchConfig(
             connection=self.connection,
@@ -129,6 +133,8 @@ class WaveBenchConfig:
                     if frequency_tolerance_ratio is None
                     else frequency_tolerance_ratio
                 ),
+                target_cycles=self.waveform.target_cycles if target_cycles is None else target_cycles,
+                window_frequency_hz=self.waveform.window_frequency_hz if window_frequency_hz is None else window_frequency_hz,
             ),
             output=self.output,
             source_path=self.source_path,
@@ -176,6 +182,8 @@ def load_config(path: str | Path = "wavebench.toml") -> WaveBenchConfig:
                 time_range_s=float(w["time_range_s"]) if "time_range_s" in w else None,
                 expected_frequency_hz=float(w["expected_frequency_hz"]) if "expected_frequency_hz" in w else None,
                 frequency_tolerance_ratio=float(w.get("frequency_tolerance_ratio", 0.05)),
+                target_cycles=float(w["target_cycles"]) if "target_cycles" in w else None,
+                window_frequency_hz=float(w["window_frequency_hz"]) if "window_frequency_hz" in w else None,
             ),
             output=OutputConfig(
                 directory=Path(str(o.get("directory", "data/raw"))),
@@ -205,4 +213,8 @@ def load_config(path: str | Path = "wavebench.toml") -> WaveBenchConfig:
         raise ConfigError("waveform.expected_frequency_hz must be > 0")
     if config.waveform.frequency_tolerance_ratio <= 0:
         raise ConfigError("waveform.frequency_tolerance_ratio must be > 0")
+    if config.waveform.target_cycles is not None and config.waveform.target_cycles <= 0:
+        raise ConfigError("waveform.target_cycles must be > 0")
+    if config.waveform.window_frequency_hz is not None and config.waveform.window_frequency_hz <= 0:
+        raise ConfigError("waveform.window_frequency_hz must be > 0")
     return config

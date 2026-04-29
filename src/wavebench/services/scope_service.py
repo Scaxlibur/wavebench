@@ -106,6 +106,8 @@ class ScopeService:
                     "label": label,
                     "time_range_s": self.config.waveform.time_range_s,
                     "expected_frequency_hz": self.config.waveform.expected_frequency_hz,
+                    "target_cycles": self.config.waveform.target_cycles,
+                    "window_frequency_hz": self.config.waveform.window_frequency_hz,
                     "frequency_tolerance_ratio": self.config.waveform.frequency_tolerance_ratio,
                     "failed": True,
                 },
@@ -147,6 +149,8 @@ class ScopeService:
                 "triggered_single": True,
                 "time_range_s": self.config.waveform.time_range_s,
                 "expected_frequency_hz": self.config.waveform.expected_frequency_hz,
+                "target_cycles": self.config.waveform.target_cycles,
+                "window_frequency_hz": self.config.waveform.window_frequency_hz,
                 "frequency_tolerance_ratio": self.config.waveform.frequency_tolerance_ratio,
             },
             "waveform": {
