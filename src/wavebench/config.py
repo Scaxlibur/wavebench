@@ -6,6 +6,23 @@ import tomllib
 
 from .errors import ConfigError
 
+WAVEFORM_POINTS_ALIASES = {
+    "def": "DEF",
+    "default": "DEF",
+    "max": "MAX",
+    "maximum": "MAX",
+    "dmax": "DMAX",
+    "dmaximum": "DMAX",
+}
+
+
+def normalize_waveform_points(points: str) -> str:
+    normalized = points.strip().lower()
+    try:
+        return WAVEFORM_POINTS_ALIASES[normalized]
+    except KeyError as exc:
+        raise ConfigError("waveform points must be one of: def, max, dmax") from exc
+
 @dataclass(frozen=True)
 class ConnectionConfig:
     backend: str
@@ -84,6 +101,20 @@ class WaveBenchConfig:
             source_path=self.source_path,
         )
 
+    def with_waveform_overrides(self, *, points: str | None = None) -> "WaveBenchConfig":
+        return WaveBenchConfig(
+            connection=self.connection,
+            scope=self.scope,
+            autoscale=self.autoscale,
+            waveform=WaveformConfig(
+                format=self.waveform.format,
+                byte_order=self.waveform.byte_order,
+                points=self.waveform.points if points is None else normalize_waveform_points(points),
+            ),
+            output=self.output,
+            source_path=self.source_path,
+        )
+
 def load_config(path: str | Path = "wavebench.toml") -> WaveBenchConfig:
     config_path = Path(path)
     if not config_path.exists():
@@ -122,7 +153,7 @@ def load_config(path: str | Path = "wavebench.toml") -> WaveBenchConfig:
             waveform=WaveformConfig(
                 format=str(w.get("format", "real")),
                 byte_order=str(w.get("byte_order", "lsbf")),
-                points=str(w.get("points", "dmax")),
+                points=normalize_waveform_points(str(w.get("points", "dmax"))),
             ),
             output=OutputConfig(
                 directory=Path(str(o.get("directory", "data/raw"))),
