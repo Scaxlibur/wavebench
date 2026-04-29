@@ -369,3 +369,13 @@ columns = [time_s, voltage_v]
 JSON：只放元信息，不放大数组。
 
 commands.log：记录关键 SCPI 命令与响应。
+
+
+## 数据质量摘要字段补充
+
+`metadata.json` 的 `waveform.summary` 中包含：
+
+- `frequency_estimate_hz`: 估计频率。
+- `frequency_method`: 频率估计方法，例如 `hysteresis_rising_crossing` 或 `fft_peak`。
+- `estimated_cycles`: 当前采集窗口内估计包含的周期数。
+- `quality_warnings`: 数据质量提示列表；例如少于 2 个周期时给出 `low_cycle_count`，提示频率估计可能不可靠。

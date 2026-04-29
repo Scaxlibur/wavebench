@@ -23,6 +23,13 @@ class QualityTests(unittest.TestCase):
         self.assertEqual(quality.voltage_vpp_v, 4.0)
         self.assertAlmostEqual(quality.voltage_rms_v, np.sqrt(2.0))
 
+    def test_warns_when_window_has_too_few_cycles(self):
+        times = np.linspace(-0.001, 0.001, 10000, endpoint=False)
+        voltages = 2.5 * np.sin(2 * np.pi * 500.0 * times)
+        quality = summarize_waveform(times, voltages)
+        self.assertAlmostEqual(quality.estimated_cycles, 1.0, delta=0.05)
+        self.assertTrue(any("frequency estimate may be unreliable" in warning for warning in quality.quality_warnings))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -14,8 +14,10 @@ class WaveformQuality:
     voltage_vpp_v: float
     frequency_estimate_hz: float | None
     frequency_method: str
+    estimated_cycles: float | None
+    quality_warnings: list[str]
 
-    def as_dict(self) -> dict[str, float | str | None]:
+    def as_dict(self) -> dict[str, object]:
         return {
             "voltage_min_v": self.voltage_min_v,
             "voltage_max_v": self.voltage_max_v,
@@ -24,6 +26,8 @@ class WaveformQuality:
             "voltage_vpp_v": self.voltage_vpp_v,
             "frequency_estimate_hz": self.frequency_estimate_hz,
             "frequency_method": self.frequency_method,
+            "estimated_cycles": self.estimated_cycles,
+            "quality_warnings": self.quality_warnings,
         }
 
 
@@ -90,12 +94,32 @@ def estimate_frequency_fft(times_s: np.ndarray, voltages_v: np.ndarray, max_poin
     return frequency if frequency > 0 else None
 
 
+def estimate_cycles_in_window(times_s: np.ndarray, frequency_hz: float | None) -> float | None:
+    if frequency_hz is None or times_s.size < 2:
+        return None
+    dt = float(np.median(np.diff(times_s)))
+    if dt <= 0:
+        return None
+    duration = float(times_s[-1] - times_s[0] + dt)
+    if duration <= 0:
+        return None
+    return float(frequency_hz * duration)
+
+
+def quality_warnings(estimated_cycles: float | None) -> list[str]:
+    warnings: list[str] = []
+    if estimated_cycles is not None and estimated_cycles < 2.0:
+        warnings.append("low_cycle_count: waveform window contains fewer than 2 estimated cycles; frequency estimate may be unreliable")
+    return warnings
+
+
 def summarize_waveform(times_s: np.ndarray, voltages_v: np.ndarray) -> WaveformQuality:
     frequency = estimate_frequency_hysteresis(times_s, voltages_v)
     method = "hysteresis_rising_crossing"
     if frequency is None:
         frequency = estimate_frequency_fft(times_s, voltages_v)
         method = "fft_peak"
+    estimated_cycles = estimate_cycles_in_window(times_s, frequency)
     return WaveformQuality(
         voltage_min_v=float(np.min(voltages_v)),
         voltage_max_v=float(np.max(voltages_v)),
@@ -104,4 +128,6 @@ def summarize_waveform(times_s: np.ndarray, voltages_v: np.ndarray) -> WaveformQ
         voltage_vpp_v=float(np.max(voltages_v) - np.min(voltages_v)),
         frequency_estimate_hz=frequency,
         frequency_method=method,
+        estimated_cycles=estimated_cycles,
+        quality_warnings=quality_warnings(estimated_cycles),
     )

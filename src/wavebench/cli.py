@@ -77,6 +77,11 @@ def _print_waveform_summary(waveform: WaveformData) -> None:
     frequency = summary.get("frequency_estimate_hz")
     if frequency is not None:
         print(f"frequency≈{frequency:.6g} Hz")
+    estimated_cycles = summary.get("estimated_cycles")
+    if estimated_cycles is not None:
+        print(f"estimated_cycles≈{estimated_cycles:.3g}")
+    for warning in summary.get("quality_warnings", []):
+        print(f"warning={warning}")
 
 
 def main(argv: list[str] | None = None) -> int:
