@@ -81,6 +81,14 @@ Windows Ethernet -> RTM2032 192.168.123.2 -> VISA/SCPI
 sweep smoke : 1k→10k linear sweep, auto 10 ms window, no low-cycle warning
 ```
 
+已确认下一阶段信号源目标设备：
+
+```text
+RIGOL DG4202 @ 192.168.123.3
+PyVISA + NI-VISA verified
+resource = TCPIP::192.168.123.3::INSTR
+```
+
 ### 推荐实机命令
 
 快速单次采集（不写 CSV）：
@@ -129,8 +137,9 @@ python -m wavebench scope capture --config wavebench.toml   --channel 1 --channe
 ### 下一步
 
 - [x] 明确多通道策略：`--channel` 可重复，按通道逐个触发采集；每个通道独立质量摘要，不假设信号相同。
-- [ ] 若需要扫频无人值守测试，先实现轻量采集序列和 `sweep_summary.csv`，确认流程后再考虑正式 CLI。
-- [ ] 后续再考虑截图、YAML 实验流程、信号发生器接入。
+- [ ] 将 DG4202 整理进正式 WaveBench 架构：source transport / driver / service / CLI。
+- [ ] 若需要离散扫点测试，优先走“设置信号发生器频点 -> 示波器采集 -> 记录结果”的顺序流程。
+- [ ] 后续再考虑截图、YAML 实验流程。
 
 ## 当前关键约束
 
