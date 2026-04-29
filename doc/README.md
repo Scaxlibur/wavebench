@@ -84,19 +84,34 @@ sweep smoke : 1k→10k linear sweep, auto 10 ms window, no low-cycle warning
 快速单次采集（不写 CSV）：
 
 ```bash
-python -m wavebench scope capture --config wavebench.toml --channel 1   --label smoke   --points def   --no-csv
+python -m wavebench scope capture --config wavebench.toml --channel 1 `
+  --label smoke `
+  --points def `
+  --no-csv
 ```
 
 按最低频率自动设置窗口，例如扫频最低 1 kHz、目标 10 个周期：
 
 ```bash
-python -m wavebench scope capture --config wavebench.toml --channel 1   --label sweep_smoke   --points def   --window-frequency 1000   --target-cycles 10   --no-csv
+python -m wavebench scope capture --config wavebench.toml --channel 1 `
+  --label sweep_smoke `
+  --points def `
+  --window-frequency 1000 `
+  --target-cycles 10 `
+  --no-csv
 ```
 
 固定频率校验，例如期望 500 Hz、容差 5%：
 
 ```bash
-python -m wavebench scope capture --config wavebench.toml --channel 1   --label sine_500hz_check   --points def   --window-frequency 500   --target-cycles 10   --expect-frequency 500   --frequency-tolerance 0.05   --no-csv
+python -m wavebench scope capture --config wavebench.toml --channel 1 `
+  --label sine_500hz_check `
+  --points def `
+  --window-frequency 500 `
+  --target-cycles 10 `
+  --expect-frequency 500 `
+  --frequency-tolerance 0.05 `
+  --no-csv
 ```
 
 ### 下一步

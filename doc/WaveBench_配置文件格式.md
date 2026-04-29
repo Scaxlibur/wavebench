@@ -243,7 +243,6 @@ experiment workflow
 
 ```gitignore
 # Rei scratchpad / local helper workspace
-tool-of-rei/
 
 # Local WaveBench config and generated data
 wavebench.toml
