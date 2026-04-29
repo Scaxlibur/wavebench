@@ -24,4 +24,3 @@ $env:PYTHONPATH = "src"
 python -m wavebench scope idn --config wavebench.toml
 ```
 
-`tool-of-rei/` is Rei's scratch/reference toolbox and is intentionally ignored by git.

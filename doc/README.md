@@ -158,7 +158,7 @@ python -m wavebench scope capture --config wavebench.toml   --channel 1 --channe
 - [x] 将 DG4202 整理进正式 WaveBench 架构最小骨架：`source idn/status/set-freq/output`。
 - [x] 为离散扫点流程增加 source-mode 防呆：在固定频点实验前明确检查 `FREQ:MODE`，必要时从 `SWE` 切到 `FIX`。
 - [x] 正式最小闭环已验证：`source set-freq` -> `scope capture`。
-- [ ] 后续将离散扫点测试封装成统一流程命令或脚本。
+- [ ] 后续将离散扫点测试封装成统一流程命令或脚本。当前已在私有验证层完成脚本化准备。
 - [ ] 后续再考虑截图、YAML 实验流程。
 
 ## 当前关键约束
