@@ -43,6 +43,19 @@ class ConfigOverrideTests(unittest.TestCase):
         with self.assertRaises(Exception):
             config.with_waveform_overrides(points="10000")
 
+    def test_waveform_overrides_time_range(self):
+        config = WaveBenchConfig(
+            connection=ConnectionConfig("lan", "TCPIP::127.0.0.1::INSTR", 100, 100),
+            scope=ScopeConfig("rtm2032", None, 1, False, True),
+            autoscale=AutoscaleConfig(True, True),
+            waveform=WaveformConfig("real", "lsbf", "dmax"),
+            output=OutputConfig(Path("data/raw"), "timestamp_label", True, True, True, True, False),
+            source_path=Path("test.toml"),
+        )
+        updated = config.with_waveform_overrides(time_range_s=0.01)
+        self.assertEqual(updated.waveform.points, "dmax")
+        self.assertEqual(updated.waveform.time_range_s, 0.01)
+
 
 if __name__ == "__main__":
     unittest.main()

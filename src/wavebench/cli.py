@@ -43,6 +43,7 @@ def build_parser() -> argparse.ArgumentParser:
     capture.add_argument("--channel", type=int, default=None)
     capture.add_argument("--label", default="capture")
     capture.add_argument("--points", default=None, help="Override waveform points: def, max, or dmax")
+    capture.add_argument("--time-range", type=float, default=None, help="Set total acquisition time across 10 divisions, in seconds")
     capture.add_argument("--no-csv", action="store_true", help="Do not save CSV waveform output")
     capture.add_argument("--no-npy", action="store_true", help="Do not save NPY waveform output")
     add_runtime_options(capture)
@@ -54,8 +55,8 @@ def _load_service(args: argparse.Namespace) -> ScopeService:
     config = load_config(args.config)
     if args.resource:
         config = config.with_resource(args.resource)
-    if getattr(args, "points", None):
-        config = config.with_waveform_overrides(points=args.points)
+    if getattr(args, "points", None) or getattr(args, "time_range", None) is not None:
+        config = config.with_waveform_overrides(points=getattr(args, "points", None), time_range_s=getattr(args, "time_range", None))
     if getattr(args, "no_csv", False) or getattr(args, "no_npy", False):
         config = config.with_output_overrides(
             save_csv=False if getattr(args, "no_csv", False) else None,

@@ -100,6 +100,11 @@ class RTM2032Scope:
         if check_errors:
             self.assert_no_errors()
 
+    def set_time_range(self, time_range_s: float) -> None:
+        if time_range_s <= 0:
+            raise DataError("time range must be > 0")
+        self.transport.write(f"TIMebase:RANGe {time_range_s:.12g}")
+
     def _setup_real_waveform_transfer(self, channel: int, points: str) -> None:
         if channel < 1:
             raise DataError("channel must be >= 1")
@@ -122,8 +127,12 @@ class RTM2032Scope:
             self.assert_no_errors()
         return waveform
 
-    def capture_waveform(self, channel: int, points: str = "dmax", check_errors: bool = True) -> WaveformData:
+    def capture_waveform(
+        self, channel: int, points: str = "dmax", check_errors: bool = True, time_range_s: float | None = None
+    ) -> WaveformData:
         self.transport.write("*CLS")
+        if time_range_s is not None:
+            self.set_time_range(time_range_s)
         self._setup_real_waveform_transfer(channel=channel, points=points)
         self.transport.write("SINGle")
         try:

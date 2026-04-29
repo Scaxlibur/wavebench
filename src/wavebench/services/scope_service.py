@@ -87,6 +87,7 @@ class ScopeService:
                     channel=channel,
                     points=self.config.waveform.points,
                     check_errors=self.config.scope.check_errors,
+                    time_range_s=self.config.waveform.time_range_s,
                 )
             finally:
                 scope.close()
@@ -99,7 +100,13 @@ class ScopeService:
             )
             partial = {
                 "instrument": {"resource": self.config.connection.resource},
-                "operation": {"command": "scope capture", "channel": channel, "label": label, "failed": True},
+                "operation": {
+                    "command": "scope capture",
+                    "channel": channel,
+                    "label": label,
+                    "time_range_s": self.config.waveform.time_range_s,
+                    "failed": True,
+                },
                 "error": {"type": type(exc).__name__, "message": str(exc)},
                 "files": {"commands": str(failed_dir / "commands.log")} if commands_log_path is not None else {},
             }
@@ -131,7 +138,13 @@ class ScopeService:
 
         metadata: dict[str, Any] = {
             "instrument": {"idn": instrument_idn, "resource": self.config.connection.resource},
-            "operation": {"command": "scope capture", "channel": channel, "label": label, "triggered_single": True},
+            "operation": {
+                "command": "scope capture",
+                "channel": channel,
+                "label": label,
+                "triggered_single": True,
+                "time_range_s": self.config.waveform.time_range_s,
+            },
             "waveform": {
                 "header": {
                     "x_start_s": waveform.header.x_start,

@@ -13,7 +13,7 @@ class FailingScopeService(ScopeService):
         class Scope:
             def idn(self):
                 return "fake"
-            def capture_waveform(self, channel, points, check_errors):
+            def capture_waveform(self, channel, points, check_errors, time_range_s=None):
                 raise OperationTimeout("simulated trigger timeout")
             def close(self):
                 pass

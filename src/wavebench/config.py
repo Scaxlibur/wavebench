@@ -48,6 +48,7 @@ class WaveformConfig:
     format: str
     byte_order: str
     points: str
+    time_range_s: float | None = None
 
 @dataclass(frozen=True)
 class OutputConfig:
@@ -101,7 +102,9 @@ class WaveBenchConfig:
             source_path=self.source_path,
         )
 
-    def with_waveform_overrides(self, *, points: str | None = None) -> "WaveBenchConfig":
+    def with_waveform_overrides(
+        self, *, points: str | None = None, time_range_s: float | None = None
+    ) -> "WaveBenchConfig":
         return WaveBenchConfig(
             connection=self.connection,
             scope=self.scope,
@@ -110,6 +113,7 @@ class WaveBenchConfig:
                 format=self.waveform.format,
                 byte_order=self.waveform.byte_order,
                 points=self.waveform.points if points is None else normalize_waveform_points(points),
+                time_range_s=self.waveform.time_range_s if time_range_s is None else time_range_s,
             ),
             output=self.output,
             source_path=self.source_path,
@@ -154,6 +158,7 @@ def load_config(path: str | Path = "wavebench.toml") -> WaveBenchConfig:
                 format=str(w.get("format", "real")),
                 byte_order=str(w.get("byte_order", "lsbf")),
                 points=normalize_waveform_points(str(w.get("points", "dmax"))),
+                time_range_s=float(w["time_range_s"]) if "time_range_s" in w else None,
             ),
             output=OutputConfig(
                 directory=Path(str(o.get("directory", "data/raw"))),
@@ -177,4 +182,6 @@ def load_config(path: str | Path = "wavebench.toml") -> WaveBenchConfig:
         raise ConfigError("MVP-1 only supports driver = 'rtm2032'")
     if config.scope.default_channel < 1:
         raise ConfigError("scope.default_channel must be >= 1")
+    if config.waveform.time_range_s is not None and config.waveform.time_range_s <= 0:
+        raise ConfigError("waveform.time_range_s must be > 0")
     return config
