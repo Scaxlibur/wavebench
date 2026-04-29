@@ -3,7 +3,7 @@ tool-of-rei/
 
 # Local WaveBench config and generated data
 wavebench.toml
-data/
+/data/
 
 # Python
 __pycache__/

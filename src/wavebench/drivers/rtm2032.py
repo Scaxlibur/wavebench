@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from wavebench.data.quality import summarize_waveform
 from wavebench.errors import DataError, InstrumentError, OperationTimeout
 from wavebench.transport.base import InstrumentTransport
 
@@ -40,16 +41,15 @@ class WaveformData:
     def sample_count(self) -> int:
         return int(self.voltages_v.size)
 
-    def summary(self) -> dict[str, float | int]:
+    def summary(self) -> dict[str, float | int | str | None]:
+        quality = summarize_waveform(self.times_s, self.voltages_v)
         return {
             "channel": self.channel,
             "samples": self.sample_count,
             "x_start_s": self.header.x_start,
             "x_stop_s": self.header.x_stop,
             "x_increment_s": self.header.x_increment,
-            "voltage_min_v": float(np.min(self.voltages_v)),
-            "voltage_max_v": float(np.max(self.voltages_v)),
-            "voltage_mean_v": float(np.mean(self.voltages_v)),
+            **quality.as_dict(),
         }
 
 def parse_waveform_header(response: str) -> WaveformHeader:

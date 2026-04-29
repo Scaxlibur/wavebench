@@ -60,7 +60,12 @@ def _print_waveform_summary(waveform: WaveformData) -> None:
     print(f"time={summary['x_start_s']:.6e}..{summary['x_stop_s']:.6e} s")
     print(f"dt={summary['x_increment_s']:.6e} s")
     print(f"voltage={summary['voltage_min_v']:.6g}..{summary['voltage_max_v']:.6g} V")
+    print(f"vpp={summary['voltage_vpp_v']:.6g} V")
+    print(f"rms={summary['voltage_rms_v']:.6g} V")
     print(f"mean={summary['voltage_mean_v']:.6g} V")
+    frequency = summary.get("frequency_estimate_hz")
+    if frequency is not None:
+        print(f"frequency≈{frequency:.6g} Hz")
 
 
 def main(argv: list[str] | None = None) -> int:
