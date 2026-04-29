@@ -73,7 +73,7 @@ def load_config(path: str | Path = "wavebench.toml") -> WaveBenchConfig:
             f"config file not found: {config_path}. Copy wavebench.example.toml to wavebench.toml first."
         )
     try:
-        raw = tomllib.loads(config_path.read_text(encoding="utf-8"))
+        raw = tomllib.loads(config_path.read_bytes().decode("utf-8-sig"))
     except tomllib.TOMLDecodeError as exc:
         raise ConfigError(f"invalid TOML in {config_path}: {exc}") from exc
 
