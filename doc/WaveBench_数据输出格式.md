@@ -16,6 +16,30 @@ CSV + NPY + JSON + commands.log
 
 暂不考虑 MATLAB 兼容、Parquet、数据库和自动报告。
 
+## 当前实现状态（2026-04-29）
+
+`9c9cc32 feat: fetch and capture RTM2032 waveforms` 已实现单通道采集包输出：
+
+```text
+data/raw/20260429_162450_square_1khz/
+├─ ch1.csv
+├─ ch1.npy
+├─ metadata.json
+└─ commands.log
+```
+
+实机样例来自 RTM2032 自带约 1 kHz 方波：
+
+```text
+samples = 10000
+time    = -1.000000e-03 .. 9.998000e-04 s
+dt      = 2.000000e-07 s
+voltage = about -0.5 .. 0.62 V
+```
+
+当前 `capture` 先实现为“读取当前波形并打包”。严格的 `SINGle + *OPC?` 单次采集语义仍是下一步。
+
+
 ## 采集包
 
 每次采集生成一个独立目录，称为“采集包”。

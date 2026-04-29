@@ -192,6 +192,25 @@ FORM UINT,32
 
 UINT 路线需要 `XORigin? / XINCrement? / YORigin? / YINCrement? / YRESolution?` 参与换算，留到后续版本。
 
+## 实机验证状态（2026-04-29）
+
+已在 RTM2032（以太网 `192.168.123.2`）上验证：
+
+| 项目 | 结果 | 备注 |
+|---|---|---|
+| `*IDN?` | 通过 | `Rohde&Schwarz,RTM2032,5710.0999k32/101662,06.010` |
+| `AUToscale` + `*OPC?` | 通过 | 接入示波器自带约 1 kHz 方波后，前面板显示恢复正常 |
+| `FORM REAL` / `FORM:BORD LSBF` | 通过 | `RsInstrument.query_bin_or_ascii_float_list()` 可直接解析 REAL binary block |
+| `CHAN1:DATA:HEAD?` | 通过 | 示例返回 `-1.0000E-03,9.9980E-04,10000,1` |
+| `CHAN1:DATA?` | 通过 | 读取 10000 点，电压约 `-0.5..0.62 V` |
+| `scope capture` 采集包 | 通过 | 当前实现会打包当前波形，已输出 CSV / NPY / metadata / commands.log |
+
+当前实现注意：
+
+- `scope fetch` 已符合本文定义：读取当前波形，不触发新采集。
+- `scope capture` 当前版本（`9c9cc32`）已经能生成采集包，但还没有执行 `SINGle + *OPC?`。
+- 下一步需要决定 `capture` 是否严格按本文定义触发单次采集；如果是，就要补触发超时提示和 failed package。
+
 ## `DATA:POINts` 注意事项
 
 手册确认可选值：
