@@ -5,6 +5,28 @@ import numpy as np
 from wavebench.data.quality import estimate_frequency_fft, estimate_frequency_hysteresis, summarize_waveform
 
 
+def make_pwm_waveform(*, period_s: float, duration_s: float, duty_cycle: float, rise_time_s: float, fall_time_s: float, amplitude_v: float = 2.5):
+    dt = 1e-6
+    times = np.arange(0.0, duration_s, dt)
+    phase = np.mod(times, period_s)
+    voltages = np.empty_like(times)
+    low = -amplitude_v
+    high = amplitude_v
+    high_end = duty_cycle * period_s
+    fall_end = high_end + fall_time_s
+    rise_end = rise_time_s
+    for i, t in enumerate(phase):
+        if t < rise_end:
+            voltages[i] = low + (high - low) * (t / rise_time_s)
+        elif t < high_end:
+            voltages[i] = high
+        elif t < fall_end:
+            voltages[i] = high - (high - low) * ((t - high_end) / fall_time_s)
+        else:
+            voltages[i] = low
+    return times, voltages
+
+
 class QualityTests(unittest.TestCase):
     def test_estimates_sine_frequency_with_hysteresis(self):
         times = np.linspace(0.0, 0.01, 10000, endpoint=False)
@@ -22,6 +44,28 @@ class QualityTests(unittest.TestCase):
         quality = summarize_waveform(times, voltages)
         self.assertEqual(quality.voltage_vpp_v, 4.0)
         self.assertAlmostEqual(quality.voltage_rms_v, np.sqrt(2.0))
+
+    def test_estimates_duty_cycle_for_square_like_pwm(self):
+        times, voltages = make_pwm_waveform(period_s=0.001, duration_s=0.01, duty_cycle=0.25, rise_time_s=20e-6, fall_time_s=20e-6)
+        quality = summarize_waveform(times, voltages)
+        self.assertIsNotNone(quality.duty_cycle)
+        self.assertAlmostEqual(quality.duty_cycle, 0.25, delta=0.03)
+
+    def test_estimates_rise_and_fall_time_for_square_like_wave(self):
+        times, voltages = make_pwm_waveform(period_s=0.001, duration_s=0.01, duty_cycle=0.5, rise_time_s=20e-6, fall_time_s=30e-6)
+        quality = summarize_waveform(times, voltages)
+        self.assertIsNotNone(quality.rise_time_s)
+        self.assertIsNotNone(quality.fall_time_s)
+        self.assertAlmostEqual(quality.rise_time_s, 16e-6, delta=3e-6)
+        self.assertAlmostEqual(quality.fall_time_s, 24e-6, delta=3e-6)
+
+    def test_sine_does_not_report_edge_metrics(self):
+        times = np.linspace(0.0, 0.01, 10000, endpoint=False)
+        voltages = 2.5 * np.sin(2 * np.pi * 1000.0 * times)
+        quality = summarize_waveform(times, voltages)
+        self.assertIsNone(quality.duty_cycle)
+        self.assertIsNone(quality.rise_time_s)
+        self.assertIsNone(quality.fall_time_s)
 
     def test_warns_when_window_has_too_few_cycles(self):
         times = np.linspace(-0.001, 0.001, 10000, endpoint=False)

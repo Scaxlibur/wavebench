@@ -416,6 +416,9 @@ commands.log：记录关键 SCPI 命令与响应。
   "frequency_estimate_hz": 9382.33,
   "frequency_method": "hysteresis_rising_crossing",
   "estimated_cycles": 93.8,
+  "duty_cycle": null,
+  "rise_time_s": null,
+  "fall_time_s": null,
   "expected_frequency_hz": null,
   "frequency_error_ratio": null,
   "frequency_in_tolerance": null,
@@ -475,3 +478,21 @@ commands.log
 ```
 
 当前多通道语义是逐通道采集，不保证通道间同一时刻采样，也不假设不同通道接入的是同一个信号。频率、幅度和 warning 都按通道独立计算。
+
+
+对于看起来像方波 / PWM / 阶跃的波形，`waveform.summary` 还会补充轻量边沿指标：
+
+```json
+{
+  "duty_cycle": 0.25,
+  "rise_time_s": 1.6e-5,
+  "fall_time_s": 2.4e-5
+}
+```
+
+说明：
+
+- `duty_cycle` 是高电平占空比，范围约 `0.0 ~ 1.0`。
+- `rise_time_s` 使用 10% → 90% 定义。
+- `fall_time_s` 使用 90% → 10% 定义。
+- 对正弦或无法可靠识别为两电平的波形，这三个字段返回 `null`，不强行给数。

@@ -6,6 +6,93 @@ import numpy as np
 
 
 @dataclass(frozen=True)
+class TwoLevelWaveform:
+    low_level_v: float
+    high_level_v: float
+    center_v: float
+
+
+def estimate_two_level_waveform(voltages_v: np.ndarray) -> TwoLevelWaveform | None:
+    if voltages_v.size < 8:
+        return None
+    v_min = float(np.min(voltages_v))
+    v_max = float(np.max(voltages_v))
+    span = v_max - v_min
+    if span <= 0:
+        return None
+    center = (v_max + v_min) / 2.0
+    low_mask = voltages_v <= center - 0.25 * span
+    high_mask = voltages_v >= center + 0.25 * span
+    low_fraction = float(np.mean(low_mask))
+    high_fraction = float(np.mean(high_mask))
+    if low_fraction < 0.05 or high_fraction < 0.05:
+        return None
+    if low_fraction + high_fraction < 0.8:
+        return None
+    low_level = float(np.median(voltages_v[low_mask]))
+    high_level = float(np.median(voltages_v[high_mask]))
+    if not high_level > low_level:
+        return None
+    return TwoLevelWaveform(low_level_v=low_level, high_level_v=high_level, center_v=(low_level + high_level) / 2.0)
+
+
+def estimate_duty_cycle(voltages_v: np.ndarray, levels: TwoLevelWaveform | None) -> float | None:
+    if levels is None or voltages_v.size == 0:
+        return None
+    return float(np.mean(voltages_v >= levels.center_v))
+
+
+def interpolate_crossing_time(t0: float, v0: float, t1: float, v1: float, threshold: float) -> float:
+    if v1 == v0:
+        return t0
+    fraction = (threshold - v0) / (v1 - v0)
+    return float(t0 + fraction * (t1 - t0))
+
+
+def estimate_transition_time(
+    times_s: np.ndarray, voltages_v: np.ndarray, levels: TwoLevelWaveform | None, *, rising: bool
+) -> float | None:
+    if levels is None or times_s.size != voltages_v.size or times_s.size < 3:
+        return None
+    span = levels.high_level_v - levels.low_level_v
+    if span <= 0:
+        return None
+    start_threshold = levels.low_level_v + 0.1 * span if rising else levels.low_level_v + 0.9 * span
+    end_threshold = levels.low_level_v + 0.9 * span if rising else levels.low_level_v + 0.1 * span
+    durations: list[float] = []
+    i = 1
+    while i < times_s.size:
+        prev_v = float(voltages_v[i - 1])
+        v = float(voltages_v[i])
+        crosses_start = (prev_v < start_threshold <= v) if rising else (prev_v > start_threshold >= v)
+        if not crosses_start:
+            i += 1
+            continue
+        t_start = interpolate_crossing_time(float(times_s[i - 1]), prev_v, float(times_s[i]), v, start_threshold)
+        j = i
+        found = False
+        while j < times_s.size:
+            prev2_v = float(voltages_v[j - 1])
+            v2 = float(voltages_v[j])
+            crosses_end = (prev2_v < end_threshold <= v2) if rising else (prev2_v > end_threshold >= v2)
+            if crosses_end:
+                t_end = interpolate_crossing_time(float(times_s[j - 1]), prev2_v, float(times_s[j]), v2, end_threshold)
+                if t_end >= t_start:
+                    durations.append(float(t_end - t_start))
+                found = True
+                break
+            if rising and v2 < start_threshold:
+                break
+            if (not rising) and v2 > start_threshold:
+                break
+            j += 1
+        i = j + 1 if found else i + 1
+    if not durations:
+        return None
+    return float(np.median(np.asarray(durations, dtype=np.float64)))
+
+
+@dataclass(frozen=True)
 class WaveformQuality:
     voltage_min_v: float
     voltage_max_v: float
@@ -15,6 +102,9 @@ class WaveformQuality:
     frequency_estimate_hz: float | None
     frequency_method: str
     estimated_cycles: float | None
+    duty_cycle: float | None
+    rise_time_s: float | None
+    fall_time_s: float | None
     expected_frequency_hz: float | None
     frequency_error_ratio: float | None
     frequency_in_tolerance: bool | None
@@ -30,6 +120,9 @@ class WaveformQuality:
             "frequency_estimate_hz": self.frequency_estimate_hz,
             "frequency_method": self.frequency_method,
             "estimated_cycles": self.estimated_cycles,
+            "duty_cycle": self.duty_cycle,
+            "rise_time_s": self.rise_time_s,
+            "fall_time_s": self.fall_time_s,
             "expected_frequency_hz": self.expected_frequency_hz,
             "frequency_error_ratio": self.frequency_error_ratio,
             "frequency_in_tolerance": self.frequency_in_tolerance,
@@ -140,6 +233,10 @@ def summarize_waveform(
         frequency = estimate_frequency_fft(times_s, voltages_v)
         method = "fft_peak"
     estimated_cycles = estimate_cycles_in_window(times_s, frequency)
+    levels = estimate_two_level_waveform(voltages_v)
+    duty_cycle = estimate_duty_cycle(voltages_v, levels)
+    rise_time_s = estimate_transition_time(times_s, voltages_v, levels, rising=True)
+    fall_time_s = estimate_transition_time(times_s, voltages_v, levels, rising=False)
     freq_error = frequency_error_ratio(frequency, expected_frequency_hz)
     return WaveformQuality(
         voltage_min_v=float(np.min(voltages_v)),
@@ -150,6 +247,9 @@ def summarize_waveform(
         frequency_estimate_hz=frequency,
         frequency_method=method,
         estimated_cycles=estimated_cycles,
+        duty_cycle=duty_cycle,
+        rise_time_s=rise_time_s,
+        fall_time_s=fall_time_s,
         expected_frequency_hz=expected_frequency_hz,
         frequency_error_ratio=freq_error,
         frequency_in_tolerance=None if freq_error is None else freq_error <= frequency_tolerance_ratio,
