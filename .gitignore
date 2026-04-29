@@ -1,0 +1,16 @@
+# Rei scratchpad / local helper workspace
+tool-of-rei/
+
+# Local WaveBench config and generated data
+wavebench.toml
+data/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+dist/
+build/
+*.egg-info/

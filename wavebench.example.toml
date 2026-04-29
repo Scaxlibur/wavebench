@@ -1,0 +1,76 @@
+# WaveBench local configuration example
+# Copy this file to `wavebench.toml` and edit it for your lab setup.
+# `wavebench.toml` is ignored by git because it may contain real instrument IPs and local paths.
+
+[connection]
+# Connection backend. MVP-1 only supports LAN VISA resources.
+backend = "lan"
+
+# VISA resource string for the oscilloscope.
+# Replace the IP address with your RTM2032 LAN address.
+resource = "TCPIP::192.168.1.100::INSTR"
+
+# General VISA I/O timeout in milliseconds.
+timeout_ms = 10000
+
+# Timeout for long operations such as AUToscale and SINGle + *OPC?.
+opc_timeout_ms = 30000
+
+[scope]
+# Device driver name. MVP-1 only supports "rtm2032".
+driver = "rtm2032"
+
+# Optional model hint used for friendly checks and messages.
+model_hint = "RTM2032"
+
+# Default channel used when CLI does not pass --channel.
+default_channel = 1
+
+# Do not reset the oscilloscope by default.
+# Keeping this false avoids wiping front-panel settings during experiments.
+reset_before_run = false
+
+# Query SYST:ERR? after important operations when possible.
+check_errors = true
+
+[autoscale]
+# AUToscale is asynchronous, so WaveBench should wait for completion.
+# MVP-1 may force this to true even if changed.
+wait_opc = true
+
+# Check instrument error queue after autoscale.
+check_errors = true
+
+[waveform]
+# Waveform transfer format. MVP-1 supports "real" only.
+format = "real"
+
+# Binary byte order for waveform transfer. RTM2000 examples use LSBF.
+byte_order = "lsbf"
+
+# Sample range for waveform transfer.
+# "dmax" means maximum memory data in the displayed time range.
+points = "dmax"
+
+[output]
+# Base directory for generated acquisition packages.
+directory = "data/raw"
+
+# Acquisition package naming rule.
+# Current plan: YYYYMMDD_HHMMSS_<label>.
+package_naming = "timestamp_label"
+
+# Save per-channel CSV files: index,time_s,voltage_v.
+save_csv = true
+
+# Save per-channel NPY files with shape (N, 2): [time_s, voltage_v].
+save_npy = true
+
+# Save metadata.json with instrument, operation, waveform header, and file references.
+save_json = true
+
+# Save commands.log with key SCPI commands and responses.
+save_commands_log = true
+
+# Screenshot export is reserved for later; disabled in MVP-1 by default.
+save_screenshot = false
