@@ -44,6 +44,8 @@ def build_parser() -> argparse.ArgumentParser:
     capture.add_argument("--label", default="capture")
     capture.add_argument("--points", default=None, help="Override waveform points: def, max, or dmax")
     capture.add_argument("--time-range", type=float, default=None, help="Set total acquisition time across 10 divisions, in seconds")
+    capture.add_argument("--expect-frequency", type=float, default=None, help="Expected signal frequency in Hz for metadata quality checks")
+    capture.add_argument("--frequency-tolerance", type=float, default=None, help="Relative frequency tolerance, e.g. 0.05 for 5 percent")
     capture.add_argument("--no-csv", action="store_true", help="Do not save CSV waveform output")
     capture.add_argument("--no-npy", action="store_true", help="Do not save NPY waveform output")
     add_runtime_options(capture)
@@ -55,8 +57,18 @@ def _load_service(args: argparse.Namespace) -> ScopeService:
     config = load_config(args.config)
     if args.resource:
         config = config.with_resource(args.resource)
-    if getattr(args, "points", None) or getattr(args, "time_range", None) is not None:
-        config = config.with_waveform_overrides(points=getattr(args, "points", None), time_range_s=getattr(args, "time_range", None))
+    if (
+        getattr(args, "points", None)
+        or getattr(args, "time_range", None) is not None
+        or getattr(args, "expect_frequency", None) is not None
+        or getattr(args, "frequency_tolerance", None) is not None
+    ):
+        config = config.with_waveform_overrides(
+            points=getattr(args, "points", None),
+            time_range_s=getattr(args, "time_range", None),
+            expected_frequency_hz=getattr(args, "expect_frequency", None),
+            frequency_tolerance_ratio=getattr(args, "frequency_tolerance", None),
+        )
     if getattr(args, "no_csv", False) or getattr(args, "no_npy", False):
         config = config.with_output_overrides(
             save_csv=False if getattr(args, "no_csv", False) else None,
@@ -81,6 +93,9 @@ def _print_waveform_summary(waveform: WaveformData) -> None:
     estimated_cycles = summary.get("estimated_cycles")
     if estimated_cycles is not None:
         print(f"estimated_cycles≈{estimated_cycles:.3g}")
+    frequency_error = summary.get("frequency_error_ratio")
+    if frequency_error is not None:
+        print(f"frequency_error≈{frequency_error:.3%}")
     for warning in summary.get("quality_warnings", []):
         print(f"warning={warning}")
 

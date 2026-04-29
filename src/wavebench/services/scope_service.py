@@ -105,6 +105,8 @@ class ScopeService:
                     "channel": channel,
                     "label": label,
                     "time_range_s": self.config.waveform.time_range_s,
+                    "expected_frequency_hz": self.config.waveform.expected_frequency_hz,
+                    "frequency_tolerance_ratio": self.config.waveform.frequency_tolerance_ratio,
                     "failed": True,
                 },
                 "error": {"type": type(exc).__name__, "message": str(exc)},
@@ -144,6 +146,8 @@ class ScopeService:
                 "label": label,
                 "triggered_single": True,
                 "time_range_s": self.config.waveform.time_range_s,
+                "expected_frequency_hz": self.config.waveform.expected_frequency_hz,
+                "frequency_tolerance_ratio": self.config.waveform.frequency_tolerance_ratio,
             },
             "waveform": {
                 "header": {
@@ -153,7 +157,10 @@ class ScopeService:
                     "points": waveform.header.points,
                     "segment": waveform.header.segment,
                 },
-                "summary": waveform.summary(),
+                "summary": waveform.summary(
+                    expected_frequency_hz=self.config.waveform.expected_frequency_hz,
+                    frequency_tolerance_ratio=self.config.waveform.frequency_tolerance_ratio,
+                ),
             },
             "files": files,
         }

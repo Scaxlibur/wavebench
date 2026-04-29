@@ -30,6 +30,14 @@ class QualityTests(unittest.TestCase):
         self.assertAlmostEqual(quality.estimated_cycles, 1.0, delta=0.05)
         self.assertTrue(any("frequency estimate may be unreliable" in warning for warning in quality.quality_warnings))
 
+    def test_warns_when_expected_frequency_mismatches(self):
+        times = np.linspace(0.0, 0.01, 10000, endpoint=False)
+        voltages = 2.5 * np.sin(2 * np.pi * 5000.0 * times)
+        quality = summarize_waveform(times, voltages, expected_frequency_hz=500.0, frequency_tolerance_ratio=0.05)
+        self.assertFalse(quality.frequency_in_tolerance)
+        self.assertAlmostEqual(quality.frequency_error_ratio, 9.0, delta=0.1)
+        self.assertTrue(any("frequency_mismatch" in warning for warning in quality.quality_warnings))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -379,3 +379,8 @@ commands.log：记录关键 SCPI 命令与响应。
 - `frequency_method`: 频率估计方法，例如 `hysteresis_rising_crossing` 或 `fft_peak`。
 - `estimated_cycles`: 当前采集窗口内估计包含的周期数。
 - `quality_warnings`: 数据质量提示列表；例如少于 2 个周期时给出 `low_cycle_count`，提示频率估计可能不可靠。
+
+- `expected_frequency_hz`: 用户通过 CLI/config 给出的预期频率。
+- `frequency_error_ratio`: 估计频率相对预期频率的误差比例。
+- `frequency_in_tolerance`: 是否落在给定频率容差内。
+- `frequency_mismatch`: 估计频率偏离预期频率时的提示。

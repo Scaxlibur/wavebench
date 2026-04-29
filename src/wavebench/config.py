@@ -49,6 +49,8 @@ class WaveformConfig:
     byte_order: str
     points: str
     time_range_s: float | None = None
+    expected_frequency_hz: float | None = None
+    frequency_tolerance_ratio: float = 0.05
 
 @dataclass(frozen=True)
 class OutputConfig:
@@ -103,7 +105,12 @@ class WaveBenchConfig:
         )
 
     def with_waveform_overrides(
-        self, *, points: str | None = None, time_range_s: float | None = None
+        self,
+        *,
+        points: str | None = None,
+        time_range_s: float | None = None,
+        expected_frequency_hz: float | None = None,
+        frequency_tolerance_ratio: float | None = None,
     ) -> "WaveBenchConfig":
         return WaveBenchConfig(
             connection=self.connection,
@@ -114,6 +121,14 @@ class WaveBenchConfig:
                 byte_order=self.waveform.byte_order,
                 points=self.waveform.points if points is None else normalize_waveform_points(points),
                 time_range_s=self.waveform.time_range_s if time_range_s is None else time_range_s,
+                expected_frequency_hz=(
+                    self.waveform.expected_frequency_hz if expected_frequency_hz is None else expected_frequency_hz
+                ),
+                frequency_tolerance_ratio=(
+                    self.waveform.frequency_tolerance_ratio
+                    if frequency_tolerance_ratio is None
+                    else frequency_tolerance_ratio
+                ),
             ),
             output=self.output,
             source_path=self.source_path,
@@ -159,6 +174,8 @@ def load_config(path: str | Path = "wavebench.toml") -> WaveBenchConfig:
                 byte_order=str(w.get("byte_order", "lsbf")),
                 points=normalize_waveform_points(str(w.get("points", "dmax"))),
                 time_range_s=float(w["time_range_s"]) if "time_range_s" in w else None,
+                expected_frequency_hz=float(w["expected_frequency_hz"]) if "expected_frequency_hz" in w else None,
+                frequency_tolerance_ratio=float(w.get("frequency_tolerance_ratio", 0.05)),
             ),
             output=OutputConfig(
                 directory=Path(str(o.get("directory", "data/raw"))),
@@ -184,4 +201,8 @@ def load_config(path: str | Path = "wavebench.toml") -> WaveBenchConfig:
         raise ConfigError("scope.default_channel must be >= 1")
     if config.waveform.time_range_s is not None and config.waveform.time_range_s <= 0:
         raise ConfigError("waveform.time_range_s must be > 0")
+    if config.waveform.expected_frequency_hz is not None and config.waveform.expected_frequency_hz <= 0:
+        raise ConfigError("waveform.expected_frequency_hz must be > 0")
+    if config.waveform.frequency_tolerance_ratio <= 0:
+        raise ConfigError("waveform.frequency_tolerance_ratio must be > 0")
     return config

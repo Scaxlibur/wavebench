@@ -41,8 +41,15 @@ class WaveformData:
     def sample_count(self) -> int:
         return int(self.voltages_v.size)
 
-    def summary(self) -> dict[str, object]:
-        quality = summarize_waveform(self.times_s, self.voltages_v)
+    def summary(
+        self, *, expected_frequency_hz: float | None = None, frequency_tolerance_ratio: float = 0.05
+    ) -> dict[str, object]:
+        quality = summarize_waveform(
+            self.times_s,
+            self.voltages_v,
+            expected_frequency_hz=expected_frequency_hz,
+            frequency_tolerance_ratio=frequency_tolerance_ratio,
+        )
         return {
             "channel": self.channel,
             "samples": self.sample_count,
