@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import json
+import traceback
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -11,7 +12,7 @@ import numpy as np
 from wavebench.config import WaveBenchConfig
 from wavebench.data.package import new_package_dir
 from wavebench.drivers.rtm2032 import RTM2032Scope, WaveformData
-from wavebench.errors import ConfigError
+from wavebench.errors import ConfigError, WaveBenchError
 from wavebench.logging import CommandLogger
 from wavebench.transport.rsinstrument_transport import RsInstrumentTransport
 
@@ -78,16 +79,37 @@ class ScopeService:
         commands_log_path = package_dir / "commands.log" if self.config.output.save_commands_log else None
         if commands_log_path is not None:
             self.logger.path = commands_log_path
-        scope = self._open_scope()
         try:
-            instrument_idn = scope.idn()
-            waveform = scope.capture_waveform(
-                channel=channel,
-                points=self.config.waveform.points,
-                check_errors=self.config.scope.check_errors,
+            scope = self._open_scope()
+            try:
+                instrument_idn = scope.idn()
+                waveform = scope.capture_waveform(
+                    channel=channel,
+                    points=self.config.waveform.points,
+                    check_errors=self.config.scope.check_errors,
+                )
+            finally:
+                scope.close()
+        except Exception as exc:
+            failed_dir = package_dir.with_name(package_dir.name + "_failed")
+            package_dir.rename(failed_dir)
+            (failed_dir / "error.txt").write_text(
+                f"{type(exc).__name__}: {exc}\n\n{traceback.format_exc()}",
+                encoding="utf-8",
             )
-        finally:
-            scope.close()
+            partial = {
+                "instrument": {"resource": self.config.connection.resource},
+                "operation": {"command": "scope capture", "channel": channel, "label": label, "failed": True},
+                "error": {"type": type(exc).__name__, "message": str(exc)},
+                "files": {"commands": str(failed_dir / "commands.log")} if commands_log_path is not None else {},
+            }
+            (failed_dir / "metadata.partial.json").write_text(
+                json.dumps(partial, indent=2, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            if isinstance(exc, WaveBenchError):
+                raise
+            raise
         times = waveform.times_s
         files: dict[str, str] = {}
         csv_path: Path | None = None
