@@ -4,10 +4,12 @@ import argparse
 import sys
 
 from .config import load_config
+from .drivers.dg4202 import SourceStatus
 from .drivers.rtm2032 import WaveformData
 from .errors import ConfigError, WaveBenchError
 from .logging import CommandLogger
 from .services.scope_service import ScopeService
+from .services.source_service import SourceService
 
 
 def add_runtime_options(parser: argparse.ArgumentParser) -> None:
@@ -20,6 +22,29 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="domain", required=True)
 
     scope_parser = subparsers.add_parser("scope", help="Oscilloscope commands")
+    source_parser = subparsers.add_parser("source", help="Signal generator commands")
+    source_sub = source_parser.add_subparsers(dest="command", required=True)
+
+    source_idn = source_sub.add_parser("idn", help="Query source *IDN?")
+    add_runtime_options(source_idn)
+
+    source_errors = source_sub.add_parser("errors", help="Read source SYST:ERR? until empty")
+    add_runtime_options(source_errors)
+
+    source_status = source_sub.add_parser("status", help="Query source channel status")
+    source_status.add_argument("--channel", type=int, default=None)
+    add_runtime_options(source_status)
+
+    source_set_freq = source_sub.add_parser("set-freq", help="Set source channel frequency in Hz")
+    source_set_freq.add_argument("--channel", type=int, default=None)
+    source_set_freq.add_argument("value_hz", type=float)
+    add_runtime_options(source_set_freq)
+
+    source_output = source_sub.add_parser("output", help="Set source channel output on or off")
+    source_output.add_argument("--channel", type=int, default=None)
+    source_output.add_argument("state", choices=["on", "off", "ON", "OFF"])
+    add_runtime_options(source_output)
+
     scope_sub = scope_parser.add_subparsers(dest="command", required=True)
 
     idn = scope_sub.add_parser("idn", help="Query *IDN?")
@@ -94,6 +119,20 @@ def _load_service(args: argparse.Namespace) -> ScopeService:
     return ScopeService(config=config, logger=CommandLogger())
 
 
+def _load_source_service(args: argparse.Namespace) -> SourceService:
+    config = load_config(args.config)
+    if args.resource:
+        config = config.with_source_resource(args.resource)
+    return SourceService(config=config, logger=CommandLogger())
+
+
+def _print_source_status(status: SourceStatus) -> None:
+    print(f"CH{status.channel}: output={status.output} func={status.function} freq={status.frequency_hz}Hz amp={status.amplitude}{status.amplitude_unit or ''} offset={status.offset_v}V phase={status.phase_deg}deg")
+    print(f"mode={status.frequency_mode} sweep={status.sweep_enabled}")
+    if status.apply_raw is not None:
+        print(f"apply={status.apply_raw}")
+
+
 def _print_waveform_summary(waveform: WaveformData) -> None:
     summary = waveform.summary()
     print(f"CH{summary['channel']} waveform fetched")
@@ -121,6 +160,24 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     try:
+        if args.domain == "source":
+            service = _load_source_service(args)
+            if args.command == "idn":
+                print(service.idn())
+                return 0
+            if args.command == "errors":
+                for item in service.errors():
+                    print(item)
+                return 0
+            if args.command == "status":
+                _print_source_status(service.status(channel=args.channel))
+                return 0
+            if args.command == "set-freq":
+                _print_source_status(service.set_frequency(channel=args.channel, value_hz=args.value_hz))
+                return 0
+            if args.command == "output":
+                _print_source_status(service.set_output(channel=args.channel, enabled=args.state.lower() == "on"))
+                return 0
         if args.domain == "scope":
             service = _load_service(args)
             if args.command == "idn":

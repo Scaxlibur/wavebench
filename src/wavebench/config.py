@@ -55,6 +55,14 @@ class WaveformConfig:
     window_frequency_hz: float | None = None
 
 @dataclass(frozen=True)
+class SourceConfig:
+    driver: str
+    resource: str | None
+    default_channel: int
+    check_errors: bool
+    ensure_fix_mode_on_set_frequency: bool
+
+@dataclass(frozen=True)
 class OutputConfig:
     directory: Path
     package_naming: str
@@ -72,6 +80,7 @@ class WaveBenchConfig:
     waveform: WaveformConfig
     output: OutputConfig
     source_path: Path
+    source: SourceConfig | None = None
 
     def with_resource(self, resource: str) -> "WaveBenchConfig":
         return WaveBenchConfig(
@@ -86,6 +95,7 @@ class WaveBenchConfig:
             waveform=self.waveform,
             output=self.output,
             source_path=self.source_path,
+            source=self.source,
         )
 
     def with_output_overrides(self, *, save_csv: bool | None = None, save_npy: bool | None = None) -> "WaveBenchConfig":
@@ -104,6 +114,7 @@ class WaveBenchConfig:
                 save_screenshot=self.output.save_screenshot,
             ),
             source_path=self.source_path,
+            source=self.source,
         )
 
     def with_waveform_overrides(
@@ -138,6 +149,31 @@ class WaveBenchConfig:
             ),
             output=self.output,
             source_path=self.source_path,
+            source=self.source,
+        )
+
+    def with_source_resource(self, resource: str) -> "WaveBenchConfig":
+        source = self.source or SourceConfig(
+            driver="dg4202",
+            resource=None,
+            default_channel=1,
+            check_errors=True,
+            ensure_fix_mode_on_set_frequency=True,
+        )
+        return WaveBenchConfig(
+            connection=self.connection,
+            scope=self.scope,
+            autoscale=self.autoscale,
+            waveform=self.waveform,
+            output=self.output,
+            source_path=self.source_path,
+            source=SourceConfig(
+                driver=source.driver,
+                resource=resource,
+                default_channel=source.default_channel,
+                check_errors=source.check_errors,
+                ensure_fix_mode_on_set_frequency=source.ensure_fix_mode_on_set_frequency,
+            ),
         )
 
 def load_config(path: str | Path = "wavebench.toml") -> WaveBenchConfig:
@@ -157,6 +193,16 @@ def load_config(path: str | Path = "wavebench.toml") -> WaveBenchConfig:
         a = raw.get("autoscale", {})
         w = raw.get("waveform", {})
         o = raw.get("output", {})
+        src = raw.get("source")
+        source = None
+        if src is not None:
+            source = SourceConfig(
+                driver=str(src.get("driver", "dg4202")),
+                resource=str(src["resource"]) if "resource" in src else None,
+                default_channel=int(src.get("default_channel", 1)),
+                check_errors=bool(src.get("check_errors", True)),
+                ensure_fix_mode_on_set_frequency=bool(src.get("ensure_fix_mode_on_set_frequency", True)),
+            )
         config = WaveBenchConfig(
             connection=ConnectionConfig(
                 backend=str(c.get("backend", "lan")),
@@ -195,6 +241,7 @@ def load_config(path: str | Path = "wavebench.toml") -> WaveBenchConfig:
                 save_screenshot=bool(o.get("save_screenshot", False)),
             ),
             source_path=config_path,
+            source=source,
         )
     except KeyError as exc:
         raise ConfigError(f"missing required config key: {exc}") from exc
@@ -217,4 +264,9 @@ def load_config(path: str | Path = "wavebench.toml") -> WaveBenchConfig:
         raise ConfigError("waveform.target_cycles must be > 0")
     if config.waveform.window_frequency_hz is not None and config.waveform.window_frequency_hz <= 0:
         raise ConfigError("waveform.window_frequency_hz must be > 0")
+    if config.source is not None:
+        if config.source.driver.lower() != "dg4202":
+            raise ConfigError("source.driver must be 'dg4202'")
+        if config.source.default_channel < 1:
+            raise ConfigError("source.default_channel must be >= 1")
     return config

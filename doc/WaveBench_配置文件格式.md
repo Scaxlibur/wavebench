@@ -120,6 +120,13 @@ save_npy = true
 save_json = true
 save_commands_log = true
 save_screenshot = false
+
+[source]
+driver = "dg4202"
+resource = "TCPIP::192.168.123.3::INSTR"
+default_channel = 1
+check_errors = true
+ensure_fix_mode_on_set_frequency = true
 ```
 
 ## `[connection]`
@@ -215,6 +222,13 @@ save_npy = true
 save_json = true
 save_commands_log = true
 save_screenshot = false
+
+[source]
+driver = "dg4202"
+resource = "TCPIP::192.168.123.3::INSTR"
+default_channel = 1
+check_errors = true
+ensure_fix_mode_on_set_frequency = true
 ```
 
 默认保存：
@@ -279,3 +293,27 @@ import tomllib
 ```
 
 第一阶段只需要读取配置，不需要程序写回配置，因此无需额外 TOML 写入库。
+
+
+## `[source]`
+
+```toml
+[source]
+driver = "dg4202"
+resource = "TCPIP::192.168.123.3::INSTR"
+default_channel = 1
+check_errors = true
+ensure_fix_mode_on_set_frequency = true
+```
+
+当前第二阶段信号源只支持：
+
+```toml
+driver = "dg4202"
+```
+
+说明：
+
+- `resource` 是信号发生器的 VISA 资源串。
+- `default_channel` 是 `wavebench source ...` 未显式传 `--channel` 时使用的通道。
+- `ensure_fix_mode_on_set_frequency = true` 表示在执行 `source set-freq` 前，若仪器当前处于 `SWE` 模式，则先切到 `FIX`，避免把 sweep 频率误当成固定频率输出。

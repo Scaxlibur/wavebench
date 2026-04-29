@@ -74,3 +74,20 @@ save_commands_log = true
 
 # Screenshot export is reserved for later; disabled in MVP-1 by default.
 save_screenshot = false
+
+
+[source]
+# Signal generator driver. Current MVP source support targets Rigol DG4202.
+driver = "dg4202"
+
+# VISA resource string for the signal generator.
+resource = "TCPIP::192.168.1.101::INSTR"
+
+# Default channel used when source CLI does not pass --channel.
+default_channel = 1
+
+# Query SYST:ERR? after source operations when possible.
+check_errors = true
+
+# When setting a fixed frequency, switch SWE -> FIX first if needed.
+ensure_fix_mode_on_set_frequency = true

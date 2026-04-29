@@ -22,6 +22,19 @@ class CliTests(unittest.TestCase):
         self.assertEqual(args.command, "capture")
         self.assertEqual(args.channel, [1, 2])
 
+    def test_source_status_accepts_channel(self):
+        args = build_parser().parse_args(["source", "status", "--channel", "2"])
+        self.assertEqual(args.domain, "source")
+        self.assertEqual(args.command, "status")
+        self.assertEqual(args.channel, 2)
+
+    def test_source_set_freq_accepts_value(self):
+        args = build_parser().parse_args(["source", "set-freq", "--channel", "2", "1000"])
+        self.assertEqual(args.domain, "source")
+        self.assertEqual(args.command, "set-freq")
+        self.assertEqual(args.channel, 2)
+        self.assertEqual(args.value_hz, 1000.0)
+
     def test_fetch_accepts_points(self):
         args = build_parser().parse_args(["scope", "fetch", "--points", "dmax"])
         self.assertEqual(args.command, "fetch")

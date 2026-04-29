@@ -328,3 +328,18 @@ scope only
 fetch / capture 默认不接管前面板设置
 优先完成 auto、fetch、capture 三条高频路径
 ```
+
+
+## 第二阶段补充：信号源 CLI 最小骨架
+
+当前新增最小信号源命令：
+
+```bash
+wavebench source idn
+wavebench source status --channel 1
+wavebench source status --channel 2
+wavebench source set-freq --channel 2 1000
+wavebench source output --channel 2 on
+```
+
+信号源当前目标设备为 RIGOL DG4202，底层走 PyVISA / NI-VISA，不与示波器共用 R&S 专用库。
