@@ -79,6 +79,8 @@ Windows Ethernet -> RTM2032 192.168.123.2 -> VISA/SCPI
 1 kHz sine  : 10000000 samples with DMAX, Vpp≈5.12 V, freq≈999.997 Hz
 5 kHz sine  : Vpp≈5.12 V, freq≈5001.36 Hz
 sweep smoke : 1k→10k linear sweep, auto 10 ms window, no low-cycle warning
+formal source->scope loop: source set-freq 1 kHz, scope verified ≈1 kHz
+real square-wave metrics: 100 kHz square, duty≈0.5, rise/fall≈32 ns
 ```
 
 已确认下一阶段信号源目标设备：
@@ -154,8 +156,9 @@ python -m wavebench scope capture --config wavebench.toml   --channel 1 --channe
 
 - [x] 明确多通道策略：`--channel` 可重复，按通道逐个触发采集；每个通道独立质量摘要，不假设信号相同。
 - [x] 将 DG4202 整理进正式 WaveBench 架构最小骨架：`source idn/status/set-freq/output`。
-- [ ] 为离散扫点流程增加 source-mode 防呆：在固定频点实验前明确检查 `FREQ:MODE`，必要时从 `SWE` 切到 `FIX`。
-- [ ] 若需要离散扫点测试，优先走“设置信号发生器频点 -> 示波器采集 -> 记录结果”的顺序流程。
+- [x] 为离散扫点流程增加 source-mode 防呆：在固定频点实验前明确检查 `FREQ:MODE`，必要时从 `SWE` 切到 `FIX`。
+- [x] 正式最小闭环已验证：`source set-freq` -> `scope capture`。
+- [ ] 后续将离散扫点测试封装成统一流程命令或脚本。
 - [ ] 后续再考虑截图、YAML 实验流程。
 
 ## 当前关键约束
