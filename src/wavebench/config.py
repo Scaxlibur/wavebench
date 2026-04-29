@@ -66,6 +66,24 @@ class WaveBenchConfig:
             source_path=self.source_path,
         )
 
+    def with_output_overrides(self, *, save_csv: bool | None = None, save_npy: bool | None = None) -> "WaveBenchConfig":
+        return WaveBenchConfig(
+            connection=self.connection,
+            scope=self.scope,
+            autoscale=self.autoscale,
+            waveform=self.waveform,
+            output=OutputConfig(
+                directory=self.output.directory,
+                package_naming=self.output.package_naming,
+                save_csv=self.output.save_csv if save_csv is None else save_csv,
+                save_npy=self.output.save_npy if save_npy is None else save_npy,
+                save_json=self.output.save_json,
+                save_commands_log=self.output.save_commands_log,
+                save_screenshot=self.output.save_screenshot,
+            ),
+            source_path=self.source_path,
+        )
+
 def load_config(path: str | Path = "wavebench.toml") -> WaveBenchConfig:
     config_path = Path(path)
     if not config_path.exists():
