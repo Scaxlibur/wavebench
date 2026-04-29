@@ -4,6 +4,7 @@ import argparse
 import sys
 
 from .config import load_config
+from .drivers.rtm2032 import WaveformData
 from .errors import WaveBenchError
 from .logging import CommandLogger
 from .services.scope_service import ScopeService
@@ -52,6 +53,16 @@ def _load_service(args: argparse.Namespace) -> ScopeService:
     return ScopeService(config=config, logger=CommandLogger())
 
 
+def _print_waveform_summary(waveform: WaveformData) -> None:
+    summary = waveform.summary()
+    print(f"CH{summary['channel']} waveform fetched")
+    print(f"samples={summary['samples']}")
+    print(f"time={summary['x_start_s']:.6e}..{summary['x_stop_s']:.6e} s")
+    print(f"dt={summary['x_increment_s']:.6e} s")
+    print(f"voltage={summary['voltage_min_v']:.6g}..{summary['voltage_max_v']:.6g} V")
+    print(f"mean={summary['voltage_mean_v']:.6g} V")
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -69,10 +80,23 @@ def main(argv: list[str] | None = None) -> int:
                 service.autoscale()
                 print("AUToscale completed")
                 return 0
-            if args.command in {"fetch", "capture"}:
+            if args.command == "fetch":
                 channel = args.channel or service.config.scope.default_channel
-                print(f"{args.command} for CH{channel} is planned but not implemented yet")
-                return 1
+                waveform = service.fetch_waveform(channel=channel)
+                _print_waveform_summary(waveform)
+                return 0
+            if args.command == "capture":
+                channel = args.channel or service.config.scope.default_channel
+                result = service.capture_waveform(channel=channel, label=args.label)
+                _print_waveform_summary(result.waveform)
+                print(f"package={result.package_dir}")
+                if result.csv_path is not None:
+                    print(f"csv={result.csv_path}")
+                if result.npy_path is not None:
+                    print(f"npy={result.npy_path}")
+                if result.commands_log_path is not None:
+                    print(f"commands_log={result.commands_log_path}")
+                return 0
         parser.error("unknown command")
     except WaveBenchError as exc:
         print(f"wavebench: {exc}", file=sys.stderr)

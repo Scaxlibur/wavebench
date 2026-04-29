@@ -2,8 +2,70 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from wavebench.errors import InstrumentError
+import numpy as np
+
+from wavebench.errors import DataError, InstrumentError
 from wavebench.transport.base import InstrumentTransport
+
+@dataclass(frozen=True)
+class WaveformHeader:
+    x_start: float
+    x_stop: float
+    points: int
+    segment: int | None = None
+
+    @property
+    def x_increment(self) -> float:
+        if self.points <= 1:
+            return 0.0
+        return (self.x_stop - self.x_start) / (self.points - 1)
+
+    @property
+    def duration(self) -> float:
+        return self.x_stop - self.x_start
+
+@dataclass(frozen=True)
+class WaveformData:
+    channel: int
+    header: WaveformHeader
+    voltages_v: np.ndarray
+
+    @property
+    def times_s(self) -> np.ndarray:
+        if self.header.points <= 1:
+            return np.array([self.header.x_start], dtype=np.float64)
+        return np.linspace(self.header.x_start, self.header.x_stop, self.header.points, dtype=np.float64)
+
+    @property
+    def sample_count(self) -> int:
+        return int(self.voltages_v.size)
+
+    def summary(self) -> dict[str, float | int]:
+        return {
+            "channel": self.channel,
+            "samples": self.sample_count,
+            "x_start_s": self.header.x_start,
+            "x_stop_s": self.header.x_stop,
+            "x_increment_s": self.header.x_increment,
+            "voltage_min_v": float(np.min(self.voltages_v)),
+            "voltage_max_v": float(np.max(self.voltages_v)),
+            "voltage_mean_v": float(np.mean(self.voltages_v)),
+        }
+
+def parse_waveform_header(response: str) -> WaveformHeader:
+    parts = [item.strip() for item in response.split(",")]
+    if len(parts) < 3:
+        raise DataError(f"invalid CHAN:DATA:HEAD? response: {response!r}")
+    try:
+        x_start = float(parts[0])
+        x_stop = float(parts[1])
+        points = int(float(parts[2]))
+        segment = int(float(parts[3])) if len(parts) >= 4 else None
+    except ValueError as exc:
+        raise DataError(f"invalid CHAN:DATA:HEAD? response: {response!r}") from exc
+    if points <= 0:
+        raise DataError(f"invalid waveform point count: {points}")
+    return WaveformHeader(x_start=x_start, x_stop=x_stop, points=points, segment=segment)
 
 @dataclass
 class RTM2032Scope:
@@ -37,6 +99,21 @@ class RTM2032Scope:
             self.transport.query_opc()
         if check_errors:
             self.assert_no_errors()
+
+    def fetch_waveform(self, channel: int, points: str = "dmax", check_errors: bool = True) -> WaveformData:
+        if channel < 1:
+            raise DataError("channel must be >= 1")
+        self.transport.write(f"CHAN{channel}:STAT ON")
+        self.transport.write("FORM REAL")
+        self.transport.write("FORM:BORD LSBF")
+        self.transport.write(f"CHAN:DATA:POIN {points.upper()}")
+        header = parse_waveform_header(self.transport.query(f"CHAN{channel}:DATA:HEAD?"))
+        voltages = np.asarray(self.transport.query_float_list(f"CHAN{channel}:DATA?"), dtype=np.float64)
+        if voltages.size != header.points:
+            raise DataError(f"waveform length mismatch: header says {header.points}, got {voltages.size}")
+        if check_errors:
+            self.assert_no_errors()
+        return WaveformData(channel=channel, header=header, voltages_v=voltages)
 
     def close(self) -> None:
         self.transport.close()

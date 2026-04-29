@@ -39,6 +39,12 @@ class RsInstrumentTransport:
         self.logger.record("response", response)
         return response
 
+    def query_float_list(self, command: str) -> list[float]:
+        self.logger.record("query", command)
+        values = list(self.session.query_bin_or_ascii_float_list(command))
+        self.logger.record("response", f"<float_list len={len(values)}>")
+        return values
+
     def query_opc(self) -> str:
         self.logger.record("query", "*OPC?")
         response = str(self.session.query_opc()).strip()

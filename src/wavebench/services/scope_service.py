@@ -1,11 +1,28 @@
 from __future__ import annotations
 
+import csv
+import json
 from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+import numpy as np
 
 from wavebench.config import WaveBenchConfig
-from wavebench.drivers.rtm2032 import RTM2032Scope
+from wavebench.data.package import new_package_dir
+from wavebench.drivers.rtm2032 import RTM2032Scope, WaveformData
+from wavebench.errors import ConfigError
 from wavebench.logging import CommandLogger
 from wavebench.transport.rsinstrument_transport import RsInstrumentTransport
+
+@dataclass(frozen=True)
+class CaptureResult:
+    package_dir: Path
+    waveform: WaveformData
+    metadata_path: Path
+    csv_path: Path | None
+    npy_path: Path | None
+    commands_log_path: Path | None
 
 @dataclass
 class ScopeService:
@@ -39,3 +56,72 @@ class ScopeService:
             )
         finally:
             scope.close()
+
+    def fetch_waveform(self, channel: int) -> WaveformData:
+        if self.config.waveform.format.lower() != "real":
+            raise ConfigError("MVP-1 only supports waveform.format = 'real'")
+        if self.config.waveform.byte_order.lower() != "lsbf":
+            raise ConfigError("MVP-1 only supports waveform.byte_order = 'lsbf'")
+        scope = self._open_scope()
+        try:
+            return scope.fetch_waveform(
+                channel=channel,
+                points=self.config.waveform.points,
+                check_errors=self.config.scope.check_errors,
+            )
+        finally:
+            scope.close()
+
+    def capture_waveform(self, channel: int, label: str) -> CaptureResult:
+        package_dir = new_package_dir(self.config.output.directory, label)
+        package_dir.mkdir(parents=True, exist_ok=False)
+        commands_log_path = package_dir / "commands.log" if self.config.output.save_commands_log else None
+        if commands_log_path is not None:
+            self.logger.path = commands_log_path
+        instrument_idn = self.idn()
+        waveform = self.fetch_waveform(channel=channel)
+        times = waveform.times_s
+        files: dict[str, str] = {}
+        csv_path: Path | None = None
+        npy_path: Path | None = None
+
+        if self.config.output.save_csv:
+            csv_path = package_dir / f"ch{channel}.csv"
+            with csv_path.open("w", newline="", encoding="utf-8") as file:
+                writer = csv.writer(file)
+                writer.writerow(["index", "time_s", "voltage_v"])
+                for index, (time_s, voltage_v) in enumerate(zip(times, waveform.voltages_v)):
+                    writer.writerow([index, f"{time_s:.12e}", f"{float(voltage_v):.12e}"])
+            files["csv"] = str(csv_path)
+
+        if self.config.output.save_npy:
+            npy_path = package_dir / f"ch{channel}.npy"
+            np.save(npy_path, np.column_stack((times, waveform.voltages_v)))
+            files["npy"] = str(npy_path)
+
+        metadata: dict[str, Any] = {
+            "instrument": {"idn": instrument_idn, "resource": self.config.connection.resource},
+            "operation": {"command": "scope capture", "channel": channel, "label": label},
+            "waveform": {
+                "header": {
+                    "x_start_s": waveform.header.x_start,
+                    "x_stop_s": waveform.header.x_stop,
+                    "x_increment_s": waveform.header.x_increment,
+                    "points": waveform.header.points,
+                    "segment": waveform.header.segment,
+                },
+                "summary": waveform.summary(),
+            },
+            "files": files,
+        }
+        metadata_path = package_dir / "metadata.json"
+        if self.config.output.save_json:
+            metadata_path.write_text(json.dumps(metadata, indent=2, ensure_ascii=False), encoding="utf-8")
+        return CaptureResult(
+            package_dir=package_dir,
+            waveform=waveform,
+            metadata_path=metadata_path,
+            csv_path=csv_path,
+            npy_path=npy_path,
+            commands_log_path=commands_log_path,
+        )
