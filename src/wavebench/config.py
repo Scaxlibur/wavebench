@@ -61,6 +61,7 @@ class SourceConfig:
     default_channel: int
     check_errors: bool
     ensure_fix_mode_on_set_frequency: bool
+    settle_ms_after_set_frequency: int
 
 @dataclass(frozen=True)
 class OutputConfig:
@@ -159,6 +160,7 @@ class WaveBenchConfig:
             default_channel=1,
             check_errors=True,
             ensure_fix_mode_on_set_frequency=True,
+            settle_ms_after_set_frequency=0,
         )
         return WaveBenchConfig(
             connection=self.connection,
@@ -173,6 +175,7 @@ class WaveBenchConfig:
                 default_channel=source.default_channel,
                 check_errors=source.check_errors,
                 ensure_fix_mode_on_set_frequency=source.ensure_fix_mode_on_set_frequency,
+                settle_ms_after_set_frequency=source.settle_ms_after_set_frequency,
             ),
         )
 
@@ -202,6 +205,7 @@ def load_config(path: str | Path = "wavebench.toml") -> WaveBenchConfig:
                 default_channel=int(src.get("default_channel", 1)),
                 check_errors=bool(src.get("check_errors", True)),
                 ensure_fix_mode_on_set_frequency=bool(src.get("ensure_fix_mode_on_set_frequency", True)),
+                settle_ms_after_set_frequency=int(src.get("settle_ms_after_set_frequency", 0)),
             )
         config = WaveBenchConfig(
             connection=ConnectionConfig(
@@ -269,4 +273,6 @@ def load_config(path: str | Path = "wavebench.toml") -> WaveBenchConfig:
             raise ConfigError("source.driver must be 'dg4202'")
         if config.source.default_channel < 1:
             raise ConfigError("source.default_channel must be >= 1")
+        if config.source.settle_ms_after_set_frequency < 0:
+            raise ConfigError("source.settle_ms_after_set_frequency must be >= 0")
     return config

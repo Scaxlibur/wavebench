@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import time
 
 from wavebench.config import ConnectionConfig, SourceConfig, WaveBenchConfig
 from wavebench.drivers.dg4202 import DG4202Source, SourceStatus
@@ -58,12 +59,18 @@ class SourceService:
         channel = source_cfg.default_channel if channel is None else channel
         source = self._open_source()
         try:
-            return source.set_frequency(
+            status = source.set_frequency(
                 channel,
                 value_hz,
                 ensure_fix_mode=source_cfg.ensure_fix_mode_on_set_frequency,
-                check_errors=source_cfg.check_errors,
+                check_errors=False,
             )
+            if source_cfg.settle_ms_after_set_frequency:
+                time.sleep(source_cfg.settle_ms_after_set_frequency / 1000.0)
+                status = source.get_status(channel)
+            if source_cfg.check_errors:
+                source.assert_no_errors()
+            return status
         finally:
             source.close()
 
