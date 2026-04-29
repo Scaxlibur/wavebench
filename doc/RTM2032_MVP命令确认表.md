@@ -267,3 +267,67 @@ DMAXimum
 3. `scope auto`：实现 `AUToscale + *OPC?`。
 4. `scope fetch --channel 1`：不触发采集，只读当前波形。
 5. `scope capture --channel 1`：加入 `SINGle + *OPC?`。
+
+
+## 2026-04-29 实机同步：已验证命令序列
+
+### `scope capture` 当前序列
+
+```text
+*IDN?
+*CLS
+[optional] TIMebase:RANGe <seconds>
+CHAN<m>:STAT ON
+FORM REAL
+FORM:BORD LSBF
+CHAN:DATA:POIN DEF|MAX|DMAX
+SINGle
+*OPC?
+CHAN<m>:DATA:HEAD?
+CHAN<m>:DATA?
+SYST:ERR?
+```
+
+说明：
+
+- `scope capture` 会触发新的单次采集，不是只读取屏幕上已有波形。
+- 默认不发送 `*RST`。
+- `TIMebase:RANGe` 只在用户传入 `--time-range`，或通过 `--window-frequency + --target-cycles` 自动计算出时窗时发送。
+- `CHAN:DATA:POIN` 在 RTM2032 上只接受 `DEFault | MAXimum | DMAXimum`；实测发送任意数字点数会产生 `-104,"Data type error"`。
+- `DEF` 实测返回屏幕可见点，常见为 10000 点；`DMAX` 可返回显示时间范围内的最大内存点，实测可达 10000000 点。
+- `SINGle + *OPC?` 后前面板可能显示停止/暂停；下一次 `capture` 再发送 `SINGle` 可重新启动单次采集。
+
+### 数据窗口相关命令
+
+```text
+TIMebase:RANGe <AcquisitionTime>
+```
+
+用途：设置 10 格总采集时间。例如：
+
+```text
+TIMebase:RANGe 0.01
+```
+
+实测 header 约为：
+
+```text
+x_start=-5 ms, x_stop=4.999 ms, points=10000, dt=1 us
+```
+
+### 输出控制与质量校验
+
+这些不是 SCPI 命令，而是 WaveBench CLI 层行为：
+
+```bash
+--no-csv
+--no-npy
+--points def|max|dmax
+--time-range <seconds>
+--window-frequency <Hz>
+--target-cycles <N>
+--expect-frequency <Hz>
+--frequency-tolerance <ratio>
+```
+
+`--window-frequency` 只用于计算时窗，不判断频率对错；`--expect-frequency` 才用于 metadata 里的频率一致性校验。

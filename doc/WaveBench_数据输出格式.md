@@ -384,3 +384,53 @@ commands.log：记录关键 SCPI 命令与响应。
 - `frequency_error_ratio`: 估计频率相对预期频率的误差比例。
 - `frequency_in_tolerance`: 是否落在给定频率容差内。
 - `frequency_mismatch`: 估计频率偏离预期频率时的提示。
+
+
+## 2026-04-29 实机同步：质量摘要与控制字段
+
+当前 `metadata.json` 的 `operation` 会记录本次采集动作：
+
+```json
+{
+  "command": "scope capture",
+  "channel": 1,
+  "label": "sweep_smoke",
+  "triggered_single": true,
+  "time_range_s": 0.01,
+  "expected_frequency_hz": null,
+  "target_cycles": 10.0,
+  "window_frequency_hz": 1000.0,
+  "frequency_tolerance_ratio": 0.05
+}
+```
+
+`waveform.summary` 会记录基础质量摘要：
+
+```json
+{
+  "voltage_min_v": -2.54,
+  "voltage_max_v": 2.5,
+  "voltage_mean_v": -0.0167,
+  "voltage_rms_v": 1.756,
+  "voltage_vpp_v": 5.04,
+  "frequency_estimate_hz": 9382.33,
+  "frequency_method": "hysteresis_rising_crossing",
+  "estimated_cycles": 93.8,
+  "expected_frequency_hz": null,
+  "frequency_error_ratio": null,
+  "frequency_in_tolerance": null,
+  "quality_warnings": []
+}
+```
+
+频率估计优先使用滞回上升沿，失败时回退到 NumPy FFT peak。若采集窗口少于约 2 个周期，`quality_warnings` 会包含 `low_cycle_count`，表示频率估计可能不可靠。若设置了 `expected_frequency_hz` 且估计频率超出容差，会包含 `frequency_mismatch`。
+
+失败采集包命名为 `*_failed`，至少包含：
+
+```text
+metadata.partial.json
+error.txt
+commands.log
+```
+
+配置错误或连接未建立前的失败不会生成采集包；连接成功后发生的采集/仪器/数据错误会生成 failed package，便于复盘 SCPI 序列和仪器错误队列。
