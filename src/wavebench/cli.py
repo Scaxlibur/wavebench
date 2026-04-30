@@ -59,6 +59,8 @@ def build_parser() -> argparse.ArgumentParser:
     capture_inspect.add_argument("path", help="Path to data/raw/<capture_dir>")
     capture_inspect.add_argument("--fft", action="store_true", help="Print offline FFT spectrum summary for saved NPY waveforms")
     capture_inspect.add_argument("--harmonics", type=int, default=5, help="Highest harmonic order to report with --fft")
+    capture_inspect.add_argument("--fft-expect-frequency", type=float, default=None, help="Expected FFT peak frequency in Hz")
+    capture_inspect.add_argument("--fft-frequency-tolerance", type=float, default=0.05, help="Relative tolerance for --fft-expect-frequency")
 
     power_sub = power_parser.add_subparsers(dest="command", required=True)
     power_idn = power_sub.add_parser("idn", help="Query power supply *IDN?")
@@ -332,9 +334,19 @@ def _print_capture_package_summary(package) -> None:
             print(f"  {kind}={path}")
 
 
-def _print_capture_fft_summary(package, *, max_harmonic_order: int = 5) -> None:
+def _print_capture_fft_summary(
+    package,
+    *,
+    max_harmonic_order: int = 5,
+    expected_frequency_hz: float | None = None,
+    frequency_tolerance_ratio: float = 0.05,
+) -> None:
     if max_harmonic_order < 1:
         raise ConfigError("--harmonics must be >= 1")
+    if expected_frequency_hz is not None and expected_frequency_hz <= 0:
+        raise ConfigError("--fft-expect-frequency must be > 0")
+    if frequency_tolerance_ratio < 0:
+        raise ConfigError("--fft-frequency-tolerance must be >= 0")
     print("FFT")
     for channel in package.channels:
         npy_text = channel.files.get("npy")
@@ -353,6 +365,10 @@ def _print_capture_fft_summary(package, *, max_harmonic_order: int = 5) -> None:
         print(f"  sample_rate≈{analysis['sample_rate_hz']:.6g} Hz")
         print(f"  resolution≈{analysis['resolution_hz']:.6g} Hz")
         print(f"  peak_frequency≈{analysis['peak_frequency_hz']:.6g} Hz")
+        if expected_frequency_hz is not None:
+            error_ratio = abs(analysis["peak_frequency_hz"] - expected_frequency_hz) / expected_frequency_hz
+            print(f"  peak_frequency_error≈{error_ratio:.3%}")
+            print(f"  peak_frequency_ok={error_ratio <= frequency_tolerance_ratio}")
         print(f"  peak_amplitude≈{analysis['peak_amplitude_v']:.6g} V")
         print(f"  noise_floor≈{analysis['noise_floor_v']:.6g} V")
         thd = analysis.get("thd_ratio")
@@ -545,7 +561,12 @@ def main(argv: list[str] | None = None) -> int:
                 package = load_capture_package(args.path)
                 _print_capture_package_summary(package)
                 if args.fft:
-                    _print_capture_fft_summary(package, max_harmonic_order=args.harmonics)
+                    _print_capture_fft_summary(
+                        package,
+                        max_harmonic_order=args.harmonics,
+                        expected_frequency_hz=args.fft_expect_frequency,
+                        frequency_tolerance_ratio=args.fft_frequency_tolerance,
+                    )
                 return 0
         if args.domain == "run":
             if args.command == "report":

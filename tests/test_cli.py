@@ -230,11 +230,16 @@ class CliTests(unittest.TestCase):
         self.assertEqual(args.path, "data/raw/example")
 
     def test_capture_inspect_accepts_fft(self):
-        args = build_parser().parse_args(["capture", "inspect", "data/raw/example", "--fft", "--harmonics", "7"])
+        args = build_parser().parse_args([
+            "capture", "inspect", "data/raw/example", "--fft", "--harmonics", "7",
+            "--fft-expect-frequency", "1000", "--fft-frequency-tolerance", "0.02"
+        ])
         self.assertEqual(args.domain, "capture")
         self.assertEqual(args.command, "inspect")
         self.assertTrue(args.fft)
         self.assertEqual(args.harmonics, 7)
+        self.assertEqual(args.fft_expect_frequency, 1000.0)
+        self.assertEqual(args.fft_frequency_tolerance, 0.02)
 
     def test_capture_inspect_fft_prints_spectrum_summary(self):
         with TemporaryDirectory() as tmp:
@@ -265,7 +270,10 @@ class CliTests(unittest.TestCase):
             stdout = io.StringIO()
 
             with redirect_stdout(stdout):
-                status = main(["capture", "inspect", str(capture), "--fft", "--harmonics", "7"])
+                status = main([
+                    "capture", "inspect", str(capture), "--fft", "--harmonics", "7",
+                    "--fft-expect-frequency", "50", "--fft-frequency-tolerance", "0.01"
+                ])
 
             output = stdout.getvalue()
             self.assertEqual(status, 0)
@@ -275,6 +283,8 @@ class CliTests(unittest.TestCase):
             self.assertIn("sample_rate≈1000 Hz", output)
             self.assertIn("resolution≈1 Hz", output)
             self.assertIn("peak_frequency≈50 Hz", output)
+            self.assertIn("peak_frequency_error≈0.000%", output)
+            self.assertIn("peak_frequency_ok=True", output)
             self.assertIn("noise_floor≈", output)
             self.assertIn("harmonic_7≈", output)
 
