@@ -39,6 +39,20 @@ class CliTests(unittest.TestCase):
         args = build_parser().parse_args(["scope", "fetch", "--points", "dmax"])
         self.assertEqual(args.command, "fetch")
         self.assertEqual(args.points, "dmax")
+    def test_source_set_func_accepts_function(self):
+        args = build_parser().parse_args(["source", "set-func", "--channel", "2", "squ"])
+        self.assertEqual(args.domain, "source")
+        self.assertEqual(args.command, "set-func")
+        self.assertEqual(args.channel, 2)
+        self.assertEqual(args.function, "squ")
+
+    def test_source_set_vpp_accepts_value(self):
+        args = build_parser().parse_args(["source", "set-vpp", "--channel", "2", "3.3"])
+        self.assertEqual(args.domain, "source")
+        self.assertEqual(args.command, "set-vpp")
+        self.assertEqual(args.channel, 2)
+        self.assertEqual(args.value_vpp, 3.3)
+
 
     def test_sweep_discrete_accepts_frequencies_and_channels(self):
         args = build_parser().parse_args([

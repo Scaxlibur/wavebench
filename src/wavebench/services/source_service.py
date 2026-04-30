@@ -82,3 +82,21 @@ class SourceService:
             return source.set_output(channel, enabled, check_errors=source_cfg.check_errors)
         finally:
             source.close()
+
+    def set_function(self, channel: int | None, function: str) -> SourceStatus:
+        source_cfg = self._source_config()
+        channel = source_cfg.default_channel if channel is None else channel
+        source = self._open_source()
+        try:
+            return source.set_function(channel, function, check_errors=source_cfg.check_errors)
+        finally:
+            source.close()
+
+    def set_amplitude_vpp(self, channel: int | None, value_vpp: float) -> SourceStatus:
+        source_cfg = self._source_config()
+        channel = source_cfg.default_channel if channel is None else channel
+        source = self._open_source()
+        try:
+            return source.set_amplitude_vpp(channel, value_vpp, check_errors=source_cfg.check_errors)
+        finally:
+            source.close()

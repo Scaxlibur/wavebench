@@ -107,5 +107,42 @@ class DG4202Source:
             self.assert_no_errors()
         return status
 
+
+    def set_function(self, channel: int, function: str, *, check_errors: bool = True) -> SourceStatus:
+        if channel < 1:
+            raise DataError("channel must be >= 1")
+        normalized = function.strip().upper()
+        aliases = {
+            "SINE": "SIN",
+            "SIN": "SIN",
+            "SQUARE": "SQU",
+            "SQU": "SQU",
+            "RAMP": "RAMP",
+            "PULSE": "PULS",
+            "PULS": "PULS",
+            "NOISE": "NOIS",
+            "NOIS": "NOIS",
+            "DC": "DC",
+        }
+        if normalized not in aliases:
+            raise DataError("function must be one of: sin, squ, ramp, puls, nois, dc")
+        self.transport.write(f":SOUR{channel}:FUNC {aliases[normalized]}")
+        status = self.get_status(channel)
+        if check_errors:
+            self.assert_no_errors()
+        return status
+
+    def set_amplitude_vpp(self, channel: int, value_vpp: float, *, check_errors: bool = True) -> SourceStatus:
+        if channel < 1:
+            raise DataError("channel must be >= 1")
+        if value_vpp <= 0:
+            raise DataError("amplitude must be > 0")
+        self.transport.write(f":SOUR{channel}:VOLT:UNIT VPP")
+        self.transport.write(f":SOUR{channel}:VOLT {value_vpp:.12g}")
+        status = self.get_status(channel)
+        if check_errors:
+            self.assert_no_errors()
+        return status
+
     def close(self) -> None:
         self.transport.close()

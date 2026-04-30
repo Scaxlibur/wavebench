@@ -28,6 +28,12 @@ class FakeTransport:
             self.state["freq"] = float(command.split()[-1])
         elif command.startswith(":OUTP2 "):
             self.state["out"] = command.split()[-1]
+        elif command.startswith(":SOUR2:FUNC "):
+            self.state["func"] = command.split()[-1]
+        elif command.startswith(":SOUR2:VOLT:UNIT "):
+            self.state["unit"] = command.split()[-1]
+        elif command.startswith(":SOUR2:VOLT "):
+            self.state["volt"] = float(command.split()[-1])
 
     def query(self, command: str) -> str:
         mapping = {
@@ -75,6 +81,22 @@ class DG4202Tests(unittest.TestCase):
         status = driver.set_output(2, False, check_errors=True)
         self.assertEqual(transport.writes[0], ":OUTP2 OFF")
         self.assertEqual(status.output, "OFF")
+
+    def test_set_function_writes_normalized_function(self):
+        transport = FakeTransport()
+        driver = DG4202Source(transport=transport, check_errors_after_ops=True)
+        status = driver.set_function(2, "square", check_errors=True)
+        self.assertEqual(transport.writes[0], ":SOUR2:FUNC SQU")
+        self.assertEqual(status.function, "SQU")
+
+    def test_set_amplitude_vpp_writes_unit_and_value(self):
+        transport = FakeTransport()
+        driver = DG4202Source(transport=transport, check_errors_after_ops=True)
+        status = driver.set_amplitude_vpp(2, 3.3, check_errors=True)
+        self.assertEqual(transport.writes[0], ":SOUR2:VOLT:UNIT VPP")
+        self.assertEqual(transport.writes[1], ":SOUR2:VOLT 3.3")
+        self.assertEqual(status.amplitude, 3.3)
+        self.assertEqual(status.amplitude_unit, "VPP")
 
 
 if __name__ == "__main__":

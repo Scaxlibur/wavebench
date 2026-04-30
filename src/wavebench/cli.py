@@ -47,6 +47,16 @@ def build_parser() -> argparse.ArgumentParser:
     source_output.add_argument("state", choices=["on", "off", "ON", "OFF"])
     add_runtime_options(source_output)
 
+    source_set_func = source_sub.add_parser("set-func", help="Set source channel waveform function")
+    source_set_func.add_argument("--channel", type=int, default=None)
+    source_set_func.add_argument("function", help="Waveform function: sin, squ, ramp, puls, nois, or dc")
+    add_runtime_options(source_set_func)
+
+    source_set_vpp = source_sub.add_parser("set-vpp", help="Set source channel amplitude in Vpp")
+    source_set_vpp.add_argument("--channel", type=int, default=None)
+    source_set_vpp.add_argument("value_vpp", type=float)
+    add_runtime_options(source_set_vpp)
+
     sweep_sub = sweep_parser.add_subparsers(dest="command", required=True)
     sweep_discrete = sweep_sub.add_parser("discrete", help="Run a discrete source-frequency sweep and capture each point")
     sweep_discrete.add_argument("--source-channel", type=int, default=None)
@@ -201,6 +211,12 @@ def main(argv: list[str] | None = None) -> int:
                 return 0
             if args.command == "output":
                 _print_source_status(service.set_output(channel=args.channel, enabled=args.state.lower() == "on"))
+                return 0
+            if args.command == "set-func":
+                _print_source_status(service.set_function(channel=args.channel, function=args.function))
+                return 0
+            if args.command == "set-vpp":
+                _print_source_status(service.set_amplitude_vpp(channel=args.channel, value_vpp=args.value_vpp))
                 return 0
         if args.domain == "sweep":
             service = _load_sweep_service(args)
