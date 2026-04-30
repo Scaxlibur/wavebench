@@ -85,6 +85,14 @@ class RunReportTests(unittest.TestCase):
             self.assertIn("<h2>Waveform previews</h2>", html)
             self.assertIn("Step 3 ch1", html)
             self.assertIn("<polyline", html)
+            manifest = json.loads((run_dir / "report-assets" / "manifest.json").read_text(encoding="utf-8"))
+            self.assertEqual(manifest["schema"], "wavebench.report_manifest.v1")
+            self.assertEqual(manifest["report"], "report.html")
+            self.assertEqual(manifest["run_json"], "run.json")
+            self.assertEqual(manifest["capture_packages"][0]["package"], "data\\raw\\cap1")
+            self.assertEqual(manifest["screenshots"][0]["path"], "../../raw/cap1/screenshot.png")
+            self.assertEqual(manifest["waveform_previews"][0]["source_npy"], "../../raw/cap1/ch1.npy")
+            self.assertEqual(manifest["warnings"], [])
 
     def test_run_report_without_screenshot_omits_screenshots_section(self):
         with TemporaryDirectory() as tmp:
@@ -277,11 +285,15 @@ class RunReportTests(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            html = render_run_report_html(load_run_package(run_dir), output_dir=run_dir)
+            output = write_run_report_html(load_run_package(run_dir))
+            html = output.read_text(encoding="utf-8")
 
             self.assertIn("<h2>Waveform previews</h2>", html)
             self.assertIn("waveform preview unavailable", html)
             self.assertIn("FileNotFoundError", html)
+            manifest = json.loads((run_dir / "report-assets" / "manifest.json").read_text(encoding="utf-8"))
+            self.assertEqual(manifest["waveform_previews"][0]["exists"], False)
+            self.assertIn("waveform npy missing", manifest["warnings"][0])
 
     def test_run_report_renders_expected_vs_measured_table(self):
         with TemporaryDirectory() as tmp:

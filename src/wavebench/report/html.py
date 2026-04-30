@@ -15,7 +15,23 @@ from wavebench.data.packages import RunPackage
 def write_run_report_html(run: RunPackage, output_path: str | Path | None = None) -> Path:
     path = Path(output_path) if output_path is not None else run.path / "report.html"
     path.write_text(render_run_report_html(run, output_dir=path.parent), encoding="utf-8")
+    write_run_report_manifest(run, output_dir=path.parent, report_path=path)
     return path
+
+
+def write_run_report_manifest(
+    run: RunPackage, output_dir: str | Path | None = None, report_path: str | Path | None = None
+) -> Path:
+    report_output_dir = Path(output_dir) if output_dir is not None else run.path
+    manifest_path = report_output_dir / "report-assets" / "manifest.json"
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
+    manifest = _build_report_manifest(
+        run,
+        output_dir=report_output_dir,
+        report_path=Path(report_path) if report_path is not None else report_output_dir / "report.html",
+    )
+    manifest_path.write_text(json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8")
+    return manifest_path
 
 
 @dataclass(frozen=True)
@@ -155,6 +171,69 @@ code {{ background: #f0f4f8; padding: 0.1rem 0.25rem; border-radius: 3px; }}
 </body>
 </html>
 """
+
+
+def _build_report_manifest(run: RunPackage, *, output_dir: Path, report_path: Path) -> dict[str, Any]:
+    screenshots = _collect_screenshots(run, output_dir)
+    capture_packages: list[dict[str, Any]] = []
+    waveform_previews: list[dict[str, Any]] = []
+    warnings: list[str] = []
+    for step in run.steps:
+        artifact = step.get("artifact", {}) if isinstance(step.get("artifact"), dict) else {}
+        package_text = artifact.get("package")
+        if not package_text:
+            continue
+        package = str(package_text)
+        package_dir = _resolve_artifact_path(run.path, package)
+        step_index = str(step.get("index", ""))
+        package_record = {
+            "step_index": step_index,
+            "package": package,
+            "path": _relative_url(package_dir, output_dir),
+            "exists": package_dir.exists(),
+        }
+        capture_packages.append(package_record)
+        if not package_dir.exists():
+            warnings.append(f"step {step_index}: capture package missing: {package}")
+        metadata = _read_capture_metadata(package_dir, artifact.get("metadata"))
+        for channel, npy_text, _summary in _metadata_waveform_npy_files(metadata):
+            if npy_text:
+                npy_path = _resolve_capture_file_path(run.path, package_dir, str(npy_text))
+                npy_exists = npy_path.exists()
+                source_npy = _relative_url(npy_path, output_dir)
+                if not npy_exists:
+                    warnings.append(f"step {step_index} ch{channel}: waveform npy missing: {npy_text}")
+            else:
+                npy_exists = False
+                source_npy = ""
+                warnings.append(f"step {step_index} ch{channel}: waveform npy missing")
+            waveform_previews.append(
+                {
+                    "step_index": step_index,
+                    "package": package,
+                    "channel": channel,
+                    "source_npy": source_npy,
+                    "exists": npy_exists,
+                    "generated": "inline-svg",
+                }
+            )
+    return {
+        "schema": "wavebench.report_manifest.v1",
+        "report": _relative_url(report_path, output_dir),
+        "run_json": _relative_url(run.run_json_path, output_dir),
+        "summary_csv": _relative_url(run.summary_csv_path, output_dir) if run.summary_csv_path is not None else None,
+        "capture_packages": capture_packages,
+        "screenshots": [
+            {
+                "step_index": item.step_index,
+                "package": item.package,
+                "path": _relative_url(item.path, output_dir),
+            }
+            for item in screenshots
+        ],
+        "waveform_previews": waveform_previews,
+        "warnings": warnings,
+    }
 
 
 def _summary_block(summary: ReportSummary) -> str:
