@@ -4,7 +4,7 @@ from dataclasses import dataclass
 import time
 
 from wavebench.config import ConnectionConfig, SourceConfig, WaveBenchConfig
-from wavebench.drivers.dg4202 import DG4202Source, SourceStatus
+from wavebench.drivers.dg4202 import ArbitraryQueryProbeResult, DG4202Source, SourceStatus
 from wavebench.errors import ConfigError
 from wavebench.logging import CommandLogger
 from wavebench.services.source_state import RestorableSourceState
@@ -122,5 +122,14 @@ class SourceService:
         source = self._open_source()
         try:
             return source.set_amplitude_vpp(channel, value_vpp, check_errors=source_cfg.check_errors)
+        finally:
+            source.close()
+
+    def probe_arbitrary_queries(self, channel: int | None = None) -> list[ArbitraryQueryProbeResult]:
+        source_cfg = self._source_config()
+        channel = source_cfg.default_channel if channel is None else channel
+        source = self._open_source()
+        try:
+            return source.probe_arbitrary_queries(channel)
         finally:
             source.close()

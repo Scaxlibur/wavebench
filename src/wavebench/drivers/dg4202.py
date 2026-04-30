@@ -37,6 +37,34 @@ class SourceStatus:
         }
 
 
+@dataclass(frozen=True)
+class ArbitraryQueryProbeResult:
+    label: str
+    command: str
+    response: str | None
+    errors: list[str]
+    exception: str | None = None
+
+    @property
+    def accepted(self) -> bool:
+        if self.exception is not None:
+            return False
+        return not [item for item in self.errors if not (item.startswith("0") or "No error" in item)]
+
+
+ARBITRARY_QUERY_CANDIDATES: tuple[tuple[str, str], ...] = (
+    ("current_function", ":SOUR{channel}:FUNC?"),
+    ("user_function", ":SOUR{channel}:FUNC:USER?"),
+    ("arb_function", ":SOUR{channel}:FUNC:ARB?"),
+    ("arb_state", ":SOUR{channel}:ARB?"),
+    ("arb_sample_rate", ":SOUR{channel}:ARB:SRAT?"),
+    ("arb_frequency", ":SOUR{channel}:ARB:FREQ?"),
+    ("source_data_catalog", ":SOUR{channel}:DATA:CAT?"),
+    ("source_data", ":SOUR{channel}:DATA?"),
+    ("global_data_catalog", ":DATA:CAT?"),
+)
+
+
 @dataclass
 class DG4202Source:
     transport: object
@@ -158,6 +186,38 @@ class DG4202Source:
         if check_errors:
             self.assert_no_errors()
         return status
+
+    def probe_arbitrary_queries(
+        self,
+        channel: int,
+        candidates: tuple[tuple[str, str], ...] = ARBITRARY_QUERY_CANDIDATES,
+    ) -> list[ArbitraryQueryProbeResult]:
+        if channel < 1:
+            raise DataError("channel must be >= 1")
+        results: list[ArbitraryQueryProbeResult] = []
+        # Drain pre-existing errors so each candidate result is attributable.
+        self.errors()
+        for label, template in candidates:
+            command = template.format(channel=channel)
+            if not command.strip().endswith("?"):
+                raise DataError("arbitrary probe candidates must be query-only commands")
+            response: str | None = None
+            exception: str | None = None
+            try:
+                response = self.transport.query(command)
+            except Exception as exc:  # probe should continue across unsupported commands/timeouts
+                exception = f"{type(exc).__name__}: {exc}"
+            errors = self.errors()
+            results.append(
+                ArbitraryQueryProbeResult(
+                    label=label,
+                    command=command,
+                    response=response,
+                    errors=errors,
+                    exception=exception,
+                )
+            )
+        return results
 
     def close(self) -> None:
         self.transport.close()

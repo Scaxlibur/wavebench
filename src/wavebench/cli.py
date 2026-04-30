@@ -112,6 +112,10 @@ def build_parser() -> argparse.ArgumentParser:
     source_set_duty.add_argument("duty_percent", type=float)
     add_runtime_options(source_set_duty)
 
+    source_arb_probe = source_sub.add_parser("arb-probe", help="Run query-only DG4202 arbitrary-waveform SCPI probes; does not upload or enable output")
+    source_arb_probe.add_argument("--channel", type=int, default=None)
+    add_runtime_options(source_arb_probe)
+
     source_arb_load = source_sub.add_parser("arb-load", help="Prepare an arbitrary waveform payload; upload is gated until DG4202 SCPI is confirmed")
     source_arb_load.add_argument("--channel", type=int, required=True)
     source_arb_load.add_argument("--file", required=True, help="Input waveform file: .csv or .npy")
@@ -452,6 +456,18 @@ def _project_root_from_capture_path(package_dir: Path) -> Path:
     return package_dir.parent
 
 
+def _print_arbitrary_probe_results(results: list[Any]) -> None:
+    for item in results:
+        response = "" if item.response is None else item.response
+        exception = "" if item.exception is None else f" exception={item.exception}"
+        active_errors = [err for err in item.errors if not (err.startswith("0") or "No error" in err)]
+        error_text = " | ".join(active_errors) if active_errors else "0"
+        print(
+            f"{item.label}: accepted={item.accepted} command={item.command} "
+            f"response={response} errors={error_text}{exception}"
+        )
+
+
 def _print_arbitrary_waveform_summary(args: argparse.Namespace) -> None:
     name = validate_waveform_name(args.name)
     waveform = load_arbitrary_waveform(
@@ -575,6 +591,9 @@ def main(argv: list[str] | None = None) -> int:
             if args.command == "errors":
                 for item in service.errors():
                     print(item)
+                return 0
+            if args.command == "arb-probe":
+                _print_arbitrary_probe_results(service.probe_arbitrary_queries(channel=args.channel))
                 return 0
             if args.command == "status":
                 _print_source_status(service.status(channel=args.channel))

@@ -6,6 +6,7 @@ from wavebench.drivers.dg4202 import DG4202Source
 class FakeTransport:
     def __init__(self):
         self.writes = []
+        self.error_queue = ['0,"No error"']
         self.state = {
             "out": "ON",
             "func": "SIN",
@@ -39,9 +40,12 @@ class FakeTransport:
             self.state["duty"] = float(command.split()[-1])
 
     def query(self, command: str) -> str:
+        if command == "SYST:ERR?":
+            if self.error_queue:
+                return self.error_queue.pop(0)
+            return '0,"No error"'
         mapping = {
             "*IDN?": "Rigol Technologies,DG4202,SN,FW",
-            "SYST:ERR?": '0,"No error"',
             ":OUTP2?": self.state["out"],
             ":SOUR2:FUNC?": self.state["func"],
             ":SOUR2:FREQ?": str(self.state["freq"]),
@@ -53,7 +57,12 @@ class FakeTransport:
             ":SOUR2:SWE:STAT?": self.state["swe"],
             ":SOUR2:APPL?": self.state["apply"],
             ":SOUR2:FUNC:SQU:DCYC?": str(self.state["duty"]),
+            ":SOUR2:FUNC:USER?": '"USER1"',
+            ":SOUR2:ARB:SRAT?": "1000000",
         }
+        if command not in mapping:
+            self.error_queue.append('-113,"Undefined header"')
+            return ""
         return mapping[command]
 
     def close(self) -> None:
@@ -109,6 +118,27 @@ class DG4202Tests(unittest.TestCase):
         status = driver.set_square_duty_cycle(2, 25.0, check_errors=True)
         self.assertEqual(transport.writes[0], ":SOUR2:FUNC:SQU:DCYC 25")
         self.assertEqual(status.square_duty_cycle_percent, 25.0)
+
+
+    def test_probe_arbitrary_queries_uses_query_only_candidates_and_reads_errors(self):
+        transport = FakeTransport()
+        driver = DG4202Source(transport=transport, check_errors_after_ops=True)
+
+        results = driver.probe_arbitrary_queries(2)
+
+        commands = [item.command for item in results]
+        self.assertIn(":SOUR2:FUNC:USER?", commands)
+        self.assertIn(":SOUR2:ARB:SRAT?", commands)
+        self.assertTrue(all(command.endswith("?") for command in commands))
+        accepted = {item.label: item.accepted for item in results}
+        self.assertTrue(accepted["user_function"])
+        self.assertTrue(accepted["arb_sample_rate"])
+        self.assertFalse(accepted["source_data_catalog"])
+
+    def test_probe_arbitrary_queries_rejects_non_query_candidate(self):
+        driver = DG4202Source(transport=FakeTransport(), check_errors_after_ops=True)
+        with self.assertRaises(Exception):
+            driver.probe_arbitrary_queries(2, candidates=(("bad", ":SOUR{channel}:FUNC ARB"),))
 
     def test_set_square_duty_cycle_rejects_out_of_range_values(self):
         driver = DG4202Source(transport=FakeTransport(), check_errors_after_ops=True)
