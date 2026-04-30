@@ -55,6 +55,17 @@ class ReportSummary:
     primary_vpp: str
 
 
+@dataclass(frozen=True)
+class ReportExpectationRow:
+    step_index: str
+    step_kind: str
+    metric: str
+    expected: str
+    measured: str
+    status: str
+    details: str
+
+
 def render_run_report_html(run: RunPackage, output_dir: str | Path | None = None) -> str:
     experiment = run.run.get("experiment", {}) if isinstance(run.run.get("experiment"), dict) else {}
     restore = run.run.get("restore", {}) if isinstance(run.run.get("restore"), dict) else {}
@@ -62,12 +73,14 @@ def render_run_report_html(run: RunPackage, output_dir: str | Path | None = None
     report_output_dir = Path(output_dir) if output_dir is not None else run.path
     screenshots = _collect_screenshots(run, report_output_dir)
     signals = _collect_signal_summaries(run)
+    expectations = _collect_expectation_rows(run)
     summary = _build_report_summary(run, screenshots, signals)
     screenshots_by_step = {item.step_index: item for item in screenshots}
     rows = "\n".join(_step_row(step, screenshots_by_step.get(str(step.get("index", "")))) for step in run.steps)
     if not rows:
         rows = '<tr><td colspan="9">No steps recorded.</td></tr>'
     screenshots_block = _screenshots_block(screenshots)
+    expectations_block = _expectations_block(expectations)
     signals_block = _signals_block(signals)
     summary_note = "present" if run.summary_csv_path is not None else "missing"
     error_block = ""
@@ -98,6 +111,8 @@ code {{ background: #f0f4f8; padding: 0.1rem 0.25rem; border-radius: 3px; }}
 .ok {{ color: #0b6b3a; }}
 .failed {{ color: #a61b1b; }}
 .warning {{ color: #915930; }}
+.expectations-table tr.failed td {{ background: #fff5f5; }}
+.expectations-table tr.ok td {{ background: #f7fff9; }}
 </style>
 </head>
 <body>
@@ -116,6 +131,7 @@ code {{ background: #f0f4f8; padding: 0.1rem 0.25rem; border-radius: 3px; }}
 {rows}
 </tbody>
 </table>
+{expectations_block}
 {signals_block}
 {screenshots_block}
 </body>
@@ -148,6 +164,35 @@ def _summary_card(label: str, value: str, *, css_class: str = "") -> str:
         f'<div class="label">{escape(label)}</div>'
         f'<div class="value{safe_class}">{escape(value) if value else "-"}</div>'
         '</div>'
+    )
+
+
+def _expectations_block(expectations: list[ReportExpectationRow]) -> str:
+    if not expectations:
+        return ""
+    rows = "\n".join(_expectation_row(row) for row in expectations)
+    return f"""<h2>Expected vs measured</h2>
+<table class="expectations-table">
+<thead><tr><th>Step</th><th>Kind</th><th>Metric</th><th>Expected</th><th>Measured</th><th>Status</th><th>Details</th></tr></thead>
+<tbody>
+{rows}
+</tbody>
+</table>
+"""
+
+
+def _expectation_row(row: ReportExpectationRow) -> str:
+    status = escape(row.status)
+    return (
+        f'<tr class="{status}">'
+        f"<td>{escape(row.step_index)}</td>"
+        f"<td>{escape(row.step_kind)}</td>"
+        f"<td>{escape(row.metric)}</td>"
+        f"<td>{escape(row.expected)}</td>"
+        f"<td>{escape(row.measured)}</td>"
+        f'<td class="{status}">{escape(row.status)}</td>'
+        f"<td>{escape(row.details)}</td>"
+        "</tr>"
     )
 
 
@@ -190,6 +235,64 @@ def _step_row(step: dict[str, Any], screenshot: ReportScreenshot | None = None) 
         f"<td>{escape(failures_text)}</td>"
         "</tr>"
     )
+
+
+def _collect_expectation_rows(run: RunPackage) -> list[ReportExpectationRow]:
+    rows: list[ReportExpectationRow] = []
+    for step in run.steps:
+        artifact = step.get("artifact", {}) if isinstance(step.get("artifact"), dict) else {}
+        expect = artifact.get("expect", {}) if isinstance(artifact.get("expect"), dict) else {}
+        checks = expect.get("checks", {})
+        if not isinstance(checks, dict):
+            continue
+        for metric, raw_check in checks.items():
+            check = raw_check if isinstance(raw_check, dict) else {}
+            status = str(check.get("status", "")) or str(expect.get("status", ""))
+            rows.append(
+                ReportExpectationRow(
+                    step_index=str(step.get("index", "")),
+                    step_kind=str(step.get("kind", "")),
+                    metric=str(metric),
+                    expected=_format_limits(check.get("limits", {})),
+                    measured=_format_expect_measured(check),
+                    status=status,
+                    details=_format_expect_details(check),
+                )
+            )
+    return rows
+
+
+def _format_limits(limits: Any) -> str:
+    if not isinstance(limits, dict):
+        return ""
+    minimum = limits.get("min")
+    maximum = limits.get("max")
+    if minimum is not None and maximum is not None:
+        return f"{_format_plain(minimum)}..{_format_plain(maximum)}"
+    if minimum is not None:
+        return f">= {_format_plain(minimum)}"
+    if maximum is not None:
+        return f"<= {_format_plain(maximum)}"
+    return ""
+
+
+def _format_expect_measured(check: dict[str, Any]) -> str:
+    if "value" in check:
+        return _format_plain(check.get("value"))
+    reason = check.get("reason")
+    if reason:
+        return str(reason)
+    return ""
+
+
+def _format_expect_details(check: dict[str, Any]) -> str:
+    reasons = check.get("reasons")
+    if isinstance(reasons, list):
+        return " | ".join(str(item) for item in reasons)
+    reason = check.get("reason")
+    if reason:
+        return str(reason)
+    return ""
 
 
 def _build_report_summary(

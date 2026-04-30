@@ -232,5 +232,85 @@ class RunReportTests(unittest.TestCase):
             self.assertIn("low_cycles", html)
 
 
+    def test_run_report_renders_expected_vs_measured_table(self):
+        with TemporaryDirectory() as tmp:
+            run_dir = Path(tmp) / "data" / "runs" / "run_expect"
+            run_dir.mkdir(parents=True)
+            (run_dir / "run.json").write_text(
+                json.dumps(
+                    {
+                        "status": "failed",
+                        "steps": [
+                            {
+                                "index": 7,
+                                "kind": "scope.capture",
+                                "status": "failed",
+                                "artifact": {
+                                    "expect": {
+                                        "status": "failed",
+                                        "checks": {
+                                            "frequency_estimate_hz": {
+                                                "status": "ok",
+                                                "value": 10000.0,
+                                                "limits": {"min": 9500.0, "max": 10500.0},
+                                            },
+                                            "voltage_vpp_v": {
+                                                "status": "failed",
+                                                "value": 0.01,
+                                                "limits": {"min": 0.05},
+                                                "reasons": ["below min 0.05"],
+                                            },
+                                            "duty_cycle": {
+                                                "status": "failed",
+                                                "reason": "unavailable",
+                                                "limits": {"min": 0.49, "max": 0.51},
+                                            },
+                                            "frequency_error_ratio": {
+                                                "status": "failed",
+                                                "value": "nan-ish",
+                                                "reason": "not_numeric",
+                                                "limits": {"max": 0.02},
+                                            },
+                                        },
+                                        "failures": [
+                                            "voltage_vpp_v: 0.01 below min 0.05",
+                                            "duty_cycle: unavailable",
+                                            "frequency_error_ratio: not numeric",
+                                        ],
+                                    }
+                                },
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            html = render_run_report_html(load_run_package(run_dir), output_dir=run_dir)
+
+            self.assertIn("<h2>Expected vs measured</h2>", html)
+            self.assertIn("<td>frequency_estimate_hz</td>", html)
+            self.assertIn("<td>9500..10500</td>", html)
+            self.assertIn("<td>10000</td>", html)
+            self.assertIn("<td>&gt;= 0.05</td>", html)
+            self.assertIn("<td>below min 0.05</td>", html)
+            self.assertIn("<td>unavailable</td>", html)
+            self.assertIn("<td>not_numeric</td>", html)
+            self.assertIn('<tr class="failed"><td>7</td><td>scope.capture</td><td>voltage_vpp_v</td>', html)
+
+    def test_run_report_omits_expected_vs_measured_without_expect_checks(self):
+        with TemporaryDirectory() as tmp:
+            run_dir = Path(tmp) / "data" / "runs" / "run_no_expect"
+            run_dir.mkdir(parents=True)
+            (run_dir / "run.json").write_text(
+                json.dumps({"status": "ok", "steps": [{"index": 0, "kind": "sleep", "status": "ok"}]}),
+                encoding="utf-8",
+            )
+
+            html = render_run_report_html(load_run_package(run_dir), output_dir=run_dir)
+
+            self.assertNotIn("<h2>Expected vs measured</h2>", html)
+
+
 if __name__ == "__main__":
     unittest.main()
