@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from wavebench.config import WaveBenchConfig
+from wavebench.errors import InstrumentError
 from wavebench.logging import CommandLogger
 from wavebench.services.scope_service import ScopeService
 from wavebench.services.source_service import SourceService
@@ -95,7 +96,12 @@ class SweepService:
         rows: list[DiscreteSweepRow] = []
 
         for index, frequency_hz in enumerate(frequencies_hz):
-            source_service.set_frequency(channel=source_channel, value_hz=frequency_hz)
+            source_status = source_service.set_frequency(channel=source_channel, value_hz=frequency_hz)
+            if source_status.output.strip().upper() != 'ON':
+                raise InstrumentError(
+                    f'source CH{source_channel} output is {source_status.output}; '
+                    'turn it on with `wavebench source output --channel <n> on` before running sweep'
+                )
             point_label = f'{label}_{index:02d}_{int(frequency_hz)}hz'
             point_config = self.config.with_waveform_overrides(
                 time_range_s=target_cycles / frequency_hz,
