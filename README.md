@@ -138,7 +138,10 @@ Check a multi-instrument run plan without connecting to instruments:
 
 ```powershell
 python -m wavebench run check --config wavebench.toml --plan plans/dp800_scope_probe_voltage_steps.toml
+python -m wavebench run check --config wavebench.toml --plan plans/example_scope_expect_quality.toml
 ```
+
+A public example plan with `quality_gate`, `auto_recover`, source restoration, and `[steps.expect]` lives at `plans/example_scope_expect_quality.toml`.
 
 Execute the verified DP800-to-scope probe voltage-step plan:
 

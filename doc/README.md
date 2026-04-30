@@ -157,8 +157,11 @@ python -m wavebench power output --config wavebench.toml --resource TCPIP::<dp80
 
 ```bash
 python -m wavebench run check --config wavebench.toml --plan plans/dp800_scope_probe_voltage_steps.toml
+python -m wavebench run check --config wavebench.toml --plan plans/example_scope_expect_quality.toml
 python -m wavebench run plan --config wavebench.toml --plan plans/dp800_scope_probe_voltage_steps.toml
 ```
+
+`plans/example_scope_expect_quality.toml` 是公开示例计划，包含 source restore、`quality_gate`、`auto_recover` 和 `[steps.expect]`，只用于展示写法。
 
 `run plan` 会真实连接仪器并执行计划；DP800 直连示波器探头的计划必须保留显式 scope coupling guard。
 
@@ -231,6 +234,7 @@ python -m wavebench scope capture --config wavebench.toml   --channel 1 --channe
 - [x] 修复 run plan 中 `target_cycles/window_frequency_hz` 未换算为 `time_range_s` 的问题；100 kHz duty 75% 复验为 0.75。
 - [x] run plan `scope.capture` 支持 `quality_gate = true` 和 `auto_recover = true`；质量警告时按配置执行多次 `scope.auto` 后重采，并支持重复结果一致性判定。
 - [x] run plan `scope.capture` 支持 `[steps.expect]` 指标 min/max 断言；断言失败会保留采集证据，并将 step/run 标记为 failed。
+- [x] 新增公开 example plan：`plans/example_scope_expect_quality.toml`，展示质量恢复与实验断言写法。
 - [ ] 后续再考虑截图、YAML 实验流程。
 
 ## 当前关键约束
