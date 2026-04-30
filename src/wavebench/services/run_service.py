@@ -119,11 +119,12 @@ class RunService:
             )
             raise ConfigError("run plan source state restore failed: " + restore_error["message"])
 
+        run_status = "failed" if any(record.status == "failed" for record in records) else "ok"
         self._write_run_files(
             plan=plan,
             run_json_path=run_json_path,
             summary_csv_path=summary_csv_path,
-            status="ok",
+            status=run_status,
             records=records,
             error=None,
             restore_state=restore_state,
@@ -215,7 +216,7 @@ class RunService:
         return RunStepRecord(
             index=step.index,
             kind=step.kind,
-            status="ok",
+            status=_step_status(artifact),
             fields=step.fields,
             artifact=artifact,
         )
@@ -263,6 +264,8 @@ class RunService:
                 "status": "warning" if warnings else "ok",
                 "warnings": warnings,
             }
+        if "expect" in step.fields:
+            artifact["expect"] = _evaluate_expect(artifact, step.fields["expect"])
         return artifact
 
     def _recovery_attempt_record(self, index: int, kind: str, artifact: dict[str, Any]) -> dict[str, Any]:
@@ -291,6 +294,7 @@ class RunService:
                 "voltage_vpp_v": summary.get("voltage_vpp_v"),
                 "voltage_mean_v": summary.get("voltage_mean_v"),
                 "duty_cycle": summary.get("duty_cycle"),
+                "frequency_error_ratio": summary.get("frequency_error_ratio"),
             },
         }
 
@@ -384,7 +388,18 @@ class RunService:
         )
 
         with summary_csv_path.open("w", newline="", encoding="utf-8") as file:
-            fieldnames = ["index", "kind", "status", "package", "metadata", "quality_status", "quality_warnings", "recovered"]
+            fieldnames = [
+                "index",
+                "kind",
+                "status",
+                "package",
+                "metadata",
+                "quality_status",
+                "quality_warnings",
+                "recovered",
+                "expect_status",
+                "expect_failures",
+            ]
             writer = csv.DictWriter(file, fieldnames=fieldnames)
             writer.writeheader()
             for record in records:
@@ -398,8 +413,53 @@ class RunService:
                         "quality_status": record.artifact.get("quality", {}).get("status", ""),
                         "quality_warnings": " | ".join(record.artifact.get("quality", {}).get("warnings", [])),
                         "recovered": "yes" if "quality_recovery" in record.artifact else "",
+                        "expect_status": record.artifact.get("expect", {}).get("status", ""),
+                        "expect_failures": " | ".join(record.artifact.get("expect", {}).get("failures", [])),
                     }
                 )
+
+
+def _step_status(artifact: dict[str, Any]) -> str:
+    if artifact.get("expect", {}).get("status") == "failed":
+        return "failed"
+    return "ok"
+
+
+def _evaluate_expect(artifact: dict[str, Any], expect: dict[str, dict[str, float]]) -> dict[str, Any]:
+    quality = artifact.get("quality", {})
+    checks: dict[str, Any] = {}
+    failures: list[str] = []
+    for metric, limits in expect.items():
+        raw_value = quality.get(metric)
+        if raw_value is None:
+            checks[metric] = {"status": "failed", "reason": "unavailable", "limits": limits}
+            failures.append(f"{metric}: unavailable")
+            continue
+        try:
+            value = float(raw_value)
+        except (TypeError, ValueError):
+            checks[metric] = {"status": "failed", "reason": "not_numeric", "value": raw_value, "limits": limits}
+            failures.append(f"{metric}: not numeric")
+            continue
+        status = "ok"
+        reasons: list[str] = []
+        minimum = limits.get("min")
+        maximum = limits.get("max")
+        if minimum is not None and value < minimum:
+            status = "failed"
+            reasons.append(f"below min {minimum}")
+        if maximum is not None and value > maximum:
+            status = "failed"
+            reasons.append(f"above max {maximum}")
+        checks[metric] = {
+            "status": status,
+            "value": value,
+            "limits": limits,
+        }
+        if reasons:
+            checks[metric]["reasons"] = reasons
+            failures.append(f"{metric}: {value} {'; '.join(reasons)}")
+    return {"status": "failed" if failures else "ok", "checks": checks, "failures": failures}
 
 
 def _capture_consistency(artifacts: list[dict[str, Any]], quality_config: Any) -> dict[str, Any]:

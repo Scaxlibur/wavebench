@@ -87,6 +87,7 @@ def fake_capture(
     voltage_vpp_v: float = 5.0,
     voltage_mean_v: float = 0.0,
     duty_cycle: float | None = None,
+    frequency_error_ratio: float | None = 0.0,
 ):
     package = Path(tmp) / name
     package.mkdir()
@@ -100,6 +101,7 @@ def fake_capture(
         "voltage_vpp_v": voltage_vpp_v,
         "voltage_mean_v": voltage_mean_v,
         "duty_cycle": duty_cycle,
+        "frequency_error_ratio": frequency_error_ratio,
     }
     waveform = SimpleNamespace(summary=lambda **kwargs: summary)
     return SimpleNamespace(package_dir=package, metadata_path=metadata, waveform=waveform)
@@ -276,6 +278,98 @@ auto_recover = true
                 self.assertEqual(artifact["quality"]["status"], "ok_by_consistency")
                 self.assertTrue(artifact["quality"]["trusted_by_consistency"])
                 self.assertEqual(artifact["quality_recovery"]["consistency"]["status"], "consistent")
+
+
+    def test_scope_capture_expect_passes_and_is_written_to_summary(self):
+        with TemporaryDirectory() as tmp:
+            plan = load_run_plan(
+                write_plan(
+                    tmp,
+                    """
+[[steps]]
+kind = "scope.capture"
+label = "pwm"
+
+[steps.expect]
+duty_cycle = { min = 0.49, max = 0.51 }
+frequency_error_ratio = { max = 0.02 }
+voltage_vpp_v = { min = 3.0, max = 3.6 }
+""",
+                )
+            )
+            capture = fake_capture(
+                tmp,
+                "pwm",
+                [],
+                voltage_vpp_v=3.3,
+                duty_cycle=0.5,
+                frequency_error_ratio=0.01,
+            )
+            with patch("wavebench.services.run_service.ScopeService") as scope_cls:
+                scope_cls.return_value.capture_waveform.return_value = capture
+
+                result = RunService(config=make_config(tmp), logger=CommandLogger()).run(plan)
+
+                self.assertEqual(result.steps[0].status, "ok")
+                self.assertEqual(result.steps[0].artifact["expect"]["status"], "ok")
+                run_data = json.loads(result.run_json_path.read_text(encoding="utf-8"))
+                self.assertEqual(run_data["status"], "ok")
+                summary = result.summary_csv_path.read_text(encoding="utf-8")
+                self.assertIn("expect_status", summary)
+                self.assertIn(",ok,", summary)
+
+    def test_scope_capture_expect_failure_marks_run_failed_without_exception(self):
+        with TemporaryDirectory() as tmp:
+            plan = load_run_plan(
+                write_plan(
+                    tmp,
+                    """
+[[steps]]
+kind = "scope.capture"
+label = "pwm"
+
+[steps.expect]
+duty_cycle = { min = 0.73, max = 0.77 }
+frequency_error_ratio = { max = 0.02 }
+""",
+                )
+            )
+            capture = fake_capture(tmp, "pwm", [], duty_cycle=0.5, frequency_error_ratio=0.03)
+            with patch("wavebench.services.run_service.ScopeService") as scope_cls:
+                scope_cls.return_value.capture_waveform.return_value = capture
+
+                result = RunService(config=make_config(tmp), logger=CommandLogger()).run(plan)
+
+                self.assertEqual(result.steps[0].status, "failed")
+                expect = result.steps[0].artifact["expect"]
+                self.assertEqual(expect["status"], "failed")
+                self.assertIn("duty_cycle", expect["failures"][0])
+                run_data = json.loads(result.run_json_path.read_text(encoding="utf-8"))
+                self.assertEqual(run_data["status"], "failed")
+
+    def test_scope_capture_expect_fails_when_metric_is_unavailable(self):
+        with TemporaryDirectory() as tmp:
+            plan = load_run_plan(
+                write_plan(
+                    tmp,
+                    """
+[[steps]]
+kind = "scope.capture"
+label = "dc"
+
+[steps.expect]
+duty_cycle = { min = 0.49, max = 0.51 }
+""",
+                )
+            )
+            capture = fake_capture(tmp, "dc", [], duty_cycle=None)
+            with patch("wavebench.services.run_service.ScopeService") as scope_cls:
+                scope_cls.return_value.capture_waveform.return_value = capture
+
+                result = RunService(config=make_config(tmp), logger=CommandLogger()).run(plan)
+
+                self.assertEqual(result.steps[0].status, "failed")
+                self.assertEqual(result.steps[0].artifact["expect"]["checks"]["duty_cycle"]["reason"], "unavailable")
 
     def test_runs_scope_auto_step(self):
         with TemporaryDirectory() as tmp:

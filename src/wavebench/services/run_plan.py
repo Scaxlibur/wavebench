@@ -50,6 +50,7 @@ _OPTIONAL_FIELDS = {
         "save_npy",
         "quality_gate",
         "auto_recover",
+        "expect",
     },
     "source.status": {"channel"},
     "source.set_freq": {"channel"},
@@ -212,6 +213,8 @@ def _normalize_step_fields(index: int, kind: str, fields: dict[str, Any]) -> Non
         for field in ("save_csv", "save_npy", "quality_gate", "auto_recover"):
             if field in fields and not isinstance(fields[field], bool):
                 raise ConfigError(f"{prefix}.{field} must be true or false")
+        if "expect" in fields:
+            fields["expect"] = _parse_expect(fields["expect"], f"{prefix}.expect")
     elif kind == "power.set":
         fields["voltage_v"] = _positive_float(fields["voltage_v"], f"{prefix}.voltage_v")
         fields["current_limit_a"] = _positive_float(
@@ -232,6 +235,39 @@ def _normalize_step_fields(index: int, kind: str, fields: dict[str, Any]) -> Non
         fields["duty_percent"] = _duty_percent(fields["duty_percent"], f"{prefix}.duty_percent")
     elif kind == "sleep":
         fields["duration_s"] = _positive_float(fields["duration_s"], f"{prefix}.duration_s")
+
+
+def _parse_expect(raw: Any, name: str) -> dict[str, dict[str, float]]:
+    table = _table(raw, name)
+    if not table:
+        raise ConfigError(f"{name} must not be empty")
+    result: dict[str, dict[str, float]] = {}
+    for metric, limits_raw in table.items():
+        metric_name = _non_empty_str(metric, f"{name} metric")
+        limits = _table(limits_raw, f"{name}.{metric_name}")
+        _reject_unknown_keys(limits, {"min", "max"}, f"{name}.{metric_name}")
+        if "min" not in limits and "max" not in limits:
+            raise ConfigError(f"{name}.{metric_name} requires min or max")
+        parsed: dict[str, float] = {}
+        for key in ("min", "max"):
+            if key in limits:
+                parsed[key] = _finite_float(limits[key], f"{name}.{metric_name}.{key}")
+        if "min" in parsed and "max" in parsed and parsed["min"] > parsed["max"]:
+            raise ConfigError(f"{name}.{metric_name}.min must be <= max")
+        result[metric_name] = parsed
+    return result
+
+
+def _finite_float(value: Any, name: str) -> float:
+    if isinstance(value, bool):
+        raise ConfigError(f"{name} must be a number")
+    try:
+        result = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ConfigError(f"{name} must be a number") from exc
+    if result != result or result in (float("inf"), float("-inf")):
+        raise ConfigError(f"{name} must be finite")
+    return result
 
 
 def _table(raw: Any, name: str) -> dict[str, Any]:

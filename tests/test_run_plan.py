@@ -176,6 +176,33 @@ auto_recover = true
         self.assertTrue(plan.steps[0].fields["quality_gate"])
         self.assertTrue(plan.steps[0].fields["auto_recover"])
 
+
+    def test_scope_capture_accepts_expect_limits(self):
+        path = self._write_plan("""
+[[steps]]
+kind = "scope.capture"
+label = "pwm"
+
+[steps.expect]
+duty_cycle = { min = 0.49, max = 0.51 }
+frequency_error_ratio = { max = 0.02 }
+voltage_vpp_v = { min = 3.0, max = 3.6 }
+""")
+        plan = load_run_plan(path)
+        expect = plan.steps[0].fields["expect"]
+        self.assertEqual(expect["duty_cycle"], {"min": 0.49, "max": 0.51})
+        self.assertEqual(expect["frequency_error_ratio"], {"max": 0.02})
+
+    def test_scope_capture_expect_requires_limits(self):
+        path = self._write_plan("""
+[[steps]]
+kind = "scope.capture"
+
+[steps.expect.frequency_error_ratio]
+""")
+        with self.assertRaisesRegex(ConfigError, "requires min or max"):
+            load_run_plan(path)
+
     def test_scope_capture_rejects_non_bool_quality_gate(self):
         path = self._write_plan("""
 [[steps]]

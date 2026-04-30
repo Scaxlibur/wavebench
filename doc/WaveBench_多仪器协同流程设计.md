@@ -272,6 +272,7 @@ run check: 解析 plan 并打印步骤摘要，不连接仪器
 run plan : 执行 source / power / scope / sleep 显式 step
 safety  : 按 scope_guard_channel 查询 CHAN<n>:COUP?；命中 require_scope_coupling_not 时拒绝执行
 quality : `scope.capture` 可记录质量状态；`auto_recover = true` 时按配置多次 `scope.auto` 重采，并做重复一致性判断
+expect : `scope.capture` 可设置指标 min/max 断言，失败时 run 状态为 failed
 output  : data/runs/YYYYMMDD_HHMMSS_<label>/run.json + summary.csv + step records
 restore : `[restore] source_state = true` 时 snapshot source 状态，并在成功/失败路径恢复
 ```
@@ -481,3 +482,25 @@ frequency_mismatch
 如果最近 `consistency_required_captures` 次采集的频率、Vpp、均值、duty 等指标都在 `[quality]` 容差内，即使 warning 还存在，也标记为 `ok_by_consistency`。
 
 这样做的边界是：自动调节仍然是显式 opt-in，不会被普通 `scope.capture` 偷偷触发。
+
+
+## scope.capture 实验断言
+
+`[steps.expect]` 用来判断实验有没有达标。它和质量门分开：质量门判断数据是否可信，expect 判断可信数据是否满足实验目标。
+
+```toml
+[[steps]]
+kind = "scope.capture"
+channel = 1
+label = "pwm_check"
+expect_frequency_hz = 100000
+quality_gate = true
+auto_recover = true
+
+[steps.expect]
+duty_cycle = { min = 0.73, max = 0.77 }
+frequency_error_ratio = { max = 0.02 }
+voltage_vpp_v = { min = 3.0, max = 3.6 }
+```
+
+断言支持 `min` / `max`。如果指标缺失，或实际值超出范围，对应 step 状态为 `failed`，整体 run 状态也为 `failed`。采集包、质量信息、失败原因和实际值仍然写入 `run.json` / `summary.csv`。

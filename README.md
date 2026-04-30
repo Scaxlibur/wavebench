@@ -46,6 +46,7 @@ It provides small, explicit CLI commands for LAN-connected lab instruments. The 
 - flow-level output is written under `data/runs/<timestamp>_<label>/` with `run.json`, `summary.csv`, step records, quality status, and references to normal capture packages
 - `scope.capture` steps can opt into `quality_gate = true`; with `auto_recover = true`, warning captures trigger up to `[quality].auto_recover_attempts` autoscale + recapture attempts
 - repeated warning captures can be accepted as `ok_by_consistency` when their measured metrics are stable within `[quality]` tolerances
+- `scope.capture` steps can include `[steps.expect]` metric limits; failed expectations mark the run as `failed` while preserving captured artifacts
 
 ## Safety defaults
 
