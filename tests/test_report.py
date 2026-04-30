@@ -3,6 +3,8 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+import numpy as np
+
 from wavebench.data.packages import load_run_package
 from wavebench.report.html import render_run_report_html, write_run_report_html
 
@@ -14,6 +16,7 @@ class RunReportTests(unittest.TestCase):
             capture = root / "data" / "raw" / "cap1"
             capture.mkdir(parents=True)
             (capture / "screenshot.png").write_bytes(b"\x89PNG\r\n\x1a\n")
+            np.save(capture / "ch1.npy", np.array([[0.0, 0.0], [0.5e-3, 1.0], [1.0e-3, 0.0]]))
             (capture / "metadata.json").write_text(
                 json.dumps(
                     {
@@ -79,6 +82,9 @@ class RunReportTests(unittest.TestCase):
             self.assertIn("10000 Hz", html)
             self.assertIn("0.8 V", html)
             self.assertIn("50%", html)
+            self.assertIn("<h2>Waveform previews</h2>", html)
+            self.assertIn("Step 3 ch1", html)
+            self.assertIn("<polyline", html)
 
     def test_run_report_without_screenshot_omits_screenshots_section(self):
         with TemporaryDirectory() as tmp:
@@ -168,6 +174,8 @@ class RunReportTests(unittest.TestCase):
             root = Path(tmp)
             capture = root / "data" / "raw" / "dual"
             capture.mkdir(parents=True)
+            np.save(capture / "ch1.npy", np.array([[0.0, 0.0], [1e-3, 1.0], [2e-3, 0.0]]))
+            np.save(capture / "ch2.npy", np.array([[0.0, 1.65], [1e-3, 3.3], [2e-3, 1.65]]))
             (capture / "metadata.json").write_text(
                 json.dumps(
                     {
@@ -230,7 +238,50 @@ class RunReportTests(unittest.TestCase):
             self.assertIn("2000 Hz", html)
             self.assertIn("25%", html)
             self.assertIn("low_cycles", html)
+            self.assertIn("Step 0 ch1", html)
+            self.assertIn("Step 0 ch2", html)
 
+    def test_run_report_keeps_running_when_waveform_preview_fails(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            capture = root / "data" / "raw" / "bad_waveform"
+            capture.mkdir(parents=True)
+            (capture / "metadata.json").write_text(
+                json.dumps(
+                    {
+                        "waveform": {"summary": {"channel": 1, "frequency_estimate_hz": 1000.0}},
+                        "files": {"npy": "data/raw/bad_waveform/missing.npy"},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            run_dir = root / "data" / "runs" / "run_bad_waveform"
+            run_dir.mkdir(parents=True)
+            (run_dir / "run.json").write_text(
+                json.dumps(
+                    {
+                        "status": "ok",
+                        "steps": [
+                            {
+                                "index": 0,
+                                "kind": "scope.capture",
+                                "status": "ok",
+                                "artifact": {
+                                    "package": "data/raw/bad_waveform",
+                                    "metadata": "data/raw/bad_waveform/metadata.json",
+                                },
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            html = render_run_report_html(load_run_package(run_dir), output_dir=run_dir)
+
+            self.assertIn("<h2>Waveform previews</h2>", html)
+            self.assertIn("waveform preview unavailable", html)
+            self.assertIn("FileNotFoundError", html)
 
     def test_run_report_renders_expected_vs_measured_table(self):
         with TemporaryDirectory() as tmp:

@@ -7,6 +7,8 @@ import os
 from pathlib import Path
 from typing import Any
 
+import numpy as np
+
 from wavebench.data.packages import RunPackage
 
 
@@ -66,6 +68,16 @@ class ReportExpectationRow:
     details: str
 
 
+@dataclass(frozen=True)
+class ReportWaveformPreview:
+    step_index: str
+    package: str
+    channel: str
+    title: str
+    svg: str
+    warning: str
+
+
 def render_run_report_html(run: RunPackage, output_dir: str | Path | None = None) -> str:
     experiment = run.run.get("experiment", {}) if isinstance(run.run.get("experiment"), dict) else {}
     restore = run.run.get("restore", {}) if isinstance(run.run.get("restore"), dict) else {}
@@ -74,6 +86,7 @@ def render_run_report_html(run: RunPackage, output_dir: str | Path | None = None
     screenshots = _collect_screenshots(run, report_output_dir)
     signals = _collect_signal_summaries(run)
     expectations = _collect_expectation_rows(run)
+    waveform_previews = _collect_waveform_previews(run)
     summary = _build_report_summary(run, screenshots, signals)
     screenshots_by_step = {item.step_index: item for item in screenshots}
     rows = "\n".join(_step_row(step, screenshots_by_step.get(str(step.get("index", "")))) for step in run.steps)
@@ -82,6 +95,7 @@ def render_run_report_html(run: RunPackage, output_dir: str | Path | None = None
     screenshots_block = _screenshots_block(screenshots)
     expectations_block = _expectations_block(expectations)
     signals_block = _signals_block(signals)
+    waveform_previews_block = _waveform_previews_block(waveform_previews)
     summary_note = "present" if run.summary_csv_path is not None else "missing"
     error_block = ""
     if error:
@@ -104,6 +118,9 @@ code {{ background: #f0f4f8; padding: 0.1rem 0.25rem; border-radius: 3px; }}
 .screenshot-card {{ border: 1px solid #d9e2ec; border-radius: 6px; padding: 0.75rem; background: #fff; }}
 .screenshot-card img {{ display: block; max-width: 100%; height: auto; border: 1px solid #d9e2ec; }}
 .screenshot-thumb {{ max-width: 12rem; height: auto; border: 1px solid #d9e2ec; }}
+.waveform-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(22rem, 1fr)); gap: 1rem; }}
+.waveform-card {{ border: 1px solid #d9e2ec; border-radius: 6px; padding: 0.75rem; background: #fff; }}
+.waveform-card svg {{ display: block; max-width: 100%; height: auto; }}
 .summary-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); gap: 0.75rem; margin: 1rem 0 1.25rem; }}
 .summary-card {{ border: 1px solid #d9e2ec; border-radius: 6px; padding: 0.75rem; background: #f8fafc; }}
 .summary-card .label {{ color: #627d98; font-size: 0.85rem; }}
@@ -133,6 +150,7 @@ code {{ background: #f0f4f8; padding: 0.1rem 0.25rem; border-radius: 3px; }}
 </table>
 {expectations_block}
 {signals_block}
+{waveform_previews_block}
 {screenshots_block}
 </body>
 </html>
@@ -350,6 +368,28 @@ def _screenshots_block(screenshots: list[ReportScreenshot]) -> str:
 """
 
 
+def _waveform_previews_block(previews: list[ReportWaveformPreview]) -> str:
+    if not previews:
+        return ""
+    cards = "\n".join(_waveform_preview_card(item) for item in previews)
+    return f"""<h2>Waveform previews</h2>
+<div class="waveform-grid">
+{cards}
+</div>
+"""
+
+
+def _waveform_preview_card(preview: ReportWaveformPreview) -> str:
+    warning = f'<p class="warning">{escape(preview.warning)}</p>' if preview.warning else ""
+    return (
+        '<figure class="waveform-card">'
+        f"<figcaption>{escape(preview.title)}<br><code>{escape(preview.package)}</code></figcaption>"
+        f"{preview.svg}"
+        f"{warning}"
+        "</figure>"
+    )
+
+
 def _signals_block(signals: list[ReportSignalSummary]) -> str:
     if not signals:
         return ""
@@ -392,6 +432,145 @@ def _screenshot_card(screenshot: ReportScreenshot) -> str:
         f'<figcaption>Step {step}: <code>{package}</code></figcaption>'
         '</figure>'
     )
+
+
+def _collect_waveform_previews(run: RunPackage) -> list[ReportWaveformPreview]:
+    previews: list[ReportWaveformPreview] = []
+    for step in run.steps:
+        artifact = step.get("artifact", {}) if isinstance(step.get("artifact"), dict) else {}
+        package_text = artifact.get("package")
+        if not package_text:
+            continue
+        package_dir = _resolve_artifact_path(run.path, str(package_text))
+        metadata = _read_capture_metadata(package_dir, artifact.get("metadata"))
+        for channel, npy_text, summary in _metadata_waveform_npy_files(metadata):
+            title = _waveform_preview_title(step.get("index", ""), channel, summary)
+            if not npy_text:
+                previews.append(
+                    ReportWaveformPreview(
+                        step_index=str(step.get("index", "")),
+                        package=str(package_text),
+                        channel=channel,
+                        title=title,
+                        svg="",
+                        warning="waveform preview unavailable: missing npy artifact",
+                    )
+                )
+                continue
+            npy_path = _resolve_capture_file_path(run.path, package_dir, str(npy_text))
+            svg = ""
+            warning = ""
+            try:
+                waveform = np.load(npy_path)
+                svg = _waveform_svg(waveform)
+            except Exception as exc:  # noqa: BLE001 - report generation should survive bad artifacts
+                warning = f"waveform preview unavailable: {type(exc).__name__}: {exc}"
+            previews.append(
+                ReportWaveformPreview(
+                    step_index=str(step.get("index", "")),
+                    package=str(package_text),
+                    channel=channel,
+                    title=title,
+                    svg=svg,
+                    warning=warning,
+                )
+            )
+    return previews
+
+
+def _metadata_waveform_npy_files(metadata: dict[str, Any]) -> list[tuple[str, str, dict[str, Any]]]:
+    channels = metadata.get("channels")
+    files = metadata.get("files")
+    if isinstance(channels, dict):
+        file_map = files if isinstance(files, dict) else {}
+        result: list[tuple[str, str, dict[str, Any]]] = []
+        for raw_channel, payload in sorted(channels.items(), key=lambda item: int(item[0])):
+            channel_payload = payload if isinstance(payload, dict) else {}
+            summary = channel_payload.get("summary") if isinstance(channel_payload.get("summary"), dict) else {}
+            channel_files = file_map.get(str(raw_channel), {}) if isinstance(file_map, dict) else {}
+            npy_text = channel_files.get("npy", "") if isinstance(channel_files, dict) else ""
+            result.append((str(raw_channel), str(npy_text) if npy_text else "", summary))
+        return result
+    waveform = metadata.get("waveform")
+    if isinstance(waveform, dict):
+        summary = waveform.get("summary") if isinstance(waveform.get("summary"), dict) else {}
+        operation = metadata.get("operation") if isinstance(metadata.get("operation"), dict) else {}
+        channel = summary.get("channel", operation.get("channel", ""))
+        file_map = files if isinstance(files, dict) else {}
+        npy_text = file_map.get("npy", "") if isinstance(file_map, dict) else ""
+        return [(str(channel), str(npy_text) if npy_text else "", summary)]
+    return []
+
+
+def _waveform_preview_title(step_index: Any, channel: str, summary: dict[str, Any]) -> str:
+    parts = [f"Step {step_index} ch{channel}"]
+    frequency = _format_metric(summary.get("frequency_estimate_hz"), "Hz")
+    vpp = _format_metric(summary.get("voltage_vpp_v"), "Vpp")
+    if frequency:
+        parts.append(frequency)
+    if vpp:
+        parts.append(vpp)
+    return " — ".join(parts)
+
+
+def _waveform_svg(waveform: Any, *, max_points: int = 600) -> str:
+    data = np.asarray(waveform, dtype=float)
+    if data.ndim != 2 or data.shape[1] < 2:
+        raise ValueError("expected an Nx2 waveform array")
+    finite = np.isfinite(data[:, 0]) & np.isfinite(data[:, 1])
+    data = data[finite]
+    if data.shape[0] < 2:
+        raise ValueError("need at least two finite waveform samples")
+    if data.shape[0] > max_points:
+        indices = np.linspace(0, data.shape[0] - 1, max_points).astype(int)
+        data = data[indices]
+    x = data[:, 0]
+    y = data[:, 1]
+    if float(np.max(x)) == float(np.min(x)):
+        x = np.arange(data.shape[0], dtype=float)
+    width = 640
+    height = 180
+    pad = 24
+    x_min = float(np.min(x))
+    x_max = float(np.max(x))
+    y_min = float(np.min(y))
+    y_max = float(np.max(y))
+    if y_max == y_min:
+        y_min -= 0.5
+        y_max += 0.5
+    x_scale = (width - 2 * pad) / (x_max - x_min)
+    y_scale = (height - 2 * pad) / (y_max - y_min)
+    points = []
+    for x_value, y_value in zip(x, y):
+        px = pad + (float(x_value) - x_min) * x_scale
+        py = height - pad - (float(y_value) - y_min) * y_scale
+        points.append(f"{px:.2f},{py:.2f}")
+    zero_line = ""
+    if y_min <= 0 <= y_max:
+        zero_y = height - pad - (0 - y_min) * y_scale
+        zero_line = f'<line x1="{pad}" y1="{zero_y:.2f}" x2="{width - pad}" y2="{zero_y:.2f}" stroke="#bcccdc" stroke-width="1"/>'
+    return (
+        f'<svg viewBox="0 0 {width} {height}" role="img" aria-label="waveform preview">'
+        f'<rect x="0" y="0" width="{width}" height="{height}" fill="#f8fafc"/>'
+        f'{zero_line}'
+        f'<polyline points="{" ".join(points)}" fill="none" stroke="#2563eb" stroke-width="1.5"/>'
+        f'<text x="{pad}" y="16" font-size="12" fill="#627d98">'
+        f't={_format_axis_value(x_min)}..{_format_axis_value(x_max)} s, '
+        f'v={_format_axis_value(y_min)}..{_format_axis_value(y_max)} V'
+        f'</text>'
+        f'</svg>'
+    )
+
+
+def _format_axis_value(value: float) -> str:
+    return f"{value:.4g}"
+
+
+def _resolve_capture_file_path(run_path: Path, package_dir: Path, file_text: str) -> Path:
+    candidate = _resolve_artifact_path(run_path, file_text)
+    if candidate.exists() or Path(file_text).is_absolute():
+        return candidate
+    return package_dir / file_text.replace("\\", "/")
 
 
 def _collect_signal_summaries(run: RunPackage) -> list[ReportSignalSummary]:
