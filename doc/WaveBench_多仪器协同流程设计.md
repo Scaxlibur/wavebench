@@ -186,6 +186,43 @@ duty_consistency = 0.03
 
 如果多次 warning 采集的频率、Vpp、均值、duty 等可比较指标差别不大，最终采集会标记为 `ok_by_consistency`。这表示“虽然单次质量规则仍有 warning，但重复测量稳定，结果可采信”。
 
+
+## Run plan schema quick reference
+
+Use this command to print the authoritative step schema from the current code:
+
+```powershell
+python -m wavebench run schema
+```
+
+Top-level tables:
+
+| Table | Fields | Notes |
+|---|---|---|
+| `[experiment]` | `name`, `label` | Optional metadata; defaults to the plan filename. |
+| `[safety]` | `scope_guard_channel`, `require_scope_coupling_not` | Optional read-only guard. It may refuse execution but must not auto-correct hardware settings. |
+| `[restore]` | `source_state`, `source_channel` | Optional source snapshot/restore. Restore is attempted on success and failure. |
+| `[[steps]]` | `kind` plus kind-specific fields | Steps execute in order. |
+
+Supported `[[steps]]` kinds:
+
+| kind | Required fields | Optional fields |
+|---|---|---|
+| `power.status` | - | `channel` |
+| `power.set` | `voltage_v`, `current_limit_a` | `channel` |
+| `power.output` | `state` | `channel` |
+| `source.status` | - | `channel` |
+| `source.set_func` | `function` | `channel` |
+| `source.set_vpp` | `value_vpp` | `channel` |
+| `source.set_freq` | `frequency_hz` | `channel` |
+| `source.set_duty` | `duty_percent` | `channel` |
+| `source.output` | `state` | `channel` |
+| `scope.auto` | - | - |
+| `scope.capture` | - | `channel`, `label`, `points`, `time_range_s`, `window_frequency_hz`, `target_cycles`, `expect_frequency_hz`, `frequency_tolerance`, `save_csv`, `save_npy`, `quality_gate`, `auto_recover`, `[steps.expect]` |
+| `sleep` | `duration_s` | - |
+
+`[steps.expect]` belongs under a `scope.capture` step. Each metric accepts `{ min = ..., max = ... }`. Common metrics are `frequency_estimate_hz`, `frequency_error_ratio`, `voltage_vpp_v`, `voltage_mean_v`, and `duty_cycle`.
+
 ## 实验指标断言
 
 `scope.capture` step 可以用 `[steps.expect]` 对采集摘要指标做 min/max 检查：

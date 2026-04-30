@@ -12,7 +12,7 @@ from .logging import CommandLogger
 from .services.scope_service import ScopeService
 from .services.source_service import SourceService
 from .services.power_service import PowerService
-from .services.run_plan import RunPlan, RunStep, load_run_plan
+from .services.run_plan import RunPlan, RunStep, format_run_plan_schema, load_run_plan
 from .services.run_service import RunService
 from .services.sweep_service import SweepService, parse_frequency_list
 
@@ -38,6 +38,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     run_check.add_argument("--plan", required=True, help="Path to a WaveBench run plan TOML file")
     add_runtime_options(run_check)
+    run_sub.add_parser("schema", help="Print supported run plan step kinds and fields")
     run_plan = run_sub.add_parser("plan", help="Execute a WaveBench run plan")
     run_plan.add_argument("--plan", required=True, help="Path to a WaveBench run plan TOML file")
     add_runtime_options(run_plan)
@@ -284,6 +285,9 @@ def main(argv: list[str] | None = None) -> int:
             if args.command == "check":
                 plan = load_run_plan(args.plan)
                 _print_run_plan_summary(plan)
+                return 0
+            if args.command == "schema":
+                print(format_run_plan_schema())
                 return 0
             if args.command == "plan":
                 plan = load_run_plan(args.plan)

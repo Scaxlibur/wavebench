@@ -22,6 +22,7 @@ from wavebench.services.source_state import RestorableSourceState
 _EXECUTABLE_STEP_KINDS = {
     "power.status",
     "power.set",
+    "power.output",
     "scope.auto",
     "scope.capture",
     "source.status",
@@ -168,6 +169,12 @@ class RunService:
                 channel=step.fields.get("channel"),
                 voltage_v=step.fields["voltage_v"],
                 current_limit_a=step.fields["current_limit_a"],
+            )
+            artifact = {"power_status": _status_payload(status)}
+        elif step.kind == "power.output":
+            status = self._power_service().set_output(
+                channel=step.fields.get("channel"),
+                enabled=step.fields["state"] == "on",
             )
             artifact = {"power_status": _status_payload(status)}
         elif step.kind == "source.status":

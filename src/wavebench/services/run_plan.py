@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import difflib
 from typing import Any
 import tomllib
 
@@ -63,6 +64,82 @@ _OPTIONAL_FIELDS = {
     "power.output": {"channel"},
     "sleep": set(),
 }
+
+
+_STEP_NOTES = {
+    "scope.auto": "Explicit RTM2032 AUToscale. It changes front-panel settings and is never inserted implicitly.",
+    "scope.capture": "Trigger one acquisition, write a capture package, and optionally evaluate quality/expect checks.",
+    "source.status": "Read signal-generator channel state without changing output.",
+    "source.set_freq": "Set fixed source frequency in Hz; config may force FIX mode first.",
+    "source.set_func": "Set source waveform function, for example SIN or SQU.",
+    "source.set_vpp": "Set source amplitude in Vpp.",
+    "source.set_duty": "Set square-wave duty cycle in percent; valid range is 0 < duty_percent < 100.",
+    "source.output": "Turn source channel output on or off.",
+    "power.status": "Read power-supply channel state without changing output.",
+    "power.set": "Set DP800 voltage/current limit; does not change output state.",
+    "power.output": "Turn power-supply channel output on or off; does not change voltage/current limit.",
+    "sleep": "Wait between hardware actions.",
+}
+
+
+@dataclass(frozen=True)
+class StepSchema:
+    kind: str
+    required: tuple[str, ...]
+    optional: frozenset[str]
+    notes: str = ""
+
+
+STEP_SCHEMAS = {
+    kind: StepSchema(
+        kind=kind,
+        required=_REQUIRED_FIELDS.get(kind, ()),
+        optional=frozenset(_OPTIONAL_FIELDS.get(kind, set())),
+        notes=_STEP_NOTES.get(kind, ""),
+    )
+    for kind in sorted(ALLOWED_STEP_KINDS)
+}
+
+
+def run_plan_schema_rows() -> list[dict[str, str]]:
+    rows: list[dict[str, str]] = []
+    for schema in STEP_SCHEMAS.values():
+        required = ", ".join(schema.required) or "-"
+        optional = ", ".join(sorted(schema.optional)) or "-"
+        rows.append({
+            "kind": schema.kind,
+            "required": required,
+            "optional": optional,
+            "notes": schema.notes,
+        })
+    return rows
+
+
+def format_run_plan_schema() -> str:
+    lines = [
+        "WaveBench run plan schema",
+        "",
+        "Top-level tables:",
+        "  [experiment] optional: name, label",
+        "  [safety] optional: scope_guard_channel, require_scope_coupling_not",
+        "  [restore] optional: source_state, source_channel",
+        "  [[steps]] required: kind",
+        "",
+        "Supported step kinds:",
+    ]
+    for row in run_plan_schema_rows():
+        lines.append(f"  - {row['kind']}")
+        lines.append(f"      required: {row['required']}")
+        lines.append(f"      optional : {row['optional']}")
+        if row["notes"]:
+            lines.append(f"      note     : {row['notes']}")
+    lines.extend([
+        "",
+        "scope.capture [steps.expect] metrics:",
+        "  Any numeric key from the capture quality summary may be checked with { min = ..., max = ... }.",
+        "  Common metrics: frequency_estimate_hz, frequency_error_ratio, voltage_vpp_v, voltage_mean_v, duty_cycle.",
+    ])
+    return "\n".join(lines)
 
 
 @dataclass(frozen=True)
@@ -167,15 +244,32 @@ def _parse_safety(raw: Any) -> SafetyGuard:
 def _parse_step(index: int, raw: Any) -> RunStep:
     table = _table(raw, f"steps[{index}]")
     kind = str(table.get("kind", "")).strip()
+    if not kind:
+        raise ConfigError(
+            f"steps[{index}].kind is required. Run `python -m wavebench run schema` "
+            "to list supported step kinds."
+        )
     if kind not in ALLOWED_STEP_KINDS:
         allowed = ", ".join(sorted(ALLOWED_STEP_KINDS))
-        raise ConfigError(f"steps[{index}].kind must be one of: {allowed}")
+        closest = difflib.get_close_matches(kind, sorted(ALLOWED_STEP_KINDS), n=1)
+        suggestion = f" Did you mean '{closest[0]}'?" if closest else ""
+        raise ConfigError(
+            f"steps[{index}].kind '{kind}' is not supported.{suggestion} "
+            f"Supported kinds: {allowed}. Run `python -m wavebench run schema` for field details."
+        )
 
-    allowed_fields = {"kind", *_REQUIRED_FIELDS.get(kind, ()), *_OPTIONAL_FIELDS.get(kind, set())}
+    schema = STEP_SCHEMAS[kind]
+    allowed_fields = {"kind", *schema.required, *schema.optional}
     _reject_unknown_keys(table, allowed_fields, f"steps[{index}]")
-    for field in _REQUIRED_FIELDS.get(kind, ()):
+    for field in schema.required:
         if field not in table:
-            raise ConfigError(f"steps[{index}] {kind} requires {field}")
+            required = ", ".join(schema.required) or "-"
+            optional = ", ".join(sorted(schema.optional)) or "-"
+            raise ConfigError(
+                f"steps[{index}] {kind} missing required field '{field}'. "
+                f"Required fields: {required}. Optional fields: {optional}. "
+                "Run `python -m wavebench run schema` for examples."
+            )
 
     fields = {key: value for key, value in table.items() if key != "kind"}
     _normalize_step_fields(index, kind, fields)
@@ -281,7 +375,26 @@ def _table(raw: Any, name: str) -> dict[str, Any]:
 def _reject_unknown_keys(table: dict[str, Any], allowed: set[str], name: str) -> None:
     unknown = sorted(set(table) - allowed)
     if unknown:
-        raise ConfigError(f"{name} has unknown key(s): {', '.join(unknown)}")
+        allowed_text = ", ".join(sorted(allowed)) or "-"
+        suggestions = _unknown_key_suggestions(unknown, allowed)
+        suggestion_text = f" {suggestions}" if suggestions else ""
+        hint = " Run `python -m wavebench run schema` for field details." if name.startswith("steps[") else ""
+        raise ConfigError(
+            f"{name} has unknown key(s): {', '.join(unknown)}.{suggestion_text} "
+            f"Allowed keys: {allowed_text}.{hint}"
+        )
+
+
+def _unknown_key_suggestions(unknown: list[str], allowed: set[str]) -> str:
+    parts = []
+    choices = sorted(allowed)
+    for key in unknown:
+        closest = difflib.get_close_matches(key, choices, n=1)
+        if closest:
+            parts.append(f"'{key}' -> '{closest[0]}'")
+    if not parts:
+        return ""
+    return "Did you mean " + ", ".join(parts) + "?"
 
 
 def _positive_int(value: Any, name: str) -> int:

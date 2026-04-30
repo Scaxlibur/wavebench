@@ -156,6 +156,7 @@ python -m wavebench power output --config wavebench.toml --resource TCPIP::<dp80
 多仪器流程检查与执行：
 
 ```bash
+python -m wavebench run schema
 python -m wavebench run check --config wavebench.toml --plan plans/dp800_scope_probe_voltage_steps.toml
 python -m wavebench run check --config wavebench.toml --plan plans/example_scope_expect_quality.toml
 python -m wavebench run plan --config wavebench.toml --plan plans/dp800_scope_probe_voltage_steps.toml
@@ -235,6 +236,7 @@ python -m wavebench scope capture --config wavebench.toml   --channel 1 --channe
 - [x] run plan `scope.capture` 支持 `quality_gate = true` 和 `auto_recover = true`；质量警告时按配置执行多次 `scope.auto` 后重采，并支持重复结果一致性判定。
 - [x] run plan `scope.capture` 支持 `[steps.expect]` 指标 min/max 断言；断言失败会保留采集证据，并将 step/run 标记为 failed。
 - [x] 新增公开 example plan：`plans/example_scope_expect_quality.toml`，展示质量恢复与实验断言写法。
+- [x] 新增 `run schema`，从代码打印 run plan step schema；`run check` 对未知 kind、未知字段、缺字段给出更具体提示。
 - [ ] 后续再考虑截图、YAML 实验流程。
 
 ## 当前关键约束

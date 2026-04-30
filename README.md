@@ -134,9 +134,10 @@ Run the verified duty-cycle analysis plan while also checking DP800 CH1 through 
 python -m wavebench run plan --config wavebench.toml --plan plans/dg4202_duty_10k_power_ch2_check.toml
 ```
 
-Check a multi-instrument run plan without connecting to instruments:
+Check the run-plan schema and validate plans without connecting to instruments:
 
 ```powershell
+python -m wavebench run schema
 python -m wavebench run check --config wavebench.toml --plan plans/dp800_scope_probe_voltage_steps.toml
 python -m wavebench run check --config wavebench.toml --plan plans/example_scope_expect_quality.toml
 ```

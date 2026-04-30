@@ -3,7 +3,7 @@ import tempfile
 import unittest
 
 from wavebench.errors import ConfigError
-from wavebench.services.run_plan import load_run_plan
+from wavebench.services.run_plan import STEP_SCHEMAS, format_run_plan_schema, load_run_plan
 
 
 VALID_PLAN = """
@@ -62,22 +62,36 @@ class RunPlanTests(unittest.TestCase):
         self.assertFalse(plan.steps[1].fields["save_csv"])
         self.assertEqual(plan.steps[2].fields["voltage_v"], 3.3)
 
-    def test_unknown_step_kind_is_rejected(self):
+    def test_unknown_step_kind_is_rejected_with_suggestion(self):
         path = self._write_plan("""
 [[steps]]
-kind = "power.magic"
+kind = "scope.captur"
 """)
-        with self.assertRaises(ConfigError):
+        with self.assertRaisesRegex(ConfigError, "Did you mean 'scope.capture'"):
             load_run_plan(path)
 
-    def test_missing_required_step_field_is_rejected(self):
+    def test_missing_required_step_field_is_rejected_with_schema_hint(self):
         path = self._write_plan("""
 [[steps]]
 kind = "power.set"
 voltage_v = 3.3
 """)
-        with self.assertRaises(ConfigError):
+        with self.assertRaisesRegex(ConfigError, "Required fields: voltage_v, current_limit_a"):
             load_run_plan(path)
+
+
+    def test_unknown_step_field_is_rejected_with_suggestion(self):
+        path = self._write_plan("""
+[[steps]]
+kind = "sleep"
+duraton_s = 0.5
+""")
+        with self.assertRaisesRegex(ConfigError, "'duraton_s' -> 'duration_s'"):
+            load_run_plan(path)
+
+    def test_step_schemas_drive_schema_output(self):
+        self.assertIn("scope.capture", STEP_SCHEMAS)
+        self.assertIn("expect", STEP_SCHEMAS["scope.capture"].optional)
 
     def test_restore_source_channel_requires_source_state(self):
         path = self._write_plan("""
@@ -127,6 +141,13 @@ duration_s = 0.5
         self.assertEqual(plan.steps[1].fields["state"], "on")
         self.assertEqual(plan.steps[2].fields["duty_percent"], 25.0)
         self.assertEqual(plan.steps[3].fields["duration_s"], 0.5)
+
+
+    def test_format_run_plan_schema_lists_expect_and_power_output(self):
+        text = format_run_plan_schema()
+        self.assertIn("power.output", text)
+        self.assertIn("[steps.expect]", text)
+        self.assertIn("frequency_estimate_hz", text)
 
     def test_scope_auto_step_is_explicit_and_has_no_fields(self):
         path = self._write_plan("""

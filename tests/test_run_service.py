@@ -189,6 +189,30 @@ duration_s = 0.01
             self.assertIn("runs", str(result.run_dir))
 
 
+    def test_runs_power_output_step(self):
+        with TemporaryDirectory() as tmp:
+            plan = load_run_plan(
+                write_plan(
+                    tmp,
+                    """
+[[steps]]
+kind = "power.output"
+channel = 1
+state = "off"
+""",
+                )
+            )
+            with patch("wavebench.services.run_service.PowerService") as power_cls:
+                power = power_cls.return_value
+                power.set_output.return_value = ok_power_status()
+
+                result = RunService(config=make_config(tmp), logger=CommandLogger()).run(plan)
+
+                power.set_output.assert_called_once_with(channel=1, enabled=False)
+                self.assertEqual(result.steps[0].artifact["power_status"]["output"], "ON")
+
+
+
     def test_scope_capture_quality_gate_records_warnings_without_recovery(self):
         with TemporaryDirectory() as tmp:
             plan = load_run_plan(
