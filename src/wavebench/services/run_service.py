@@ -56,11 +56,7 @@ class RunService:
     logger: CommandLogger
 
     def run(self, plan: RunPlan) -> RunResult:
-        if plan.safety.require_scope_coupling_not:
-            raise ConfigError(
-                "run plan safety guard execution is not implemented yet; "
-                "use run check, or remove the guard for non-special topologies"
-            )
+        self._run_safety_guards(plan)
         self._reject_unsupported_steps(plan)
         run_dir = new_package_dir(run_output_base(self.config), plan.label)
         steps_dir = run_dir / "steps"
@@ -103,6 +99,21 @@ class RunService:
             summary_csv_path=summary_csv_path,
             steps=records,
         )
+
+    def _run_safety_guards(self, plan: RunPlan) -> None:
+        if not plan.safety.require_scope_coupling_not:
+            return
+        if plan.safety.scope_guard_channel is None:  # pragma: no cover - parser enforces this
+            raise ConfigError("safety.scope_guard_channel is required")
+        channel = plan.safety.scope_guard_channel
+        coupling = ScopeService(config=self.config, logger=CommandLogger()).channel_coupling(channel)
+        blocked = set(plan.safety.require_scope_coupling_not)
+        if coupling.strip().upper() in blocked:
+            blocked_text = ", ".join(sorted(blocked))
+            raise ConfigError(
+                f"safety guard failed: scope CH{channel} coupling is {coupling}; "
+                f"blocked coupling value(s): {blocked_text}"
+            )
 
     def _reject_unsupported_steps(self, plan: RunPlan) -> None:
         unsupported = [step.kind for step in plan.steps if step.kind not in _EXECUTABLE_STEP_KINDS]

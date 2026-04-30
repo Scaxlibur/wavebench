@@ -150,7 +150,35 @@ duration_s = 0.01
             self.assertIn("data", str(result.run_dir))
             self.assertIn("runs", str(result.run_dir))
 
-    def test_rejects_plan_with_safety_guard_until_guard_execution_exists(self):
+    def test_allows_safety_guard_on_configured_ch1_when_coupling_is_safe(self):
+        with TemporaryDirectory() as tmp:
+            plan = load_run_plan(
+                write_plan(
+                    tmp,
+                    """
+[safety]
+require_scope_coupling_not = ["DC"]
+scope_guard_channel = 1
+
+[[steps]]
+kind = "power.status"
+channel = 1
+""",
+                )
+            )
+            with patch("wavebench.services.run_service.ScopeService") as scope_cls, patch(
+                "wavebench.services.run_service.PowerService"
+            ) as power_cls:
+                scope_cls.return_value.channel_coupling.return_value = "DCL"
+                power_cls.return_value.status.return_value = ok_power_status()
+
+                result = RunService(config=make_config(tmp), logger=CommandLogger()).run(plan)
+
+                scope_cls.return_value.channel_coupling.assert_called_once_with(1)
+                power_cls.return_value.status.assert_called_once_with(channel=1)
+                self.assertEqual(len(result.steps), 1)
+
+    def test_rejects_safety_guard_on_configured_ch2_when_coupling_is_blocked(self):
         with TemporaryDirectory() as tmp:
             plan = load_run_plan(
                 write_plan(
@@ -162,11 +190,20 @@ scope_guard_channel = 2
 
 [[steps]]
 kind = "power.status"
+channel = 1
 """,
                 )
             )
-            with self.assertRaisesRegex(ConfigError, "safety guard execution is not implemented"):
-                RunService(config=make_config(tmp), logger=CommandLogger()).run(plan)
+            with patch("wavebench.services.run_service.ScopeService") as scope_cls, patch(
+                "wavebench.services.run_service.PowerService"
+            ) as power_cls:
+                scope_cls.return_value.channel_coupling.return_value = "DC"
+
+                with self.assertRaisesRegex(ConfigError, "scope CH2 coupling is DC"):
+                    RunService(config=make_config(tmp), logger=CommandLogger()).run(plan)
+
+                scope_cls.return_value.channel_coupling.assert_called_once_with(2)
+                power_cls.assert_not_called()
 
     def test_rejects_source_steps_until_executor_supports_them(self):
         with TemporaryDirectory() as tmp:

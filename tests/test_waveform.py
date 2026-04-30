@@ -1,7 +1,20 @@
 import unittest
 
-from wavebench.drivers.rtm2032 import parse_waveform_header
+from wavebench.drivers.rtm2032 import RTM2032Scope, parse_waveform_header
 from wavebench.errors import DataError
+
+
+class FakeTransport:
+    def __init__(self, responses):
+        self.responses = responses
+        self.queries = []
+
+    def query(self, command):
+        self.queries.append(command)
+        return self.responses[command]
+
+    def close(self):
+        pass
 
 
 class WaveformHeaderTests(unittest.TestCase):
@@ -16,6 +29,18 @@ class WaveformHeaderTests(unittest.TestCase):
     def test_parse_waveform_header_rejects_invalid_response(self):
         with self.assertRaises(DataError):
             parse_waveform_header("not,a,header")
+
+    def test_scope_channel_coupling_queries_configured_channel(self):
+        transport = FakeTransport({"CHAN1:COUP?": " dcl\n"})
+        scope = RTM2032Scope(transport=transport)
+
+        self.assertEqual(scope.channel_coupling(1), "DCL")
+        self.assertEqual(transport.queries, ["CHAN1:COUP?"])
+
+    def test_scope_channel_coupling_rejects_invalid_channel(self):
+        scope = RTM2032Scope(transport=FakeTransport({}))
+        with self.assertRaises(DataError):
+            scope.channel_coupling(0)
 
 
 if __name__ == "__main__":

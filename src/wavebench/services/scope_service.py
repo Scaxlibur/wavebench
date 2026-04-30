@@ -56,6 +56,13 @@ class ScopeService:
         finally:
             scope.close()
 
+    def channel_coupling(self, channel: int) -> str:
+        scope = self._open_scope()
+        try:
+            return scope.channel_coupling(channel)
+        finally:
+            scope.close()
+
     def autoscale(self) -> None:
         scope = self._open_scope()
         try:

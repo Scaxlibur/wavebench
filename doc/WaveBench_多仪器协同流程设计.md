@@ -171,7 +171,7 @@ scope_guard_channel = 2
 含义：
 
 ```text
-查询 CHAN2:COUP?
+查询 `CHAN<scope_guard_channel>:COUP?`，例如 `scope_guard_channel = 1` 时查询 `CHAN1:COUP?`，`scope_guard_channel = 2` 时查询 `CHAN2:COUP?`
 如果返回 DC，则拒绝执行
 ```
 
@@ -270,7 +270,7 @@ wavebench run check --plan <file>
 
 仅当 plan 声明 safety guard 时连接 scope，查询 coupling。
 
-如果 `CHAN2:COUP? == DC`，拒绝执行。
+如果 `CHAN<scope_guard_channel>:COUP? == DC`，拒绝执行。
 
 ### Step 4：实现最小执行器
 

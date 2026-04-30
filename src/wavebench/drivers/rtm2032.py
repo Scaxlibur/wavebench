@@ -85,6 +85,11 @@ class RTM2032Scope:
     def clear_status(self) -> None:
         self.transport.write("*CLS")
 
+    def channel_coupling(self, channel: int) -> str:
+        if channel < 1:
+            raise DataError("channel must be >= 1")
+        return self.transport.query(f"CHAN{channel}:COUP?").strip().upper()
+
     def errors(self, limit: int = 16) -> list[str]:
         errors: list[str] = []
         for _ in range(limit):
