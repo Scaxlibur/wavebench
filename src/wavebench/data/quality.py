@@ -185,9 +185,14 @@ def estimate_frequency_fft(times_s: np.ndarray, voltages_v: np.ndarray, max_poin
     if dt <= 0:
         return None
     centered = sampled_voltages - np.mean(sampled_voltages)
+    if float(np.max(np.abs(centered))) <= 1e-12:
+        return None
     spectrum = np.fft.rfft(centered)
     magnitudes = np.abs(spectrum)
     if magnitudes.size <= 1:
+        return None
+    peak_magnitude = float(np.max(magnitudes[1:]))
+    if peak_magnitude <= 1e-12:
         return None
     peak_index = int(np.argmax(magnitudes[1:]) + 1)
     frequencies = np.fft.rfftfreq(sampled_times.size, dt)
@@ -218,12 +223,15 @@ def quality_warnings(
     estimated_cycles: float | None,
     frequency_hz: float | None,
     frequency_error: float | None,
+    expected_frequency_hz: float | None,
     tolerance_ratio: float,
     sample_count: int,
     voltage_vpp_v: float,
 ) -> list[str]:
     warnings: list[str] = []
-    if frequency_hz is None:
+    frequency_required = expected_frequency_hz is not None
+    dynamic_signal = frequency_required or frequency_hz is not None
+    if frequency_hz is None and frequency_required:
         warnings.append("frequency_unavailable: waveform frequency could not be estimated")
     if estimated_cycles is not None and estimated_cycles < 2.0:
         warnings.append("low_cycle_count: waveform window contains fewer than 2 estimated cycles; frequency estimate may be unreliable")
@@ -231,7 +239,7 @@ def quality_warnings(
         points_per_cycle = sample_count / estimated_cycles
         if points_per_cycle < 20.0:
             warnings.append("low_points_per_cycle: waveform has fewer than 20 samples per estimated cycle; duty and edge metrics may be unreliable")
-    if voltage_vpp_v < 0.02:
+    if dynamic_signal and voltage_vpp_v < 0.02:
         warnings.append("low_signal_amplitude: waveform Vpp is below 20 mV; check channel scale, probe, or signal connection")
     if frequency_error is not None and frequency_error > tolerance_ratio:
         warnings.append("frequency_mismatch: estimated frequency differs from expected frequency")
@@ -282,6 +290,7 @@ def summarize_waveform(
             estimated_cycles=estimated_cycles,
             frequency_hz=frequency,
             frequency_error=freq_error,
+            expected_frequency_hz=expected_frequency_hz,
             tolerance_ratio=frequency_tolerance_ratio,
             sample_count=int(voltages_v.size),
             voltage_vpp_v=voltage_vpp_v,
