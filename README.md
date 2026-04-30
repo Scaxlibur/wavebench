@@ -111,7 +111,7 @@ python -m wavebench power output --config wavebench.toml --channel 1 on
 Check a multi-instrument run plan without connecting to instruments:
 
 ```powershell
-python -m wavebench run check --config wavebench.toml --plan plans/dp800_voltage_steps.toml
+python -m wavebench run check --config wavebench.toml --plan plans/dp800_scope_probe_voltage_steps.toml
 ```
 
 ## Documentation

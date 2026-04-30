@@ -13,6 +13,7 @@ from .services.scope_service import ScopeService
 from .services.source_service import SourceService
 from .services.power_service import PowerService
 from .services.run_plan import RunPlan, RunStep, load_run_plan
+from .services.run_service import RunService
 from .services.sweep_service import SweepService, parse_frequency_list
 
 
@@ -37,6 +38,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     run_check.add_argument("--plan", required=True, help="Path to a WaveBench run plan TOML file")
     add_runtime_options(run_check)
+    run_plan = run_sub.add_parser("plan", help="Execute a WaveBench run plan")
+    run_plan.add_argument("--plan", required=True, help="Path to a WaveBench run plan TOML file")
+    add_runtime_options(run_plan)
 
     power_sub = power_parser.add_subparsers(dest="command", required=True)
     power_idn = power_sub.add_parser("idn", help="Query power supply *IDN?")
@@ -190,6 +194,13 @@ def _load_power_service(args: argparse.Namespace) -> PowerService:
     return PowerService(config=config, logger=CommandLogger())
 
 
+def _load_run_service(args: argparse.Namespace) -> RunService:
+    config = load_config(args.config)
+    if args.resource:
+        config = config.with_resource(args.resource)
+    return RunService(config=config, logger=CommandLogger())
+
+
 def _load_sweep_service(args: argparse.Namespace) -> SweepService:
     config = load_config(args.config)
     if args.resource:
@@ -262,6 +273,14 @@ def main(argv: list[str] | None = None) -> int:
             if args.command == "check":
                 plan = load_run_plan(args.plan)
                 _print_run_plan_summary(plan)
+                return 0
+            if args.command == "plan":
+                plan = load_run_plan(args.plan)
+                result = _load_run_service(args).run(plan)
+                print(f"run={result.run_dir}")
+                print(f"run_json={result.run_json_path}")
+                print(f"summary={result.summary_csv_path}")
+                print(f"steps={len(result.steps)}")
                 return 0
         if args.domain == "power":
             service = _load_power_service(args)

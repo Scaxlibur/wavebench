@@ -113,6 +113,15 @@ class CliTests(unittest.TestCase):
         self.assertEqual(args.config, "wavebench.toml")
         self.assertEqual(args.plan, "plans/example.toml")
 
+    def test_run_plan_accepts_plan_and_config(self):
+        args = build_parser().parse_args([
+            "run", "plan", "--config", "wavebench.toml", "--plan", "plans/example.toml"
+        ])
+        self.assertEqual(args.domain, "run")
+        self.assertEqual(args.command, "plan")
+        self.assertEqual(args.config, "wavebench.toml")
+        self.assertEqual(args.plan, "plans/example.toml")
+
 
 if __name__ == "__main__":
     unittest.main()

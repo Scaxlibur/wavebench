@@ -43,13 +43,13 @@ DP800 power : idn/status/set/output
 建议第一版命令：
 
 ```text
-wavebench run plan --config wavebench.toml --plan plans/dp800_voltage_steps.toml
+wavebench run plan --config wavebench.toml --plan plans/dp800_scope_probe_voltage_steps.toml
 ```
 
 可选命令：
 
 ```text
-wavebench run check --config wavebench.toml --plan plans/dp800_voltage_steps.toml
+wavebench run check --config wavebench.toml --plan plans/dp800_scope_probe_voltage_steps.toml
 ```
 
 其中：
@@ -67,8 +67,8 @@ wavebench run check --config wavebench.toml --plan plans/dp800_voltage_steps.tom
 
 ```toml
 [experiment]
-name = "dp800_voltage_capture"
-label = "dp800_voltage_capture"
+name = "dp800_scope_probe_voltage_capture"
+label = "dp800_scope_probe_voltage_capture"
 
 [safety]
 require_scope_coupling_not = ["DC"]
