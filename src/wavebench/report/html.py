@@ -40,6 +40,21 @@ class ReportSignalSummary:
     warnings: str
 
 
+@dataclass(frozen=True)
+class ReportSummary:
+    status: str
+    experiment_label: str
+    total_steps: int
+    failed_steps: int
+    capture_count: int
+    warning_count: int
+    failed_expect_count: int
+    screenshot_count: int
+    restore_status: str
+    primary_frequency: str
+    primary_vpp: str
+
+
 def render_run_report_html(run: RunPackage, output_dir: str | Path | None = None) -> str:
     experiment = run.run.get("experiment", {}) if isinstance(run.run.get("experiment"), dict) else {}
     restore = run.run.get("restore", {}) if isinstance(run.run.get("restore"), dict) else {}
@@ -47,6 +62,7 @@ def render_run_report_html(run: RunPackage, output_dir: str | Path | None = None
     report_output_dir = Path(output_dir) if output_dir is not None else run.path
     screenshots = _collect_screenshots(run, report_output_dir)
     signals = _collect_signal_summaries(run)
+    summary = _build_report_summary(run, screenshots, signals)
     screenshots_by_step = {item.step_index: item for item in screenshots}
     rows = "\n".join(_step_row(step, screenshots_by_step.get(str(step.get("index", "")))) for step in run.steps)
     if not rows:
@@ -75,6 +91,10 @@ code {{ background: #f0f4f8; padding: 0.1rem 0.25rem; border-radius: 3px; }}
 .screenshot-card {{ border: 1px solid #d9e2ec; border-radius: 6px; padding: 0.75rem; background: #fff; }}
 .screenshot-card img {{ display: block; max-width: 100%; height: auto; border: 1px solid #d9e2ec; }}
 .screenshot-thumb {{ max-width: 12rem; height: auto; border: 1px solid #d9e2ec; }}
+.summary-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); gap: 0.75rem; margin: 1rem 0 1.25rem; }}
+.summary-card {{ border: 1px solid #d9e2ec; border-radius: 6px; padding: 0.75rem; background: #f8fafc; }}
+.summary-card .label {{ color: #627d98; font-size: 0.85rem; }}
+.summary-card .value {{ font-size: 1.25rem; font-weight: 700; margin-top: 0.15rem; }}
 .ok {{ color: #0b6b3a; }}
 .failed {{ color: #a61b1b; }}
 .warning {{ color: #915930; }}
@@ -82,6 +102,7 @@ code {{ background: #f0f4f8; padding: 0.1rem 0.25rem; border-radius: 3px; }}
 </head>
 <body>
 <h1>WaveBench run report</h1>
+{_summary_block(summary)}
 <p><b>Run directory:</b> <code>{escape(str(run.path))}</code></p>
 <p><b>Status:</b> <span class="{escape(run.status)}">{escape(run.status)}</span></p>
 <p><b>Experiment:</b> {escape(str(experiment.get('name', '')))} / {escape(str(experiment.get('label', '')))}</p>
@@ -100,6 +121,34 @@ code {{ background: #f0f4f8; padding: 0.1rem 0.25rem; border-radius: 3px; }}
 </body>
 </html>
 """
+
+
+def _summary_block(summary: ReportSummary) -> str:
+    return f"""<h2>Summary</h2>
+<section class="summary-grid">
+{_summary_card("Status", summary.status, css_class=summary.status)}
+{_summary_card("Experiment", summary.experiment_label)}
+{_summary_card("Steps", str(summary.total_steps))}
+{_summary_card("Failed steps", str(summary.failed_steps), css_class="failed" if summary.failed_steps else "ok")}
+{_summary_card("Captures", str(summary.capture_count))}
+{_summary_card("Warnings", str(summary.warning_count), css_class="warning" if summary.warning_count else "ok")}
+{_summary_card("Expect failed", str(summary.failed_expect_count), css_class="failed" if summary.failed_expect_count else "ok")}
+{_summary_card("Screenshots", str(summary.screenshot_count))}
+{_summary_card("Restore", summary.restore_status)}
+{_summary_card("Primary frequency", summary.primary_frequency)}
+{_summary_card("Primary Vpp", summary.primary_vpp)}
+</section>
+"""
+
+
+def _summary_card(label: str, value: str, *, css_class: str = "") -> str:
+    safe_class = f" {escape(css_class)}" if css_class else ""
+    return (
+        '<div class="summary-card">'
+        f'<div class="label">{escape(label)}</div>'
+        f'<div class="value{safe_class}">{escape(value) if value else "-"}</div>'
+        '</div>'
+    )
 
 
 def _step_row(step: dict[str, Any], screenshot: ReportScreenshot | None = None) -> str:
@@ -140,6 +189,50 @@ def _step_row(step: dict[str, Any], screenshot: ReportScreenshot | None = None) 
         f"<td>{escape(warnings_text)}</td>"
         f"<td>{escape(failures_text)}</td>"
         "</tr>"
+    )
+
+
+def _build_report_summary(
+    run: RunPackage, screenshots: list[ReportScreenshot], signals: list[ReportSignalSummary]
+) -> ReportSummary:
+    experiment = run.run.get("experiment", {}) if isinstance(run.run.get("experiment"), dict) else {}
+    restore = run.run.get("restore", {}) if isinstance(run.run.get("restore"), dict) else {}
+    failed_steps = 0
+    packages: set[str] = set()
+    warning_messages: set[str] = set()
+    failed_expect_count = 0
+    for step in run.steps:
+        if step.get("status") == "failed":
+            failed_steps += 1
+        artifact = step.get("artifact", {}) if isinstance(step.get("artifact"), dict) else {}
+        package = artifact.get("package")
+        if package:
+            packages.add(str(package))
+        quality = artifact.get("quality", {}) if isinstance(artifact.get("quality"), dict) else {}
+        warnings = quality.get("warnings", [])
+        if isinstance(warnings, list):
+            warning_messages.update(str(item) for item in warnings if item)
+        elif warnings:
+            warning_messages.add(str(warnings))
+        expect = artifact.get("expect", {}) if isinstance(artifact.get("expect"), dict) else {}
+        if expect.get("status") == "failed":
+            failed_expect_count += 1
+    for signal in signals:
+        if signal.warnings:
+            warning_messages.update(item for item in signal.warnings.split(" | ") if item)
+    primary = signals[0] if signals else None
+    return ReportSummary(
+        status=run.status,
+        experiment_label=str(experiment.get("label") or experiment.get("name") or run.path.name),
+        total_steps=len(run.steps),
+        failed_steps=failed_steps,
+        capture_count=len(packages),
+        warning_count=len(warning_messages),
+        failed_expect_count=failed_expect_count,
+        screenshot_count=len(screenshots),
+        restore_status=str(restore.get("status", "not configured")) if restore else "not configured",
+        primary_frequency=primary.frequency_hz if primary is not None else "",
+        primary_vpp=primary.vpp_v if primary is not None else "",
     )
 
 

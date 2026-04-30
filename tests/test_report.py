@@ -65,6 +65,12 @@ class RunReportTests(unittest.TestCase):
             output = write_run_report_html(load_run_package(run_dir))
 
             html = output.read_text(encoding="utf-8")
+            self.assertIn("<h2>Summary</h2>", html)
+            self.assertIn('<div class="label">Status</div><div class="value ok">ok</div>', html)
+            self.assertIn('<div class="label">Captures</div><div class="value">1</div>', html)
+            self.assertIn('<div class="label">Screenshots</div><div class="value">1</div>', html)
+            self.assertIn('<div class="label">Primary frequency</div><div class="value">10000 Hz</div>', html)
+            self.assertIn('<div class="label">Primary Vpp</div><div class="value">0.8 V</div>', html)
             self.assertIn("<h2>Screenshots</h2>", html)
             self.assertIn('src="../../raw/cap1/screenshot.png"', html)
             self.assertIn('href="../../raw/cap1/screenshot.png"', html)
@@ -85,9 +91,77 @@ class RunReportTests(unittest.TestCase):
 
             html = render_run_report_html(load_run_package(run_dir), output_dir=run_dir)
 
+            self.assertIn("<h2>Summary</h2>", html)
+            self.assertIn('<div class="label">Steps</div><div class="value">1</div>', html)
+            self.assertIn('<div class="label">Captures</div><div class="value">0</div>', html)
             self.assertNotIn("<h2>Screenshots</h2>", html)
             self.assertNotIn("<h2>Signal analysis</h2>", html)
             self.assertIn("<th>Screenshot</th>", html)
+
+    def test_run_report_summary_counts_failed_expectations_and_warnings(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            capture = root / "data" / "raw" / "cap1"
+            capture.mkdir(parents=True)
+            (capture / "metadata.json").write_text(
+                json.dumps(
+                    {
+                        "waveform": {
+                            "summary": {
+                                "channel": 1,
+                                "samples": 20,
+                                "frequency_estimate_hz": 1000.0,
+                                "voltage_vpp_v": 0.01,
+                                "quality_warnings": ["low_signal_amplitude"],
+                            }
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            run_dir = root / "data" / "runs" / "run_failed"
+            run_dir.mkdir(parents=True)
+            (run_dir / "run.json").write_text(
+                json.dumps(
+                    {
+                        "status": "failed",
+                        "experiment": {"label": "bad_run"},
+                        "restore": {"status": "ok"},
+                        "steps": [
+                            {
+                                "index": 0,
+                                "kind": "scope.capture",
+                                "status": "failed",
+                                "artifact": {
+                                    "package": "data/raw/cap1",
+                                    "metadata": "data/raw/cap1/metadata.json",
+                                    "quality": {"warnings": ["low_signal_amplitude"]},
+                                    "expect": {
+                                        "status": "failed",
+                                        "checks": {
+                                            "voltage_vpp_v": {
+                                                "status": "failed",
+                                                "value": 0.01,
+                                                "limits": {"min": 0.05},
+                                            }
+                                        },
+                                        "failures": ["voltage_vpp_v: 0.01 below min 0.05"],
+                                    },
+                                },
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            html = render_run_report_html(load_run_package(run_dir), output_dir=run_dir)
+
+            self.assertIn('<div class="label">Status</div><div class="value failed">failed</div>', html)
+            self.assertIn('<div class="label">Failed steps</div><div class="value failed">1</div>', html)
+            self.assertIn('<div class="label">Warnings</div><div class="value warning">1</div>', html)
+            self.assertIn('<div class="label">Expect failed</div><div class="value failed">1</div>', html)
+            self.assertIn('<div class="label">Restore</div><div class="value">ok</div>', html)
 
     def test_run_report_lists_multi_channel_signal_analysis(self):
         with TemporaryDirectory() as tmp:
