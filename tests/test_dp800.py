@@ -76,6 +76,19 @@ class DP800Tests(unittest.TestCase):
         with self.assertRaisesRegex(Exception, "current limit must be > 0"):
             driver.set_voltage_current_limit(1, 1.0, 0.0)
 
+    def test_set_output_writes_output_only(self):
+        transport = FakeTransport()
+        driver = DP800Power(transport=transport)
+        status = driver.set_output(1, False, check_errors=True)
+        self.assertEqual(transport.writes, [":OUTP CH1,OFF"])
+        self.assertEqual(status.channel, 1)
+        self.assertNotIn(":APPL CH1,3.3,0.2", transport.writes)
+
+    def test_set_output_rejects_invalid_channel(self):
+        driver = DP800Power(transport=FakeTransport())
+        with self.assertRaisesRegex(Exception, "channel must be >= 1"):
+            driver.set_output(0, True)
+
 
 if __name__ == "__main__":
     unittest.main()

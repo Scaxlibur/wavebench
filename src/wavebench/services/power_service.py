@@ -62,3 +62,12 @@ class PowerService:
             )
         finally:
             power.close()
+
+    def set_output(self, channel: int | None, enabled: bool) -> PowerStatus:
+        power_cfg = self._power_config()
+        channel = power_cfg.default_channel if channel is None else channel
+        power = self._open_power()
+        try:
+            return power.set_output(channel, enabled, check_errors=power_cfg.check_errors)
+        finally:
+            power.close()

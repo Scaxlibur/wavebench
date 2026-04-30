@@ -115,5 +115,14 @@ class DP800Power:
             self.assert_no_errors()
         return status
 
+    def set_output(self, channel: int, enabled: bool, *, check_errors: bool = True) -> PowerStatus:
+        if channel < 1:
+            raise DataError("channel must be >= 1")
+        self.transport.write(f":OUTP CH{channel},{'ON' if enabled else 'OFF'}")
+        status = self.get_status(channel)
+        if check_errors:
+            self.assert_no_errors()
+        return status
+
     def close(self) -> None:
         self.transport.close()

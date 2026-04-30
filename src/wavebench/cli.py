@@ -40,6 +40,10 @@ def build_parser() -> argparse.ArgumentParser:
     power_set.add_argument("--voltage", type=float, required=True)
     power_set.add_argument("--current-limit", type=float, required=True)
     add_runtime_options(power_set)
+    power_output = power_sub.add_parser("output", help="Turn power supply channel output on or off")
+    power_output.add_argument("--channel", type=int, default=None)
+    power_output.add_argument("state", choices=["on", "off"])
+    add_runtime_options(power_output)
 
     source_sub = source_parser.add_subparsers(dest="command", required=True)
 
@@ -242,6 +246,9 @@ def main(argv: list[str] | None = None) -> int:
                         current_limit_a=args.current_limit,
                     )
                 )
+                return 0
+            if args.command == "output":
+                _print_power_status(service.set_output(channel=args.channel, enabled=args.state == "on"))
                 return 0
         if args.domain == "source":
             service = _load_source_service(args)

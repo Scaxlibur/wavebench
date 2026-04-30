@@ -258,8 +258,7 @@ experiment workflow
 ## `.gitignore` 规则
 
 ```gitignore
-# Rei scratchpad / local helper workspace
-
+# Local helper workspace
 # Local WaveBench config and generated data
 wavebench.toml
 data/
