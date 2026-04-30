@@ -136,7 +136,7 @@ python -m wavebench source set-duty --config wavebench.toml --channel 2 25
 Probe DG4202 arbitrary-waveform SCPI candidates without upload or output-state changes:
 
 ```powershell
-python -m wavebench source arb-probe --config wavebench.toml --channel 2
+python -m wavebench source arb-probe --config wavebench.toml --channel 2 --probe-timeout-ms 700
 ```
 
 Prepare an arbitrary waveform payload offline. This validates a CSV/NPY waveform and prints normalized + 14-bit DAC payload ranges, but does not connect to the instrument until DG4202 arbitrary-waveform SCPI is confirmed:

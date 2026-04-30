@@ -103,6 +103,26 @@ class WaveBenchConfig:
     power: PowerConfig | None = None
     quality: QualityConfig = QualityConfig()
 
+    def with_connection_timeout_ms(self, timeout_ms: int) -> "WaveBenchConfig":
+        if timeout_ms <= 0:
+            raise ConfigError("connection timeout must be > 0")
+        return WaveBenchConfig(
+            connection=ConnectionConfig(
+                backend=self.connection.backend,
+                resource=self.connection.resource,
+                timeout_ms=timeout_ms,
+                opc_timeout_ms=self.connection.opc_timeout_ms,
+            ),
+            scope=self.scope,
+            autoscale=self.autoscale,
+            waveform=self.waveform,
+            output=self.output,
+            source_path=self.source_path,
+            source=self.source,
+            power=self.power,
+            quality=self.quality,
+        )
+
     def with_resource(self, resource: str) -> "WaveBenchConfig":
         return WaveBenchConfig(
             connection=ConnectionConfig(

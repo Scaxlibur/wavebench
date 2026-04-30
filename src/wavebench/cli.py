@@ -114,6 +114,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     source_arb_probe = source_sub.add_parser("arb-probe", help="Run query-only DG4202 arbitrary-waveform SCPI probes; does not upload or enable output")
     source_arb_probe.add_argument("--channel", type=int, default=None)
+    source_arb_probe.add_argument("--probe-timeout-ms", type=int, default=1000, help="Per-query timeout for unsupported SCPI candidates")
     add_runtime_options(source_arb_probe)
 
     source_arb_load = source_sub.add_parser("arb-load", help="Prepare an arbitrary waveform payload; upload is gated until DG4202 SCPI is confirmed")
@@ -225,6 +226,9 @@ def _load_source_service(args: argparse.Namespace) -> SourceService:
     config = load_config(args.config)
     if args.resource:
         config = config.with_source_resource(args.resource)
+    probe_timeout_ms = getattr(args, "probe_timeout_ms", None)
+    if probe_timeout_ms is not None:
+        config = config.with_connection_timeout_ms(probe_timeout_ms)
     return SourceService(config=config, logger=CommandLogger())
 
 

@@ -100,10 +100,11 @@ class CliTests(unittest.TestCase):
 
 
     def test_source_arb_probe_accepts_channel(self):
-        args = build_parser().parse_args(["source", "arb-probe", "--channel", "2"])
+        args = build_parser().parse_args(["source", "arb-probe", "--channel", "2", "--probe-timeout-ms", "700"])
         self.assertEqual(args.domain, "source")
         self.assertEqual(args.command, "arb-probe")
         self.assertEqual(args.channel, 2)
+        self.assertEqual(args.probe_timeout_ms, 700)
 
     def test_source_arb_load_accepts_dry_run_options(self):
         args = build_parser().parse_args([

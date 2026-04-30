@@ -108,7 +108,8 @@ source arb upload -> source output -> scope capture -> run report / capture insp
 
 - `wavebench source arb-probe --channel 2` 已提供 query-only 探针。
 - 探针只发送以 `?` 结尾的候选命令，并逐条读取 `SYST:ERR?`。
-- 仍需上机运行后才能把候选命令提升为正式 upload sequence。
+- 2026-05-01 已上机运行第一批候选；未确认出可用任意波形上传/选择命令。
+- 下一步优先找官方 programming guide 或 RAF/Ultra Station 文件工作流，避免继续盲试。
 
 ### B. Offline waveform builder
 
