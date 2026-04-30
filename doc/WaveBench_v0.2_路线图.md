@@ -271,6 +271,7 @@ data -> drivers
 - 新增 `python -m wavebench run report data/runs/<run_dir>`，默认生成静态 `report.html`。
 - 新增单元测试覆盖包读取和 CLI 参数解析；离线命令 smoke 已通过。
 - `scope capture --screenshot` 已接入 RTM2032 `HCOP:DATA?` PNG 截图路径；截图作为采集 artifact 写入 `screenshot.png`。
+- `run report` 已能从 run step 的 capture metadata 自动发现 `files.screenshot`，并在 HTML 步骤表与 Screenshots 区块中使用相对路径引用。
 
 这些功能只读文件，不 import `drivers` / `transport`，也不会连接仪器。
 
