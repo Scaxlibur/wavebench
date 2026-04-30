@@ -1,6 +1,13 @@
+import io
+import json
 import unittest
+from contextlib import redirect_stdout
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
-from wavebench.cli import build_parser
+import numpy as np
+
+from wavebench.cli import build_parser, main
 
 
 class CliTests(unittest.TestCase):
@@ -147,6 +154,53 @@ class CliTests(unittest.TestCase):
         self.assertEqual(args.domain, "capture")
         self.assertEqual(args.command, "inspect")
         self.assertEqual(args.path, "data/raw/example")
+
+    def test_capture_inspect_accepts_fft(self):
+        args = build_parser().parse_args(["capture", "inspect", "data/raw/example", "--fft"])
+        self.assertEqual(args.domain, "capture")
+        self.assertEqual(args.command, "inspect")
+        self.assertTrue(args.fft)
+
+    def test_capture_inspect_fft_prints_spectrum_summary(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            capture = root / "data" / "raw" / "fft_cap"
+            capture.mkdir(parents=True)
+            sample_rate = 1000.0
+            samples = 1000
+            time_s = np.arange(samples) / sample_rate
+            voltage_v = np.sin(2 * np.pi * 50.0 * time_s)
+            np.save(capture / "ch1.npy", np.column_stack((time_s, voltage_v)))
+            (capture / "metadata.json").write_text(
+                json.dumps(
+                    {
+                        "operation": {"command": "scope capture", "channel": 1},
+                        "waveform": {
+                            "summary": {
+                                "channel": 1,
+                                "samples": samples,
+                                "x_increment_s": 1.0 / sample_rate,
+                            }
+                        },
+                        "files": {"npy": "data/raw/fft_cap/ch1.npy"},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            stdout = io.StringIO()
+
+            with redirect_stdout(stdout):
+                status = main(["capture", "inspect", str(capture), "--fft"])
+
+            output = stdout.getvalue()
+            self.assertEqual(status, 0)
+            self.assertIn("FFT", output)
+            self.assertIn("CH1", output)
+            self.assertIn("window=hann", output)
+            self.assertIn("sample_rate≈1000 Hz", output)
+            self.assertIn("resolution≈1 Hz", output)
+            self.assertIn("peak_frequency≈50 Hz", output)
+            self.assertIn("noise_floor≈", output)
 
     def test_run_report_accepts_path_and_output(self):
         args = build_parser().parse_args(["run", "report", "data/runs/example", "--output", "report.html"])

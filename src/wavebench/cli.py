@@ -2,6 +2,10 @@ from __future__ import annotations
 
 import argparse
 import sys
+from pathlib import Path
+from typing import Any
+
+import numpy as np
 
 from .config import load_config
 from .data.packages import load_capture_package, load_run_package
@@ -52,6 +56,7 @@ def build_parser() -> argparse.ArgumentParser:
     capture_sub = capture_parser.add_subparsers(dest="command", required=True)
     capture_inspect = capture_sub.add_parser("inspect", help="Inspect an offline capture package")
     capture_inspect.add_argument("path", help="Path to data/raw/<capture_dir>")
+    capture_inspect.add_argument("--fft", action="store_true", help="Print offline FFT spectrum summary for saved NPY waveforms")
 
     power_sub = power_parser.add_subparsers(dest="command", required=True)
     power_idn = power_sub.add_parser("idn", help="Query power supply *IDN?")
@@ -304,6 +309,135 @@ def _print_capture_package_summary(package) -> None:
             print(f"  {kind}={path}")
 
 
+def _print_capture_fft_summary(package) -> None:
+    print("FFT")
+    for channel in package.channels:
+        npy_text = channel.files.get("npy")
+        print(f"CH{channel.channel}")
+        if not npy_text:
+            print("  warning=missing npy artifact")
+            continue
+        npy_path = _resolve_capture_file_path(package.path, npy_text)
+        try:
+            analysis = _analyze_fft(np.load(npy_path))
+        except Exception as exc:  # report-style inspect should keep other channels readable
+            print(f"  warning=fft unavailable: {type(exc).__name__}: {exc}")
+            continue
+        print(f"  window={analysis['window']}")
+        print(f"  samples={analysis['samples']}")
+        print(f"  sample_rate≈{analysis['sample_rate_hz']:.6g} Hz")
+        print(f"  resolution≈{analysis['resolution_hz']:.6g} Hz")
+        print(f"  peak_frequency≈{analysis['peak_frequency_hz']:.6g} Hz")
+        print(f"  peak_amplitude≈{analysis['peak_amplitude_v']:.6g} V")
+        print(f"  noise_floor≈{analysis['noise_floor_v']:.6g} V")
+        thd = analysis.get("thd_ratio")
+        if thd is not None:
+            print(f"  thd≈{thd:.3%}")
+        for harmonic in analysis["harmonics"]:
+            print(
+                f"  harmonic_{harmonic['order']:g}≈{harmonic['frequency_hz']:.6g} Hz "
+                f"amplitude≈{harmonic['amplitude_v']:.6g} V"
+            )
+        for warning in analysis["warnings"]:
+            print(f"  warning={warning}")
+
+
+def _analyze_fft(waveform: Any) -> dict[str, Any]:
+    data = np.asarray(waveform, dtype=float)
+    if data.ndim != 2 or data.shape[1] < 2:
+        raise ValueError("expected an Nx2 waveform array")
+    finite = np.isfinite(data[:, 0]) & np.isfinite(data[:, 1])
+    data = data[finite]
+    if data.shape[0] < 4:
+        raise ValueError("need at least four finite waveform samples")
+    time_s = data[:, 0]
+    voltage_v = data[:, 1]
+    dt = np.diff(time_s)
+    positive_dt = dt[dt > 0]
+    if positive_dt.size == 0:
+        raise ValueError("waveform time axis must be increasing")
+    median_dt = float(np.median(positive_dt))
+    if median_dt <= 0:
+        raise ValueError("waveform sample interval must be positive")
+    warnings: list[str] = []
+    if not np.all(dt > 0):
+        warnings.append("non_monotonic_time_axis")
+    if np.max(np.abs(dt - median_dt)) > median_dt * 0.01:
+        warnings.append("non_uniform_sample_interval")
+    samples = int(voltage_v.size)
+    centered = voltage_v - float(np.mean(voltage_v))
+    window = np.hanning(samples)
+    coherent_gain = float(np.mean(window))
+    if coherent_gain <= 0:
+        raise ValueError("invalid FFT window")
+    spectrum = np.fft.rfft(centered * window)
+    frequencies = np.fft.rfftfreq(samples, d=median_dt)
+    amplitudes = np.abs(spectrum) * 2.0 / (samples * coherent_gain)
+    if amplitudes.size:
+        amplitudes[0] = amplitudes[0] / 2.0
+    if amplitudes.size < 2:
+        raise ValueError("not enough FFT bins")
+    search = amplitudes[1:]
+    peak_index = int(np.argmax(search) + 1)
+    peak_frequency = float(frequencies[peak_index])
+    peak_amplitude = float(amplitudes[peak_index])
+    noise_bins = np.delete(amplitudes[1:], max(peak_index - 1, 0))
+    noise_floor = float(np.median(noise_bins)) if noise_bins.size else 0.0
+    harmonics = _fft_harmonics(frequencies, amplitudes, peak_frequency)
+    harmonic_power = sum(item["amplitude_v"] ** 2 for item in harmonics)
+    thd = (harmonic_power ** 0.5 / peak_amplitude) if peak_amplitude > 0 and harmonics else None
+    return {
+        "window": "hann",
+        "samples": samples,
+        "sample_rate_hz": 1.0 / median_dt,
+        "resolution_hz": float(frequencies[1] - frequencies[0]) if frequencies.size > 1 else 0.0,
+        "peak_frequency_hz": peak_frequency,
+        "peak_amplitude_v": peak_amplitude,
+        "noise_floor_v": noise_floor,
+        "harmonics": harmonics,
+        "thd_ratio": thd,
+        "warnings": warnings,
+    }
+
+
+def _fft_harmonics(frequencies: Any, amplitudes: Any, fundamental_hz: float) -> list[dict[str, float]]:
+    if fundamental_hz <= 0:
+        return []
+    result: list[dict[str, float]] = []
+    max_frequency = float(frequencies[-1])
+    for order in range(2, 6):
+        target = fundamental_hz * order
+        if target > max_frequency:
+            break
+        index = int(np.argmin(np.abs(frequencies - target)))
+        result.append(
+            {
+                "order": float(order),
+                "frequency_hz": float(frequencies[index]),
+                "amplitude_v": float(amplitudes[index]),
+            }
+        )
+    return result
+
+
+def _resolve_capture_file_path(package_dir: Path, file_text: str) -> Path:
+    path = Path(file_text.replace("\\", "/"))
+    if path.is_absolute() or path.exists():
+        return path
+    root = _project_root_from_capture_path(package_dir)
+    candidate = root / path
+    if candidate.exists():
+        return candidate
+    return package_dir / path.name
+
+
+def _project_root_from_capture_path(package_dir: Path) -> Path:
+    parts = package_dir.parts
+    if len(parts) >= 3 and parts[-3:-1] == ("data", "raw"):
+        return Path(*parts[:-3]) if len(parts[:-3]) > 0 else Path(".")
+    return package_dir.parent
+
+
 def _print_waveform_summary(waveform: WaveformData) -> None:
     summary = waveform.summary()
     print(f"CH{summary['channel']} waveform fetched")
@@ -333,7 +467,10 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.domain == "capture":
             if args.command == "inspect":
-                _print_capture_package_summary(load_capture_package(args.path))
+                package = load_capture_package(args.path)
+                _print_capture_package_summary(package)
+                if args.fft:
+                    _print_capture_fft_summary(package)
                 return 0
         if args.domain == "run":
             if args.command == "report":
