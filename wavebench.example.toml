@@ -94,3 +94,17 @@ ensure_fix_mode_on_set_frequency = true
 
 # Extra wait after setting a fixed source frequency, in milliseconds.
 settle_ms_after_set_frequency = 500
+
+
+[power]
+# Power supply driver. Current read-only power support targets Rigol DP800 series.
+driver = "dp800"
+
+# VISA resource string for the power supply.
+resource = "TCPIP::192.168.1.102::INSTR"
+
+# Default channel used when power CLI does not pass --channel.
+default_channel = 1
+
+# Reserved for future power write operations; read-only status does not change outputs.
+check_errors = true

@@ -2,7 +2,7 @@ import unittest
 import tempfile
 from pathlib import Path
 
-from wavebench.config import AutoscaleConfig, ConnectionConfig, OutputConfig, ScopeConfig, WaveBenchConfig, WaveformConfig, load_config
+from wavebench.config import AutoscaleConfig, ConnectionConfig, OutputConfig, PowerConfig, ScopeConfig, WaveBenchConfig, WaveformConfig, load_config
 
 
 class ConfigOverrideTests(unittest.TestCase):
@@ -133,3 +133,52 @@ settle_ms_after_set_frequency = 500
             self.assertIsNotNone(config.source)
             self.assertEqual(config.source.default_channel, 2)
             self.assertEqual(config.source.settle_ms_after_set_frequency, 500)
+
+
+class PowerConfigTests(unittest.TestCase):
+    def test_loads_power_config(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "wavebench.toml"
+            path.write_text("""
+[connection]
+backend = "lan"
+resource = "TCPIP::127.0.0.1::INSTR"
+timeout_ms = 1000
+opc_timeout_ms = 1000
+
+[scope]
+driver = "rtm2032"
+default_channel = 1
+reset_before_run = false
+check_errors = true
+
+[autoscale]
+wait_opc = true
+check_errors = true
+
+[waveform]
+format = "real"
+byte_order = "lsbf"
+points = "def"
+
+[output]
+directory = "data/raw"
+package_naming = "timestamp_label"
+save_csv = true
+save_npy = true
+save_json = true
+save_commands_log = true
+save_screenshot = false
+
+[power]
+driver = "dp800"
+resource = "TCPIP::192.168.123.4::INSTR"
+default_channel = 1
+check_errors = true
+""", encoding="utf-8")
+            config = load_config(path)
+            self.assertIsNotNone(config.power)
+            self.assertEqual(config.power.resource, "TCPIP::192.168.123.4::INSTR")
+            self.assertEqual(config.power.default_channel, 1)
+            updated = config.with_power_resource("TCPIP::192.168.1.50::INSTR")
+            self.assertEqual(updated.power.resource, "TCPIP::192.168.1.50::INSTR")

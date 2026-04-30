@@ -64,6 +64,13 @@ class SourceConfig:
     settle_ms_after_set_frequency: int
 
 @dataclass(frozen=True)
+class PowerConfig:
+    driver: str
+    resource: str | None
+    default_channel: int
+    check_errors: bool
+
+@dataclass(frozen=True)
 class OutputConfig:
     directory: Path
     package_naming: str
@@ -82,6 +89,7 @@ class WaveBenchConfig:
     output: OutputConfig
     source_path: Path
     source: SourceConfig | None = None
+    power: PowerConfig | None = None
 
     def with_resource(self, resource: str) -> "WaveBenchConfig":
         return WaveBenchConfig(
@@ -97,6 +105,7 @@ class WaveBenchConfig:
             output=self.output,
             source_path=self.source_path,
             source=self.source,
+            power=self.power,
         )
 
     def with_output_overrides(self, *, save_csv: bool | None = None, save_npy: bool | None = None) -> "WaveBenchConfig":
@@ -116,6 +125,7 @@ class WaveBenchConfig:
             ),
             source_path=self.source_path,
             source=self.source,
+            power=self.power,
         )
 
     def with_waveform_overrides(
@@ -151,6 +161,7 @@ class WaveBenchConfig:
             output=self.output,
             source_path=self.source_path,
             source=self.source,
+            power=self.power,
         )
 
     def with_source_resource(self, resource: str) -> "WaveBenchConfig":
@@ -176,6 +187,30 @@ class WaveBenchConfig:
                 check_errors=source.check_errors,
                 ensure_fix_mode_on_set_frequency=source.ensure_fix_mode_on_set_frequency,
                 settle_ms_after_set_frequency=source.settle_ms_after_set_frequency,
+            ),
+            power=self.power,
+        )
+
+    def with_power_resource(self, resource: str) -> "WaveBenchConfig":
+        power = self.power or PowerConfig(
+            driver="dp800",
+            resource=None,
+            default_channel=1,
+            check_errors=True,
+        )
+        return WaveBenchConfig(
+            connection=self.connection,
+            scope=self.scope,
+            autoscale=self.autoscale,
+            waveform=self.waveform,
+            output=self.output,
+            source_path=self.source_path,
+            source=self.source,
+            power=PowerConfig(
+                driver=power.driver,
+                resource=resource,
+                default_channel=power.default_channel,
+                check_errors=power.check_errors,
             ),
         )
 
@@ -206,6 +241,15 @@ def load_config(path: str | Path = "wavebench.toml") -> WaveBenchConfig:
                 check_errors=bool(src.get("check_errors", True)),
                 ensure_fix_mode_on_set_frequency=bool(src.get("ensure_fix_mode_on_set_frequency", True)),
                 settle_ms_after_set_frequency=int(src.get("settle_ms_after_set_frequency", 0)),
+            )
+        pwr = raw.get("power")
+        power = None
+        if pwr is not None:
+            power = PowerConfig(
+                driver=str(pwr.get("driver", "dp800")),
+                resource=str(pwr["resource"]) if "resource" in pwr else None,
+                default_channel=int(pwr.get("default_channel", 1)),
+                check_errors=bool(pwr.get("check_errors", True)),
             )
         config = WaveBenchConfig(
             connection=ConnectionConfig(
@@ -246,6 +290,7 @@ def load_config(path: str | Path = "wavebench.toml") -> WaveBenchConfig:
             ),
             source_path=config_path,
             source=source,
+            power=power,
         )
     except KeyError as exc:
         raise ConfigError(f"missing required config key: {exc}") from exc
@@ -275,4 +320,9 @@ def load_config(path: str | Path = "wavebench.toml") -> WaveBenchConfig:
             raise ConfigError("source.default_channel must be >= 1")
         if config.source.settle_ms_after_set_frequency < 0:
             raise ConfigError("source.settle_ms_after_set_frequency must be >= 0")
+    if config.power is not None:
+        if config.power.driver.lower() != "dp800":
+            raise ConfigError("power.driver must be 'dp800'")
+        if config.power.default_channel < 1:
+            raise ConfigError("power.default_channel must be >= 1")
     return config

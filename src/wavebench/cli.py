@@ -5,11 +5,13 @@ import sys
 
 from .config import load_config
 from .drivers.dg4202 import SourceStatus
+from .drivers.dp800 import PowerStatus
 from .drivers.rtm2032 import WaveformData
 from .errors import ConfigError, WaveBenchError
 from .logging import CommandLogger
 from .services.scope_service import ScopeService
 from .services.source_service import SourceService
+from .services.power_service import PowerService
 from .services.sweep_service import SweepService, parse_frequency_list
 
 
@@ -24,7 +26,16 @@ def build_parser() -> argparse.ArgumentParser:
 
     scope_parser = subparsers.add_parser("scope", help="Oscilloscope commands")
     source_parser = subparsers.add_parser("source", help="Signal generator commands")
+    power_parser = subparsers.add_parser("power", help="Power supply commands")
     sweep_parser = subparsers.add_parser("sweep", help="Source/scope sweep commands")
+
+    power_sub = power_parser.add_subparsers(dest="command", required=True)
+    power_idn = power_sub.add_parser("idn", help="Query power supply *IDN?")
+    add_runtime_options(power_idn)
+    power_status = power_sub.add_parser("status", help="Query power supply channel status")
+    power_status.add_argument("--channel", type=int, default=None)
+    add_runtime_options(power_status)
+
     source_sub = source_parser.add_subparsers(dest="command", required=True)
 
     source_idn = source_sub.add_parser("idn", help="Query source *IDN?")
@@ -154,6 +165,13 @@ def _load_source_service(args: argparse.Namespace) -> SourceService:
     return SourceService(config=config, logger=CommandLogger())
 
 
+def _load_power_service(args: argparse.Namespace) -> PowerService:
+    config = load_config(args.config)
+    if args.resource:
+        config = config.with_power_resource(args.resource)
+    return PowerService(config=config, logger=CommandLogger())
+
+
 def _load_sweep_service(args: argparse.Namespace) -> SweepService:
     config = load_config(args.config)
     if args.resource:
@@ -161,6 +179,12 @@ def _load_sweep_service(args: argparse.Namespace) -> SweepService:
     if getattr(args, "source_resource", None):
         config = config.with_source_resource(args.source_resource)
     return SweepService(config=config, logger=CommandLogger())
+
+
+def _print_power_status(status: PowerStatus) -> None:
+    set_value = f"{status.set_voltage_v}V/{status.set_current_a}A"
+    measured = f"{status.measured_voltage_v}V/{status.measured_current_a}A/{status.measured_power_w}W"
+    print(f"CH{status.channel}: output={status.output} mode={status.mode} set={set_value} measured={measured} rating={status.rating}")
 
 
 def _print_source_status(status: SourceStatus) -> None:
@@ -197,6 +221,14 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     try:
+        if args.domain == "power":
+            service = _load_power_service(args)
+            if args.command == "idn":
+                print(service.idn())
+                return 0
+            if args.command == "status":
+                _print_power_status(service.status(channel=args.channel))
+                return 0
         if args.domain == "source":
             service = _load_source_service(args)
             if args.command == "idn":

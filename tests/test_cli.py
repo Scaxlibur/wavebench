@@ -22,6 +22,12 @@ class CliTests(unittest.TestCase):
         self.assertEqual(args.command, "capture")
         self.assertEqual(args.channel, [1, 2])
 
+    def test_power_status_accepts_channel(self):
+        args = build_parser().parse_args(["power", "status", "--channel", "1"])
+        self.assertEqual(args.domain, "power")
+        self.assertEqual(args.command, "status")
+        self.assertEqual(args.channel, 1)
+
     def test_source_status_accepts_channel(self):
         args = build_parser().parse_args(["source", "status", "--channel", "2"])
         self.assertEqual(args.domain, "source")
