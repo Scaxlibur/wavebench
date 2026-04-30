@@ -7,6 +7,17 @@ from wavebench.config import ConnectionConfig
 from wavebench.errors import ConnectionError
 from wavebench.logging import CommandLogger
 
+
+def _open_rsinstrument_session(rs_instrument_cls: Any, resource: str) -> Any:
+    try:
+        return rs_instrument_cls(resource, True, False)
+    except Exception as exc:
+        message = str(exc).lower()
+        if "rsvisa" not in message and "visa implementation" not in message:
+            raise
+        return rs_instrument_cls(resource, True, False, "SelectVisa=pyvisa-py")
+
+
 @dataclass
 class RsInstrumentTransport:
     resource: str
@@ -21,7 +32,7 @@ class RsInstrumentTransport:
             raise ConnectionError("RsInstrument is not installed. Run: python -m pip install -e .") from exc
         logger = logger or CommandLogger()
         try:
-            session = RsInstrument(config.resource, True, False)
+            session = _open_rsinstrument_session(RsInstrument, config.resource)
             session.visa_timeout = config.timeout_ms
             session.opc_timeout = config.opc_timeout_ms
             session.instrument_status_checking = False

@@ -23,7 +23,10 @@ class PyVisaTransport:
             raise ConnectionError("pyvisa is not installed. Run: python -m pip install pyvisa") from exc
         logger = logger or CommandLogger()
         try:
-            resource_manager = pyvisa.ResourceManager()
+            try:
+                resource_manager = pyvisa.ResourceManager()
+            except ValueError:
+                resource_manager = pyvisa.ResourceManager("@py")
             session = resource_manager.open_resource(config.resource)
             session.timeout = config.timeout_ms
             try:
