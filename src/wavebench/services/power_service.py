@@ -68,6 +68,11 @@ class PowerService:
         channel = power_cfg.default_channel if channel is None else channel
         power = self._open_power()
         try:
-            return power.set_output(channel, enabled, check_errors=power_cfg.check_errors)
+            return power.set_output(
+                channel,
+                enabled,
+                check_errors=power_cfg.check_errors,
+                settle_ms_after_output=power_cfg.settle_ms_after_output,
+            )
         finally:
             power.close()

@@ -70,6 +70,7 @@ class PowerConfig:
     default_channel: int
     check_errors: bool
     settle_ms_after_set: int
+    settle_ms_after_output: int
 
 @dataclass(frozen=True)
 class OutputConfig:
@@ -199,6 +200,7 @@ class WaveBenchConfig:
             default_channel=1,
             check_errors=True,
             settle_ms_after_set=2000,
+            settle_ms_after_output=1000,
         )
         return WaveBenchConfig(
             connection=self.connection,
@@ -214,6 +216,7 @@ class WaveBenchConfig:
                 default_channel=power.default_channel,
                 check_errors=power.check_errors,
                 settle_ms_after_set=power.settle_ms_after_set,
+                settle_ms_after_output=power.settle_ms_after_output,
             ),
         )
 
@@ -254,6 +257,7 @@ def load_config(path: str | Path = "wavebench.toml") -> WaveBenchConfig:
                 default_channel=int(pwr.get("default_channel", 1)),
                 check_errors=bool(pwr.get("check_errors", True)),
                 settle_ms_after_set=int(pwr.get("settle_ms_after_set", 2000)),
+                settle_ms_after_output=int(pwr.get("settle_ms_after_output", 1000)),
             )
         config = WaveBenchConfig(
             connection=ConnectionConfig(
@@ -331,4 +335,6 @@ def load_config(path: str | Path = "wavebench.toml") -> WaveBenchConfig:
             raise ConfigError("power.default_channel must be >= 1")
         if config.power.settle_ms_after_set < 0:
             raise ConfigError("power.settle_ms_after_set must be >= 0")
+        if config.power.settle_ms_after_output < 0:
+            raise ConfigError("power.settle_ms_after_output must be >= 0")
     return config

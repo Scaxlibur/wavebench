@@ -112,3 +112,6 @@ check_errors = true
 # Wait after setting voltage/current limit before reading measured values.
 settle_ms_after_set = 2000
 
+# Wait after turning output on/off before reading measured values.
+settle_ms_after_output = 1000
+
