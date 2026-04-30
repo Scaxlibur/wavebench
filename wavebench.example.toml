@@ -1,4 +1,4 @@
-# WaveBench local configuration example
+﻿# WaveBench local configuration example
 # Copy this file to `wavebench.toml` and edit it for your lab setup.
 # `wavebench.toml` is ignored by git because it may contain real instrument IPs and local paths.
 
@@ -106,5 +106,9 @@ resource = "TCPIP::192.168.1.102::INSTR"
 # Default channel used when power CLI does not pass --channel.
 default_channel = 1
 
-# Reserved for future power write operations; read-only status does not change outputs.
+# Query SYST:ERR? after explicit power set operations when possible.
 check_errors = true
+
+# Wait after setting voltage/current limit before reading measured values.
+settle_ms_after_set = 2000
+
