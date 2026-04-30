@@ -14,6 +14,7 @@ from .drivers.dg4202 import SourceStatus
 from .drivers.dp800 import PowerStatus
 from .drivers.rtm2032 import WaveformData
 from .errors import ConfigError, WaveBenchError
+from .arbitrary import load_arbitrary_waveform
 from .logging import CommandLogger
 from .services.scope_service import ScopeService
 from .services.source_service import SourceService
@@ -110,6 +111,18 @@ def build_parser() -> argparse.ArgumentParser:
     source_set_duty.add_argument("--channel", type=int, default=None)
     source_set_duty.add_argument("duty_percent", type=float)
     add_runtime_options(source_set_duty)
+
+    source_arb_load = source_sub.add_parser("arb-load", help="Prepare an arbitrary waveform payload; upload is gated until DG4202 SCPI is confirmed")
+    source_arb_load.add_argument("--channel", type=int, required=True)
+    source_arb_load.add_argument("--file", required=True, help="Input waveform file: .csv or .npy")
+    source_arb_load.add_argument("--name", required=True, help="Instrument waveform name, e.g. REI_ARB")
+    source_arb_load.add_argument("--amplitude", type=float, required=True, help="Target output amplitude in Vpp")
+    source_arb_load.add_argument("--offset", type=float, default=0.0, help="Target output offset in V")
+    source_arb_load.add_argument("--sample-rate", type=float, default=None, help="Sample rate in Hz when the file has no time axis")
+    source_arb_load.add_argument("--max-points", type=int, default=None, help="Optional point-count guard, e.g. 16384")
+    source_arb_load.add_argument("--output-on", action="store_true", help="Allow output state change after upload; ignored by dry-run")
+    source_arb_load.add_argument("--dry-run", action="store_true", help="Only validate/build payload summary; do not connect to the instrument")
+    add_runtime_options(source_arb_load)
 
     sweep_sub = sweep_parser.add_subparsers(dest="command", required=True)
     sweep_discrete = sweep_sub.add_parser("discrete", help="Run a discrete source-frequency sweep and capture each point")
@@ -438,6 +451,29 @@ def _project_root_from_capture_path(package_dir: Path) -> Path:
     return package_dir.parent
 
 
+def _print_arbitrary_waveform_summary(args: argparse.Namespace) -> None:
+    waveform = load_arbitrary_waveform(
+        args.file,
+        sample_rate_hz=args.sample_rate,
+        max_points=args.max_points,
+    )
+    summary = waveform.summary()
+    print(f"arb_name={args.name}")
+    print(f"channel={args.channel}")
+    print(f"file={summary['source_path']}")
+    print(f"points={summary['points']}")
+    print(f"input={summary['input_min']:.6g}..{summary['input_max']:.6g} mean={summary['input_mean']:.6g}")
+    print(f"normalized={summary['normalized_min']:.6g}..{summary['normalized_max']:.6g}")
+    print(f"dac14={summary['dac14_min']}..{summary['dac14_max']}")
+    if summary["sample_rate_hz"] is not None:
+        print(f"sample_rate={summary['sample_rate_hz']:.6g} Hz")
+    print(f"amplitude={args.amplitude:.6g} Vpp")
+    print(f"offset={args.offset:.6g} V")
+    print(f"output_on={bool(args.output_on)}")
+    print("dry_run=true")
+    print("upload=blocked_until_dg4202_scpi_is_confirmed")
+
+
 def _print_waveform_summary(waveform: WaveformData) -> None:
     summary = waveform.summary()
     print(f"CH{summary['channel']} waveform fetched")
@@ -513,6 +549,13 @@ def main(argv: list[str] | None = None) -> int:
                 _print_power_status(service.set_output(channel=args.channel, enabled=args.state == "on"))
                 return 0
         if args.domain == "source":
+            if args.command == "arb-load":
+                if args.amplitude <= 0:
+                    raise ConfigError("--amplitude must be > 0")
+                if not args.dry_run:
+                    raise ConfigError("DG4202 arbitrary upload SCPI is not confirmed yet; use --dry-run")
+                _print_arbitrary_waveform_summary(args)
+                return 0
             service = _load_source_service(args)
             if args.command == "idn":
                 print(service.idn())

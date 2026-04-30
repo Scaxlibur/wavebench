@@ -97,6 +97,58 @@ class CliTests(unittest.TestCase):
         self.assertEqual(args.duty_percent, 25.0)
 
 
+
+    def test_source_arb_load_accepts_dry_run_options(self):
+        args = build_parser().parse_args([
+            "source", "arb-load",
+            "--channel", "2",
+            "--file", "waveform.npy",
+            "--name", "REI_ARB",
+            "--amplitude", "1.0",
+            "--offset", "0.0",
+            "--sample-rate", "1000",
+            "--max-points", "16384",
+            "--output-on",
+            "--dry-run",
+        ])
+        self.assertEqual(args.domain, "source")
+        self.assertEqual(args.command, "arb-load")
+        self.assertEqual(args.channel, 2)
+        self.assertEqual(args.file, "waveform.npy")
+        self.assertEqual(args.name, "REI_ARB")
+        self.assertEqual(args.amplitude, 1.0)
+        self.assertEqual(args.offset, 0.0)
+        self.assertEqual(args.sample_rate, 1000.0)
+        self.assertEqual(args.max_points, 16384)
+        self.assertTrue(args.output_on)
+        self.assertTrue(args.dry_run)
+
+    def test_source_arb_load_dry_run_prints_payload_summary(self):
+        with TemporaryDirectory() as tmp:
+            path = Path(tmp) / "waveform.npy"
+            np.save(path, np.array([-1.0, 0.0, 1.0]))
+            stdout = io.StringIO()
+
+            with redirect_stdout(stdout):
+                status = main([
+                    "source", "arb-load",
+                    "--channel", "2",
+                    "--file", str(path),
+                    "--name", "REI_ARB",
+                    "--amplitude", "1.0",
+                    "--offset", "0.0",
+                    "--dry-run",
+                ])
+
+            output = stdout.getvalue()
+            self.assertEqual(status, 0)
+            self.assertIn("arb_name=REI_ARB", output)
+            self.assertIn("channel=2", output)
+            self.assertIn("points=3", output)
+            self.assertIn("dac14=0..16383", output)
+            self.assertIn("dry_run=true", output)
+            self.assertIn("upload=blocked_until_dg4202_scpi_is_confirmed", output)
+
     def test_sweep_discrete_accepts_frequencies_and_channels(self):
         args = build_parser().parse_args([
             "sweep", "discrete",

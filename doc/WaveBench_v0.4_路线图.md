@@ -117,8 +117,14 @@ CSV / NPY -> normalized waveform payload
 - 支持一列电压或两列 time/voltage。
 - 拒绝 NaN / inf。
 - 拒绝点数太少。
-- 可选择归一化到 `[-1, 1]` 或生成 14-bit DAC 整数。
-- 单元测试覆盖正弦、方波、非法数据。
+- 可归一化到 `[-1, 1]` 并生成 14-bit DAC 整数。
+- 单元测试覆盖 NPY、CSV、非法数据和 DAC 映射。
+
+当前实现：
+
+- `src/wavebench/arbitrary.py` 已提供离线 builder。
+- `wavebench source arb-load ... --dry-run` 已提供 payload 摘要。
+- 非 dry-run 上传仍被阻止，等待 DG4202 SCPI 确认。
 
 ### C. DG4202 driver upload 方法
 

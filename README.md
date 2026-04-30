@@ -24,6 +24,7 @@ It provides small, explicit CLI commands for LAN-connected lab instruments. The 
 - `source set-func`
 - `source set-vpp`
 - `source set-duty`
+- `source arb-load --dry-run` for offline arbitrary waveform payload validation
 - `source output`
 - `sweep discrete` source-to-scope frequency sweeps
 - optional `--restore-source-state` for discrete sweep
@@ -129,6 +130,12 @@ Set DG4202 square-wave duty cycle in percent:
 
 ```powershell
 python -m wavebench source set-duty --config wavebench.toml --channel 2 25
+```
+
+Prepare an arbitrary waveform payload offline. This validates a CSV/NPY waveform and prints normalized + 14-bit DAC payload ranges, but does not connect to the instrument until DG4202 arbitrary-waveform SCPI is confirmed:
+
+```powershell
+python -m wavebench source arb-load --channel 2 --file waveform.npy --name REI_ARB --amplitude 1.0 --offset 0.0 --dry-run
 ```
 
 Run the verified duty-cycle analysis plan while also checking DP800 CH1 through scope CH2:

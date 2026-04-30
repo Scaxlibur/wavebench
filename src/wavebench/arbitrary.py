@@ -1,0 +1,143 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+import numpy as np
+
+from wavebench.errors import DataError
+
+DAC14_MIN = 0
+DAC14_MAX = 16383
+
+
+@dataclass(frozen=True)
+class ArbitraryWaveform:
+    source_path: Path
+    samples: np.ndarray
+    normalized: np.ndarray
+    dac14: np.ndarray
+    time_s: np.ndarray | None = None
+    sample_rate_hz: float | None = None
+
+    @property
+    def points(self) -> int:
+        return int(self.normalized.size)
+
+    def summary(self) -> dict[str, Any]:
+        return {
+            "source_path": str(self.source_path),
+            "points": self.points,
+            "input_min": float(np.min(self.samples)),
+            "input_max": float(np.max(self.samples)),
+            "input_mean": float(np.mean(self.samples)),
+            "normalized_min": float(np.min(self.normalized)),
+            "normalized_max": float(np.max(self.normalized)),
+            "dac14_min": int(np.min(self.dac14)),
+            "dac14_max": int(np.max(self.dac14)),
+            "sample_rate_hz": self.sample_rate_hz,
+            "has_time_axis": self.time_s is not None,
+        }
+
+
+def load_arbitrary_waveform(
+    path: str | Path,
+    *,
+    sample_rate_hz: float | None = None,
+    max_points: int | None = None,
+) -> ArbitraryWaveform:
+    source_path = Path(path)
+    data = _load_array(source_path)
+    time_s, samples = _split_waveform_columns(data)
+    if sample_rate_hz is not None and sample_rate_hz <= 0:
+        raise DataError("sample rate must be > 0")
+    if time_s is not None:
+        inferred = _infer_sample_rate(time_s)
+        sample_rate_hz = sample_rate_hz or inferred
+    _validate_samples(samples, max_points=max_points)
+    normalized = normalize_peak(samples)
+    return ArbitraryWaveform(
+        source_path=source_path,
+        samples=samples,
+        normalized=normalized,
+        dac14=normalized_to_dac14(normalized),
+        time_s=time_s,
+        sample_rate_hz=sample_rate_hz,
+    )
+
+
+def normalize_peak(samples: np.ndarray) -> np.ndarray:
+    values = np.asarray(samples, dtype=float)
+    peak = float(np.max(np.abs(values)))
+    if peak == 0:
+        return values.copy()
+    if peak <= 1.0:
+        return values.copy()
+    return values / peak
+
+
+def normalized_to_dac14(samples: np.ndarray) -> np.ndarray:
+    values = np.asarray(samples, dtype=float)
+    if np.any(values < -1.0) or np.any(values > 1.0):
+        raise DataError("normalized waveform samples must be within [-1, 1]")
+    dac = np.rint((values + 1.0) * (DAC14_MAX / 2.0))
+    return np.clip(dac, DAC14_MIN, DAC14_MAX).astype(np.uint16)
+
+
+def _load_array(path: Path) -> np.ndarray:
+    suffix = path.suffix.lower()
+    try:
+        if suffix == ".npy":
+            return np.asarray(np.load(path), dtype=float)
+        if suffix == ".csv":
+            return np.asarray(np.loadtxt(path, delimiter=",", comments="#"), dtype=float)
+    except OSError as exc:
+        raise DataError(f"cannot read waveform file: {path}") from exc
+    except ValueError as exc:
+        raise DataError(f"cannot parse waveform file as numeric data: {path}") from exc
+    raise DataError("waveform file must be .csv or .npy")
+
+
+def _split_waveform_columns(data: np.ndarray) -> tuple[np.ndarray | None, np.ndarray]:
+    if data.ndim == 0:
+        raise DataError("waveform data must contain at least two samples")
+    if data.ndim == 1:
+        return None, data.astype(float)
+    if data.ndim != 2:
+        raise DataError("waveform data must be a 1-D array or an Nx1/Nx2 table")
+    if data.shape[1] == 1:
+        return None, data[:, 0].astype(float)
+    if data.shape[1] == 2:
+        return data[:, 0].astype(float), data[:, 1].astype(float)
+    raise DataError("waveform CSV/NPY table must have one value column or time,value columns")
+
+
+def _validate_samples(samples: np.ndarray, *, max_points: int | None) -> None:
+    if samples.ndim != 1:
+        raise DataError("waveform samples must be one-dimensional")
+    if samples.size < 2:
+        raise DataError("waveform must contain at least two points")
+    if max_points is not None:
+        if max_points < 2:
+            raise DataError("max points must be >= 2")
+        if samples.size > max_points:
+            raise DataError(f"waveform has {samples.size} points, exceeding max {max_points}")
+    if not np.all(np.isfinite(samples)):
+        raise DataError("waveform samples must not contain NaN or inf")
+
+
+def _infer_sample_rate(time_s: np.ndarray) -> float:
+    if time_s.size < 2:
+        raise DataError("time axis must contain at least two points")
+    if not np.all(np.isfinite(time_s)):
+        raise DataError("time axis must not contain NaN or inf")
+    dt = np.diff(time_s)
+    if not np.all(dt > 0):
+        raise DataError("time axis must be strictly increasing")
+    median_dt = float(np.median(dt))
+    if median_dt <= 0:
+        raise DataError("time axis sample interval must be positive")
+    if np.max(np.abs(dt - median_dt)) > median_dt * 0.01:
+        raise DataError("time axis must be uniformly sampled within 1%")
+    return 1.0 / median_dt
