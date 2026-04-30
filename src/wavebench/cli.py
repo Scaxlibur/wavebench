@@ -4,6 +4,8 @@ import argparse
 import sys
 
 from .config import load_config
+from .data.packages import load_capture_package, load_run_package
+from .report.html import write_run_report_html
 from .drivers.dg4202 import SourceStatus
 from .drivers.dp800 import PowerStatus
 from .drivers.rtm2032 import WaveformData
@@ -31,6 +33,7 @@ def build_parser() -> argparse.ArgumentParser:
     power_parser = subparsers.add_parser("power", help="Power supply commands")
     sweep_parser = subparsers.add_parser("sweep", help="Source/scope sweep commands")
     run_parser = subparsers.add_parser("run", help="Multi-instrument run plan commands")
+    capture_parser = subparsers.add_parser("capture", help="Offline capture package commands")
 
     run_sub = run_parser.add_subparsers(dest="command", required=True)
     run_check = run_sub.add_parser(
@@ -42,6 +45,13 @@ def build_parser() -> argparse.ArgumentParser:
     run_plan = run_sub.add_parser("plan", help="Execute a WaveBench run plan")
     run_plan.add_argument("--plan", required=True, help="Path to a WaveBench run plan TOML file")
     add_runtime_options(run_plan)
+    run_report = run_sub.add_parser("report", help="Generate an offline HTML report for a run package")
+    run_report.add_argument("path", help="Path to data/runs/<run_dir>")
+    run_report.add_argument("--output", default=None, help="Output HTML path; defaults to <run_dir>/report.html")
+
+    capture_sub = capture_parser.add_subparsers(dest="command", required=True)
+    capture_inspect = capture_sub.add_parser("inspect", help="Inspect an offline capture package")
+    capture_inspect.add_argument("path", help="Path to data/raw/<capture_dir>")
 
     power_sub = power_parser.add_subparsers(dest="command", required=True)
     power_idn = power_sub.add_parser("idn", help="Query power supply *IDN?")
@@ -254,6 +264,44 @@ def _print_source_status(status: SourceStatus) -> None:
         print(f"apply={status.apply_raw}")
 
 
+def _print_capture_package_summary(package) -> None:
+    print(f"package={package.path}")
+    print(f"metadata={package.metadata_path}")
+    command = package.operation.get("command", "")
+    if command:
+        print(f"operation={command}")
+    resource = package.instrument.get("resource", "")
+    if resource:
+        print(f"resource={resource}")
+    print(f"channels={','.join(str(channel.channel) for channel in package.channels)}")
+    for channel in package.channels:
+        summary = channel.summary
+        print(f"CH{channel.channel}")
+        if "samples" in summary:
+            print(f"  samples={summary['samples']}")
+        if "x_increment_s" in summary:
+            print(f"  dt={summary['x_increment_s']:.6e} s")
+        if "voltage_vpp_v" in summary:
+            print(f"  vpp={summary['voltage_vpp_v']:.6g} V")
+        if "voltage_rms_v" in summary:
+            print(f"  rms={summary['voltage_rms_v']:.6g} V")
+        if "voltage_mean_v" in summary:
+            print(f"  mean={summary['voltage_mean_v']:.6g} V")
+        if summary.get("frequency_estimate_hz") is not None:
+            print(f"  frequency≈{summary['frequency_estimate_hz']:.6g} Hz")
+        if summary.get("duty_cycle") is not None:
+            print(f"  duty={summary['duty_cycle']:.6g}")
+        if summary.get("rise_time_s") is not None:
+            print(f"  rise_time={summary['rise_time_s']:.6e} s")
+        if summary.get("fall_time_s") is not None:
+            print(f"  fall_time={summary['fall_time_s']:.6e} s")
+        warnings = summary.get("quality_warnings", [])
+        for warning in warnings:
+            print(f"  warning={warning}")
+        for kind, path in sorted(channel.files.items()):
+            print(f"  {kind}={path}")
+
+
 def _print_waveform_summary(waveform: WaveformData) -> None:
     summary = waveform.summary()
     print(f"CH{summary['channel']} waveform fetched")
@@ -281,7 +329,15 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     try:
+        if args.domain == "capture":
+            if args.command == "inspect":
+                _print_capture_package_summary(load_capture_package(args.path))
+                return 0
         if args.domain == "run":
+            if args.command == "report":
+                output = write_run_report_html(load_run_package(args.path), output_path=args.output)
+                print(f"report={output}")
+                return 0
             if args.command == "check":
                 plan = load_run_plan(args.plan)
                 _print_run_plan_summary(plan)

@@ -1,0 +1,150 @@
+from __future__ import annotations
+
+import csv
+import json
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+from wavebench.errors import ConfigError
+
+
+@dataclass(frozen=True)
+class CaptureChannel:
+    channel: int
+    header: dict[str, Any]
+    summary: dict[str, Any]
+    files: dict[str, str]
+
+
+@dataclass(frozen=True)
+class CapturePackage:
+    path: Path
+    metadata_path: Path
+    metadata: dict[str, Any]
+    channels: list[CaptureChannel]
+
+    @property
+    def operation(self) -> dict[str, Any]:
+        value = self.metadata.get("operation", {})
+        return value if isinstance(value, dict) else {}
+
+    @property
+    def instrument(self) -> dict[str, Any]:
+        value = self.metadata.get("instrument", {})
+        return value if isinstance(value, dict) else {}
+
+
+@dataclass(frozen=True)
+class RunPackage:
+    path: Path
+    run_json_path: Path
+    run: dict[str, Any]
+    summary_csv_path: Path | None
+    summary_rows: list[dict[str, str]]
+
+    @property
+    def status(self) -> str:
+        return str(self.run.get("status", "unknown"))
+
+    @property
+    def steps(self) -> list[dict[str, Any]]:
+        value = self.run.get("steps", [])
+        return value if isinstance(value, list) else []
+
+
+def _read_json_object(path: Path, *, label: str) -> dict[str, Any]:
+    if not path.exists():
+        raise ConfigError(f"{label} not found: {path}")
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ConfigError(f"{label} is not valid JSON: {path}: {exc}") from exc
+    if not isinstance(value, dict):
+        raise ConfigError(f"{label} must be a JSON object: {path}")
+    return value
+
+
+def load_capture_package(path: str | Path) -> CapturePackage:
+    package_dir = Path(path)
+    if not package_dir.exists():
+        raise ConfigError(f"capture package not found: {package_dir}")
+    if not package_dir.is_dir():
+        raise ConfigError(f"capture package must be a directory: {package_dir}")
+    metadata_path = package_dir / "metadata.json"
+    metadata = _read_json_object(metadata_path, label="capture metadata")
+    channels = _capture_channels(metadata)
+    if not channels:
+        raise ConfigError(f"capture metadata has no waveform channels: {metadata_path}")
+    return CapturePackage(
+        path=package_dir,
+        metadata_path=metadata_path,
+        metadata=metadata,
+        channels=channels,
+    )
+
+
+def _capture_channels(metadata: dict[str, Any]) -> list[CaptureChannel]:
+    if isinstance(metadata.get("channels"), dict):
+        file_map = metadata.get("files", {})
+        if not isinstance(file_map, dict):
+            file_map = {}
+        channels: list[CaptureChannel] = []
+        for raw_channel, payload in sorted(metadata["channels"].items(), key=lambda item: int(item[0])):
+            channel = int(raw_channel)
+            channel_payload = payload if isinstance(payload, dict) else {}
+            files = file_map.get(str(channel), {})
+            channels.append(
+                CaptureChannel(
+                    channel=channel,
+                    header=_dict_or_empty(channel_payload.get("header")),
+                    summary=_dict_or_empty(channel_payload.get("summary")),
+                    files=_dict_or_empty(files),
+                )
+            )
+        return channels
+
+    waveform = metadata.get("waveform")
+    if isinstance(waveform, dict):
+        summary = _dict_or_empty(waveform.get("summary"))
+        operation = _dict_or_empty(metadata.get("operation"))
+        channel = summary.get("channel", operation.get("channel"))
+        if channel is None:
+            raise ConfigError("capture metadata waveform is missing channel")
+        return [
+            CaptureChannel(
+                channel=int(channel),
+                header=_dict_or_empty(waveform.get("header")),
+                summary=summary,
+                files=_dict_or_empty(metadata.get("files")),
+            )
+        ]
+    return []
+
+
+def load_run_package(path: str | Path) -> RunPackage:
+    run_dir = Path(path)
+    if not run_dir.exists():
+        raise ConfigError(f"run package not found: {run_dir}")
+    if not run_dir.is_dir():
+        raise ConfigError(f"run package must be a directory: {run_dir}")
+    run_json_path = run_dir / "run.json"
+    run_data = _read_json_object(run_json_path, label="run.json")
+    summary_path = run_dir / "summary.csv"
+    rows: list[dict[str, str]] = []
+    present_summary_path: Path | None = None
+    if summary_path.exists():
+        present_summary_path = summary_path
+        with summary_path.open(newline="", encoding="utf-8") as file:
+            rows = [dict(row) for row in csv.DictReader(file)]
+    return RunPackage(
+        path=run_dir,
+        run_json_path=run_json_path,
+        run=run_data,
+        summary_csv_path=present_summary_path,
+        summary_rows=rows,
+    )
+
+
+def _dict_or_empty(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}

@@ -261,6 +261,18 @@ data -> drivers
 
 这样以后即使做 GUI，也可以只调用 data/report 层，而不是重新碰仪器驱动。
 
+## 当前实现进度（2026-04-30）
+
+已完成第一刀：
+
+- 新增 `wavebench.data.packages.load_capture_package(path)`，可读取单通道和多通道 `data/raw/.../metadata.json`。
+- 新增 `wavebench.data.packages.load_run_package(path)`，可读取 `data/runs/.../run.json` 和可选 `summary.csv`。
+- 新增 `python -m wavebench capture inspect data/raw/<capture_dir>`，输出通道、点数、Vpp、RMS、均值、频率、duty/rise/fall 与文件路径。
+- 新增 `python -m wavebench run report data/runs/<run_dir>`，默认生成静态 `report.html`。
+- 新增单元测试覆盖包读取和 CLI 参数解析；离线命令 smoke 已通过。
+
+这些功能只读文件，不 import `drivers` / `transport`，也不会连接仪器。
+
 ## v0.2 完成标准
 
 v0.2 可以发布时，应满足：

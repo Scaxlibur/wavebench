@@ -137,5 +137,19 @@ class CliTests(unittest.TestCase):
         self.assertEqual(args.plan, "plans/example.toml")
 
 
+    def test_capture_inspect_accepts_path(self):
+        args = build_parser().parse_args(["capture", "inspect", "data/raw/example"])
+        self.assertEqual(args.domain, "capture")
+        self.assertEqual(args.command, "inspect")
+        self.assertEqual(args.path, "data/raw/example")
+
+    def test_run_report_accepts_path_and_output(self):
+        args = build_parser().parse_args(["run", "report", "data/runs/example", "--output", "report.html"])
+        self.assertEqual(args.domain, "run")
+        self.assertEqual(args.command, "report")
+        self.assertEqual(args.path, "data/runs/example")
+        self.assertEqual(args.output, "report.html")
+
+
 if __name__ == "__main__":
     unittest.main()
