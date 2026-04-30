@@ -19,6 +19,7 @@ v0.3 的主题是：
 - 报告顶部提供清楚的 Summary card。
 - 报告中直接展示轻量波形预览，不要求读者手动打开 NPY。
 - 把 `[steps.expect]` 的目标值和实测值放在一起，减少翻 JSON 的次数。
+- 以可选离线方式补强常见信号处理，例如 FFT / 频谱摘要，但不塞进默认报告第一屏。
 - 继续保持离线报告：`run report` 不连接仪器，不改变原始采集包。
 - 继续保持静态 HTML：不引入前端框架，不做 GUI。
 
@@ -86,6 +87,34 @@ metric | expected range | measured | status
 ```
 
 这比单独列 failures 更容易读。
+
+
+### 5. 信号处理要可选、可解释
+
+FFT 有必要做，但应该作为“离线分析工具”逐步加入，而不是默认把报告变成重型分析平台。
+
+适合加入：
+
+- FFT / 频谱峰值摘要。
+- 基波频率、主要谐波、THD 粗估。
+- 噪声地板 / SNR 的轻量估计。
+- 用于发现开关电源纹波、振铃、杂散峰的频谱小图。
+
+边界：
+
+- 默认 `run report` 第一屏仍然优先结论和 pass/fail。
+- FFT 使用 capture 中已有 `ch*.npy`，不连接仪器。
+- 窗函数、采样率、频率分辨率要写清楚，避免给出看起来很精确但其实不可靠的数字。
+- 大数组要下采样或限制频点，不把完整频谱塞进 HTML。
+
+推荐形态：
+
+```text
+capture inspect <capture_dir> --fft
+run report <run_dir> --include-spectrum
+```
+
+先做 inspect 里的文本摘要，再考虑 report 里的频谱小图。
 
 ## 候选工作包
 
@@ -186,7 +215,40 @@ report-assets/manifest.json
 - manifest 只记录路径和状态，不复制原始数据。
 - 方便以后做 `run export`，但 v0.3 暂不做 zip export。
 
-### E. Report visual polish
+### E. Optional FFT / spectrum summary
+
+为已有 capture 增加可选频谱分析。
+
+第一阶段只做文本摘要：
+
+```text
+peak frequency
+peak amplitude
+noise floor estimate
+first few harmonic bins
+THD rough estimate（可选）
+```
+
+候选入口：
+
+```bash
+wavebench capture inspect <capture_dir> --fft
+```
+
+后续再考虑：
+
+```bash
+wavebench run report <run_dir> --include-spectrum
+```
+
+验收标准：
+
+- 明确使用的窗口函数和采样率。
+- 对非均匀采样、样本太少、缺少 dt 的数据给出清楚 warning。
+- 不连接仪器。
+- 不影响默认报告生成速度。
+
+### F. Report visual polish
 
 只做小范围排版，不做前端应用。
 
@@ -210,8 +272,9 @@ report-assets/manifest.json
 1. Report summary card
 2. Expected vs measured table
 3. Waveform preview SVG
-4. Report artifact manifest
-5. 视觉整理
+4. Optional FFT / spectrum summary
+5. Report artifact manifest
+6. 视觉整理
 ```
 
 理由：
@@ -219,6 +282,7 @@ report-assets/manifest.json
 - Summary card 最小、收益最大，完全离线，不引入新数据路径。
 - Expected vs measured 复用已有 `expect` 数据结构，能快速提高报告判断力。
 - Waveform preview 需要读取 NPY 和处理大数组，放在前两者稳定之后。
+- FFT 值得做，但要先作为可选离线分析，不抢默认报告第一屏。
 - manifest 是为后续导出铺路，但不应该抢 v0.3 第一刀。
 
 ## v0.3 暂不做
@@ -228,7 +292,7 @@ report-assets/manifest.json
 - 复杂 run plan 语法。
 - 条件分支、循环、矩阵实验。
 - 交互式图表。
-- FFT / 频谱分析。
+- 默认开启的 FFT / 频谱分析。
 - 自动生成论文式报告。
 - `run export --zip`。
 - 更多仪器型号。
