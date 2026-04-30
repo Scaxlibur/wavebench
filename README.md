@@ -157,3 +157,18 @@ When enabled, WaveBench snapshots output/function/frequency/amplitude and square
 ## Documentation
 
 See [`doc/README.md`](doc/README.md) for design notes, command references, verified instrument states, and implementation constraints.
+
+
+### Run plan `scope.auto`
+
+`scope.auto` is available as an explicit run-plan step. It maps to RTM2032 `AUToscale` and waits for `*OPC?` through the existing scope service. It is never inserted implicitly before `scope.capture`, because autoscale changes horizontal, vertical, and trigger settings.
+
+```toml
+[[steps]]
+kind = "scope.auto"
+
+[[steps]]
+kind = "scope.capture"
+channel = 1
+label = "after_auto"
+```

@@ -128,6 +128,24 @@ duration_s = 0.5
         self.assertEqual(plan.steps[2].fields["duty_percent"], 25.0)
         self.assertEqual(plan.steps[3].fields["duration_s"], 0.5)
 
+    def test_scope_auto_step_is_explicit_and_has_no_fields(self):
+        path = self._write_plan("""
+[[steps]]
+kind = "scope.auto"
+""")
+        plan = load_run_plan(path)
+        self.assertEqual(plan.steps[0].kind, "scope.auto")
+        self.assertEqual(plan.steps[0].fields, {})
+
+    def test_scope_auto_rejects_unknown_fields(self):
+        path = self._write_plan("""
+[[steps]]
+kind = "scope.auto"
+channel = 1
+""")
+        with self.assertRaisesRegex(ConfigError, "unknown key"):
+            load_run_plan(path)
+
     def test_scope_target_cycles_derives_time_range(self):
         path = self._write_plan("""
 [[steps]]

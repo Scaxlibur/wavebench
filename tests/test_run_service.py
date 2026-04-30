@@ -159,6 +159,24 @@ duration_s = 0.01
             self.assertIn("data", str(result.run_dir))
             self.assertIn("runs", str(result.run_dir))
 
+    def test_runs_scope_auto_step(self):
+        with TemporaryDirectory() as tmp:
+            plan = load_run_plan(
+                write_plan(
+                    tmp,
+                    """
+[[steps]]
+kind = "scope.auto"
+""",
+                )
+            )
+            with patch("wavebench.services.run_service.ScopeService") as scope_cls:
+                result = RunService(config=make_config(tmp), logger=CommandLogger()).run(plan)
+
+                scope_cls.return_value.autoscale.assert_called_once_with()
+                self.assertEqual(len(result.steps), 1)
+                self.assertEqual(result.steps[0].artifact, {"autoscale": "completed"})
+
     def test_allows_safety_guard_on_configured_ch1_when_coupling_is_safe(self):
         with TemporaryDirectory() as tmp:
             plan = load_run_plan(

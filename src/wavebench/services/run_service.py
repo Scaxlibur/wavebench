@@ -22,6 +22,7 @@ from wavebench.services.source_state import RestorableSourceState
 _EXECUTABLE_STEP_KINDS = {
     "power.status",
     "power.set",
+    "scope.auto",
     "scope.capture",
     "source.status",
     "source.set_freq",
@@ -201,6 +202,9 @@ class RunService:
                 enabled=step.fields["state"] == "on",
             )
             artifact = {"source_status": _status_payload(status)}
+        elif step.kind == "scope.auto":
+            self._scope_service().autoscale()
+            artifact = {"autoscale": "completed"}
         elif step.kind == "scope.capture":
             capture = self._scope_service_for_capture(plan, step).capture_waveform(
                 channel=step.fields.get("channel", self.config.scope.default_channel),
@@ -228,6 +232,9 @@ class RunService:
 
     def _source_service(self) -> SourceService:
         return SourceService(config=self.config, logger=CommandLogger())
+
+    def _scope_service(self) -> ScopeService:
+        return ScopeService(config=self.config, logger=CommandLogger())
 
     def _snapshot_source_state(self, plan: RunPlan) -> RestorableSourceState | None:
         if not plan.restore.source_state:

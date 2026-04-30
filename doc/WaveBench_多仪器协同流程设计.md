@@ -405,3 +405,20 @@ set_function -> set_amplitude_vpp -> set_frequency -> set_square_duty_cycle -> s
 ```
 
 仍然不恢复 DG4202 sweep mode、offset、phase、load、modulation。原因和 sweep restore 一样：这些字段还没有完整安全设计，不能假装可以无风险恢复。
+
+
+## scope.auto 步骤
+
+可以在 run plan 里显式插入示波器自带自动调节：
+
+```toml
+[[steps]]
+kind = "scope.auto"
+
+[[steps]]
+kind = "scope.capture"
+channel = 1
+label = "after_auto"
+```
+
+这对应 RTM2032 的 `AUToscale`，并沿用已有 `*OPC?` 等待完成。它不会被 `scope.capture` 隐式调用，因为 auto 会改变水平、垂直和触发设置。需要它时，把它作为一个清楚的 step 放进计划里。

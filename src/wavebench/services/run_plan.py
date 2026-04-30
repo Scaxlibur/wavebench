@@ -10,6 +10,7 @@ from wavebench.errors import ConfigError
 
 
 ALLOWED_STEP_KINDS = {
+    "scope.auto",
     "scope.capture",
     "source.status",
     "source.set_freq",
@@ -35,6 +36,7 @@ _REQUIRED_FIELDS = {
 }
 
 _OPTIONAL_FIELDS = {
+    "scope.auto": set(),
     "scope.capture": {
         "channel",
         "label",

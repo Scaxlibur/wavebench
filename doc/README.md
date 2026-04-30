@@ -256,3 +256,10 @@ python -m wavebench scope capture --config wavebench.toml   --channel 1 --channe
 - `power set` 和 `power output` 是两个独立命令：前者不改变 output，后者不改变电压/电流限值。
 - DP800 读回等待通过 `power.settle_ms_after_set` 与 `power.settle_ms_after_output` 配置，不应隐藏为不可见常量。
 - 使用示波器测电源输出时，不要自动切换输入阻抗；50 Ω 输入耐压较低，必须由操作者明确确认。
+
+
+### 2026-04-30 scope.auto run-plan step
+
+- [x] `run plan` supports explicit `scope.auto` steps.
+- [x] The step calls RTM2032 `AUToscale` through `ScopeService.autoscale()` and waits for completion via the existing `*OPC?` path.
+- [x] `scope.capture` still does not call autoscale implicitly; plans must insert `scope.auto` where wanted.
