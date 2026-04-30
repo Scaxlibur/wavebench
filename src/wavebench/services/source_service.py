@@ -7,6 +7,7 @@ from wavebench.config import ConnectionConfig, SourceConfig, WaveBenchConfig
 from wavebench.drivers.dg4202 import DG4202Source, SourceStatus
 from wavebench.errors import ConfigError
 from wavebench.logging import CommandLogger
+from wavebench.services.source_state import RestorableSourceState
 from wavebench.transport.pyvisa_transport import PyVisaTransport
 
 
@@ -53,6 +54,9 @@ class SourceService:
             return source.get_status(channel)
         finally:
             source.close()
+
+    def snapshot_restorable_state(self, channel: int | None = None) -> RestorableSourceState:
+        return RestorableSourceState.from_status(self.status(channel=channel))
 
     def set_frequency(self, channel: int | None, value_hz: float) -> SourceStatus:
         source_cfg = self._source_config()
