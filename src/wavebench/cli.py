@@ -35,6 +35,11 @@ def build_parser() -> argparse.ArgumentParser:
     power_status = power_sub.add_parser("status", help="Query power supply channel status")
     power_status.add_argument("--channel", type=int, default=None)
     add_runtime_options(power_status)
+    power_set = power_sub.add_parser("set", help="Set power supply voltage and current limit; does not change output state")
+    power_set.add_argument("--channel", type=int, default=None)
+    power_set.add_argument("--voltage", type=float, required=True)
+    power_set.add_argument("--current-limit", type=float, required=True)
+    add_runtime_options(power_set)
 
     source_sub = source_parser.add_subparsers(dest="command", required=True)
 
@@ -228,6 +233,15 @@ def main(argv: list[str] | None = None) -> int:
                 return 0
             if args.command == "status":
                 _print_power_status(service.status(channel=args.channel))
+                return 0
+            if args.command == "set":
+                _print_power_status(
+                    service.set_voltage_current_limit(
+                        channel=args.channel,
+                        voltage_v=args.voltage,
+                        current_limit_a=args.current_limit,
+                    )
+                )
                 return 0
         if args.domain == "source":
             service = _load_source_service(args)

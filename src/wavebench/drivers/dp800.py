@@ -91,5 +91,20 @@ class DP800Power:
             measured_power_w=measured_power_w,
         )
 
+    def set_voltage_current_limit(
+        self, channel: int, voltage_v: float, current_limit_a: float, *, check_errors: bool = True
+    ) -> PowerStatus:
+        if channel < 1:
+            raise DataError("channel must be >= 1")
+        if voltage_v < 0:
+            raise DataError("voltage must be >= 0")
+        if current_limit_a <= 0:
+            raise DataError("current limit must be > 0")
+        self.transport.write(f":APPL CH{channel},{voltage_v:.12g},{current_limit_a:.12g}")
+        status = self.get_status(channel)
+        if check_errors:
+            self.assert_no_errors()
+        return status
+
     def close(self) -> None:
         self.transport.close()

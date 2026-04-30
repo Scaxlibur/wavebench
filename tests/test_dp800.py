@@ -6,6 +6,10 @@ from wavebench.drivers.dp800 import DP800Power, parse_apply_response, parse_meas
 class FakeTransport:
     def __init__(self):
         self.queries = []
+        self.writes = []
+
+    def write(self, command: str) -> None:
+        self.writes.append(command)
 
     def query(self, command: str) -> str:
         self.queries.append(command)
@@ -15,6 +19,7 @@ class FakeTransport:
             ":MEAS:ALL? CH1": "5.0114,0.0000,0.000",
             ":OUTP? CH1": "ON",
             ":OUTP:MODE? CH1": "CV",
+            "SYST:ERR?": '0,"No error"',
         }
         return mapping[command]
 
@@ -54,6 +59,22 @@ class DP800Tests(unittest.TestCase):
             ":OUTP? CH1",
             ":OUTP:MODE? CH1",
         ])
+
+    def test_set_voltage_current_limit_writes_apply_only(self):
+        transport = FakeTransport()
+        driver = DP800Power(transport=transport)
+        status = driver.set_voltage_current_limit(1, 3.3, 0.2, check_errors=True)
+        self.assertEqual(transport.writes, [":APPL CH1,3.3,0.2"])
+        self.assertEqual(status.output, "ON")
+        self.assertNotIn(":OUTP CH1,ON", transport.writes)
+        self.assertNotIn(":OUTP CH1,OFF", transport.writes)
+
+    def test_set_voltage_current_limit_rejects_invalid_values(self):
+        driver = DP800Power(transport=FakeTransport())
+        with self.assertRaisesRegex(Exception, "voltage must be >= 0"):
+            driver.set_voltage_current_limit(1, -1.0, 0.1)
+        with self.assertRaisesRegex(Exception, "current limit must be > 0"):
+            driver.set_voltage_current_limit(1, 1.0, 0.0)
 
 
 if __name__ == "__main__":

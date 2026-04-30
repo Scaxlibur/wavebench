@@ -45,3 +45,19 @@ class PowerService:
             return power.get_status(channel)
         finally:
             power.close()
+
+    def set_voltage_current_limit(
+        self, channel: int | None, voltage_v: float, current_limit_a: float
+    ) -> PowerStatus:
+        power_cfg = self._power_config()
+        channel = power_cfg.default_channel if channel is None else channel
+        power = self._open_power()
+        try:
+            return power.set_voltage_current_limit(
+                channel,
+                voltage_v,
+                current_limit_a,
+                check_errors=power_cfg.check_errors,
+            )
+        finally:
+            power.close()

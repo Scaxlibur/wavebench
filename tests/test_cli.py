@@ -28,6 +28,16 @@ class CliTests(unittest.TestCase):
         self.assertEqual(args.command, "status")
         self.assertEqual(args.channel, 1)
 
+    def test_power_set_accepts_voltage_and_current_limit(self):
+        args = build_parser().parse_args([
+            "power", "set", "--channel", "1", "--voltage", "3.3", "--current-limit", "0.2"
+        ])
+        self.assertEqual(args.domain, "power")
+        self.assertEqual(args.command, "set")
+        self.assertEqual(args.channel, 1)
+        self.assertEqual(args.voltage, 3.3)
+        self.assertEqual(args.current_limit, 0.2)
+
     def test_source_status_accepts_channel(self):
         args = build_parser().parse_args(["source", "status", "--channel", "2"])
         self.assertEqual(args.domain, "source")
