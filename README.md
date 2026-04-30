@@ -21,7 +21,7 @@ It provides small, explicit CLI commands for LAN-connected lab instruments. The 
 
 - `source idn`, `source status`
 - `source set-freq`
-- `source set-func`
+- `source set-func` (`sin`, `squ`, `ramp`/`triangle`, `puls`, `nois`, `dc`)
 - `source set-vpp`
 - `source set-duty`
 - `source arb-probe` for query-only arbitrary-waveform SCPI discovery
@@ -125,6 +125,12 @@ Turn DP800 output on or off explicitly:
 ```powershell
 python -m wavebench power output --config wavebench.toml --channel 1 off
 python -m wavebench power output --config wavebench.toml --channel 1 on
+```
+
+Set DG4202 triangle/ramp output without changing output state:
+
+```powershell
+python -m wavebench source set-func --config wavebench.toml --channel 2 triangle
 ```
 
 Set DG4202 square-wave duty cycle in percent:

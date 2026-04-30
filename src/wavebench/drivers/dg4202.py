@@ -149,6 +149,8 @@ class DG4202Source:
             "SQUARE": "SQU",
             "SQU": "SQU",
             "RAMP": "RAMP",
+            "TRIANGLE": "RAMP",
+            "TRI": "RAMP",
             "PULSE": "PULS",
             "PULS": "PULS",
             "NOISE": "NOIS",
@@ -156,7 +158,7 @@ class DG4202Source:
             "DC": "DC",
         }
         if normalized not in aliases:
-            raise DataError("function must be one of: sin, squ, ramp, puls, nois, dc")
+            raise DataError("function must be one of: sin, squ, ramp/triangle, puls, nois, dc")
         self.transport.write(f":SOUR{channel}:FUNC {aliases[normalized]}")
         status = self.get_status(channel)
         if check_errors:

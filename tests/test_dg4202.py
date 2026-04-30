@@ -103,6 +103,14 @@ class DG4202Tests(unittest.TestCase):
         self.assertEqual(transport.writes[0], ":SOUR2:FUNC SQU")
         self.assertEqual(status.function, "SQU")
 
+
+    def test_set_function_accepts_triangle_alias_as_ramp(self):
+        transport = FakeTransport()
+        driver = DG4202Source(transport=transport, check_errors_after_ops=True)
+        status = driver.set_function(2, "triangle", check_errors=True)
+        self.assertEqual(transport.writes[0], ":SOUR2:FUNC RAMP")
+        self.assertEqual(status.function, "RAMP")
+
     def test_set_amplitude_vpp_writes_unit_and_value(self):
         transport = FakeTransport()
         driver = DG4202Source(transport=transport, check_errors_after_ops=True)

@@ -81,6 +81,13 @@ class CliTests(unittest.TestCase):
         self.assertEqual(args.channel, 2)
         self.assertEqual(args.function, "squ")
 
+
+    def test_source_set_func_accepts_triangle_alias(self):
+        args = build_parser().parse_args(["source", "set-func", "--channel", "2", "triangle"])
+        self.assertEqual(args.domain, "source")
+        self.assertEqual(args.command, "set-func")
+        self.assertEqual(args.function, "triangle")
+
     def test_source_set_vpp_accepts_value(self):
         args = build_parser().parse_args(["source", "set-vpp", "--channel", "2", "3.3"])
         self.assertEqual(args.domain, "source")
@@ -223,10 +230,11 @@ class CliTests(unittest.TestCase):
         self.assertEqual(args.path, "data/raw/example")
 
     def test_capture_inspect_accepts_fft(self):
-        args = build_parser().parse_args(["capture", "inspect", "data/raw/example", "--fft"])
+        args = build_parser().parse_args(["capture", "inspect", "data/raw/example", "--fft", "--harmonics", "7"])
         self.assertEqual(args.domain, "capture")
         self.assertEqual(args.command, "inspect")
         self.assertTrue(args.fft)
+        self.assertEqual(args.harmonics, 7)
 
     def test_capture_inspect_fft_prints_spectrum_summary(self):
         with TemporaryDirectory() as tmp:
@@ -257,7 +265,7 @@ class CliTests(unittest.TestCase):
             stdout = io.StringIO()
 
             with redirect_stdout(stdout):
-                status = main(["capture", "inspect", str(capture), "--fft"])
+                status = main(["capture", "inspect", str(capture), "--fft", "--harmonics", "7"])
 
             output = stdout.getvalue()
             self.assertEqual(status, 0)
@@ -268,6 +276,7 @@ class CliTests(unittest.TestCase):
             self.assertIn("resolution≈1 Hz", output)
             self.assertIn("peak_frequency≈50 Hz", output)
             self.assertIn("noise_floor≈", output)
+            self.assertIn("harmonic_7≈", output)
 
     def test_run_report_accepts_path_and_output(self):
         args = build_parser().parse_args(["run", "report", "data/runs/example", "--output", "report.html"])

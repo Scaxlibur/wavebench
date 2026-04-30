@@ -213,3 +213,16 @@ DG4202 CH2 arbitrary waveform -> RTM2032 CH1 capture -> run report
 ```text
 v0.4 不是做任意波形平台，而是安全地把一段数组送进 DG4202，并用示波器证明它真的出来了。
 ```
+
+
+## 基础波形扩展
+
+当前 `source set-func` 支持 6 类基础波形：
+
+```text
+sin, squ, ramp, puls, nois, dc
+```
+
+其中 `triangle` / `tri` 已作为 `ramp` 的别名接入，发送到 DG4202 的仍是 `RAMP`。这符合面板上三角/斜波一类基础波形的使用直觉，但后续仍应查手册确认是否需要额外的 symmetry 参数。
+
+谐波方向暂时先打磨离线分析：`capture inspect --fft --harmonics N` 可控制输出到第 N 次谐波，适合先做报告和验证闭环。信号源端的谐波输出命令等手册确认后再接入。

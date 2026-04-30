@@ -58,6 +58,7 @@ def build_parser() -> argparse.ArgumentParser:
     capture_inspect = capture_sub.add_parser("inspect", help="Inspect an offline capture package")
     capture_inspect.add_argument("path", help="Path to data/raw/<capture_dir>")
     capture_inspect.add_argument("--fft", action="store_true", help="Print offline FFT spectrum summary for saved NPY waveforms")
+    capture_inspect.add_argument("--harmonics", type=int, default=5, help="Highest harmonic order to report with --fft")
 
     power_sub = power_parser.add_subparsers(dest="command", required=True)
     power_idn = power_sub.add_parser("idn", help="Query power supply *IDN?")
@@ -99,7 +100,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     source_set_func = source_sub.add_parser("set-func", help="Set source channel waveform function")
     source_set_func.add_argument("--channel", type=int, default=None)
-    source_set_func.add_argument("function", help="Waveform function: sin, squ, ramp, puls, nois, or dc")
+    source_set_func.add_argument("function", help="Waveform function: sin, squ, ramp/triangle, puls, nois, or dc")
     add_runtime_options(source_set_func)
 
     source_set_vpp = source_sub.add_parser("set-vpp", help="Set source channel amplitude in Vpp")
@@ -331,7 +332,9 @@ def _print_capture_package_summary(package) -> None:
             print(f"  {kind}={path}")
 
 
-def _print_capture_fft_summary(package) -> None:
+def _print_capture_fft_summary(package, *, max_harmonic_order: int = 5) -> None:
+    if max_harmonic_order < 1:
+        raise ConfigError("--harmonics must be >= 1")
     print("FFT")
     for channel in package.channels:
         npy_text = channel.files.get("npy")
@@ -341,7 +344,7 @@ def _print_capture_fft_summary(package) -> None:
             continue
         npy_path = _resolve_capture_file_path(package.path, npy_text)
         try:
-            analysis = _analyze_fft(np.load(npy_path))
+            analysis = _analyze_fft(np.load(npy_path), max_harmonic_order=max_harmonic_order)
         except Exception as exc:  # report-style inspect should keep other channels readable
             print(f"  warning=fft unavailable: {type(exc).__name__}: {exc}")
             continue
@@ -364,7 +367,7 @@ def _print_capture_fft_summary(package) -> None:
             print(f"  warning={warning}")
 
 
-def _analyze_fft(waveform: Any) -> dict[str, Any]:
+def _analyze_fft(waveform: Any, *, max_harmonic_order: int = 5) -> dict[str, Any]:
     data = np.asarray(waveform, dtype=float)
     if data.ndim != 2 or data.shape[1] < 2:
         raise ValueError("expected an Nx2 waveform array")
@@ -405,7 +408,7 @@ def _analyze_fft(waveform: Any) -> dict[str, Any]:
     peak_amplitude = float(amplitudes[peak_index])
     noise_bins = np.delete(amplitudes[1:], max(peak_index - 1, 0))
     noise_floor = float(np.median(noise_bins)) if noise_bins.size else 0.0
-    harmonics = _fft_harmonics(frequencies, amplitudes, peak_frequency)
+    harmonics = _fft_harmonics(frequencies, amplitudes, peak_frequency, max_order=max_harmonic_order)
     harmonic_power = sum(item["amplitude_v"] ** 2 for item in harmonics)
     thd = (harmonic_power ** 0.5 / peak_amplitude) if peak_amplitude > 0 and harmonics else None
     return {
@@ -422,12 +425,16 @@ def _analyze_fft(waveform: Any) -> dict[str, Any]:
     }
 
 
-def _fft_harmonics(frequencies: Any, amplitudes: Any, fundamental_hz: float) -> list[dict[str, float]]:
+def _fft_harmonics(
+    frequencies: Any, amplitudes: Any, fundamental_hz: float, *, max_order: int = 5
+) -> list[dict[str, float]]:
     if fundamental_hz <= 0:
         return []
     result: list[dict[str, float]] = []
     max_frequency = float(frequencies[-1])
-    for order in range(2, 6):
+    if max_order < 2:
+        return []
+    for order in range(2, max_order + 1):
         target = fundamental_hz * order
         if target > max_frequency:
             break
@@ -538,7 +545,7 @@ def main(argv: list[str] | None = None) -> int:
                 package = load_capture_package(args.path)
                 _print_capture_package_summary(package)
                 if args.fft:
-                    _print_capture_fft_summary(package)
+                    _print_capture_fft_summary(package, max_harmonic_order=args.harmonics)
                 return 0
         if args.domain == "run":
             if args.command == "report":
