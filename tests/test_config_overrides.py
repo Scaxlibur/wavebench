@@ -175,10 +175,12 @@ driver = "dp800"
 resource = "TCPIP::192.168.123.4::INSTR"
 default_channel = 1
 check_errors = true
+settle_ms_after_set = 2000
 """, encoding="utf-8")
             config = load_config(path)
             self.assertIsNotNone(config.power)
             self.assertEqual(config.power.resource, "TCPIP::192.168.123.4::INSTR")
             self.assertEqual(config.power.default_channel, 1)
+            self.assertEqual(config.power.settle_ms_after_set, 2000)
             updated = config.with_power_resource("TCPIP::192.168.1.50::INSTR")
             self.assertEqual(updated.power.resource, "TCPIP::192.168.1.50::INSTR")

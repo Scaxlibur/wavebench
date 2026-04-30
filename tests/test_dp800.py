@@ -63,7 +63,7 @@ class DP800Tests(unittest.TestCase):
     def test_set_voltage_current_limit_writes_apply_only(self):
         transport = FakeTransport()
         driver = DP800Power(transport=transport)
-        status = driver.set_voltage_current_limit(1, 3.3, 0.2, check_errors=True)
+        status = driver.set_voltage_current_limit(1, 3.3, 0.2, check_errors=True, settle_ms_after_set=0)
         self.assertEqual(transport.writes, [":APPL CH1,3.3,0.2"])
         self.assertEqual(status.output, "ON")
         self.assertNotIn(":OUTP CH1,ON", transport.writes)

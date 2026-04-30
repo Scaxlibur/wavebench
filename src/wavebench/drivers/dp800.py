@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import time
 
 from wavebench.errors import DataError, InstrumentError
 
@@ -92,7 +93,13 @@ class DP800Power:
         )
 
     def set_voltage_current_limit(
-        self, channel: int, voltage_v: float, current_limit_a: float, *, check_errors: bool = True
+        self,
+        channel: int,
+        voltage_v: float,
+        current_limit_a: float,
+        *,
+        check_errors: bool = True,
+        settle_ms_after_set: int = 0,
     ) -> PowerStatus:
         if channel < 1:
             raise DataError("channel must be >= 1")
@@ -101,6 +108,8 @@ class DP800Power:
         if current_limit_a <= 0:
             raise DataError("current limit must be > 0")
         self.transport.write(f":APPL CH{channel},{voltage_v:.12g},{current_limit_a:.12g}")
+        if settle_ms_after_set:
+            time.sleep(settle_ms_after_set / 1000.0)
         status = self.get_status(channel)
         if check_errors:
             self.assert_no_errors()

@@ -58,6 +58,7 @@ class PowerService:
                 voltage_v,
                 current_limit_a,
                 check_errors=power_cfg.check_errors,
+                settle_ms_after_set=power_cfg.settle_ms_after_set,
             )
         finally:
             power.close()
