@@ -184,3 +184,4 @@ python -m wavebench scope capture --config wavebench.toml   --channel 1 --channe
 - `--points` 只接受 RTM2032 支持的 `def|max|dmax`，不接受任意数字点数。
 - `--time-range` 会设置 RTM2032 的 `TIMebase:RANGe`，改变水平时窗。
 - `--window-frequency` 只用于自动计算窗口；`--expect-frequency` 才用于频率一致性校验。
+- `WaveBench_sweep状态恢复设计.md`：离散扫点前后的信号源状态保存与恢复设计。
