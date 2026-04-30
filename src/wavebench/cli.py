@@ -152,6 +152,7 @@ def build_parser() -> argparse.ArgumentParser:
     capture.add_argument("--frequency-tolerance", type=float, default=None, help="Relative frequency tolerance, e.g. 0.05 for 5 percent")
     capture.add_argument("--no-csv", action="store_true", help="Do not save CSV waveform output")
     capture.add_argument("--no-npy", action="store_true", help="Do not save NPY waveform output")
+    capture.add_argument("--screenshot", action="store_true", help="Save a PNG screenshot artifact in the capture package")
     add_runtime_options(capture)
 
     return parser
@@ -188,10 +189,11 @@ def _load_service(args: argparse.Namespace) -> ScopeService:
             target_cycles=target_cycles,
             window_frequency_hz=window_frequency,
         )
-    if getattr(args, "no_csv", False) or getattr(args, "no_npy", False):
+    if getattr(args, "no_csv", False) or getattr(args, "no_npy", False) or getattr(args, "screenshot", False):
         config = config.with_output_overrides(
             save_csv=False if getattr(args, "no_csv", False) else None,
             save_npy=False if getattr(args, "no_npy", False) else None,
+            save_screenshot=True if getattr(args, "screenshot", False) else None,
         )
     return ScopeService(config=config, logger=CommandLogger())
 
@@ -454,6 +456,8 @@ def main(argv: list[str] | None = None) -> int:
                         print(f"csv={result.csv_path}")
                     if result.npy_path is not None:
                         print(f"npy={result.npy_path}")
+                    if result.screenshot_path is not None:
+                        print(f"screenshot={result.screenshot_path}")
                     if result.commands_log_path is not None:
                         print(f"commands_log={result.commands_log_path}")
                     return 0
@@ -466,6 +470,8 @@ def main(argv: list[str] | None = None) -> int:
                     if "npy" in files:
                         print(f"ch{channel}_npy={files['npy']}")
                 print(f"package={result.package_dir}")
+                if result.screenshot_path is not None:
+                    print(f"screenshot={result.screenshot_path}")
                 if result.commands_log_path is not None:
                     print(f"commands_log={result.commands_log_path}")
                 return 0

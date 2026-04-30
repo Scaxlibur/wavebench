@@ -45,6 +45,12 @@ class RsInstrumentTransport:
         self.logger.record("response", f"<float_list len={len(values)}>")
         return values
 
+    def query_bin_block(self, command: str) -> bytes:
+        self.logger.record("query_binary", command)
+        data = bytes(self.session.query_bin_block(command))
+        self.logger.record("response", f"<bin_block len={len(data)}>")
+        return data
+
     def query_opc(self) -> str:
         self.logger.record("query", "*OPC?")
         response = str(self.session.query_opc()).strip()

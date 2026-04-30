@@ -159,5 +159,14 @@ class RTM2032Scope:
             self.assert_no_errors()
         return waveform
 
+    def screenshot_png(self, *, include_menu: bool = False, color_scheme: str = "COL") -> bytes:
+        self.transport.write("HCOP:LANG PNG")
+        self.transport.write(f"HCOP:COL:SCH {color_scheme}")
+        self.transport.write(f"HCOP:MENU {'ON' if include_menu else 'OFF'}")
+        data = self.transport.query_bin_block("HCOP:DATA?")
+        if not data.startswith(b"\x89PNG\r\n\x1a\n"):
+            raise DataError("screenshot response is not a PNG image")
+        return data
+
     def close(self) -> None:
         self.transport.close()

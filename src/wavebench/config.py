@@ -121,7 +121,9 @@ class WaveBenchConfig:
             quality=self.quality,
         )
 
-    def with_output_overrides(self, *, save_csv: bool | None = None, save_npy: bool | None = None) -> "WaveBenchConfig":
+    def with_output_overrides(
+        self, *, save_csv: bool | None = None, save_npy: bool | None = None, save_screenshot: bool | None = None
+    ) -> "WaveBenchConfig":
         return WaveBenchConfig(
             connection=self.connection,
             scope=self.scope,
@@ -134,7 +136,7 @@ class WaveBenchConfig:
                 save_npy=self.output.save_npy if save_npy is None else save_npy,
                 save_json=self.output.save_json,
                 save_commands_log=self.output.save_commands_log,
-                save_screenshot=self.output.save_screenshot,
+                save_screenshot=self.output.save_screenshot if save_screenshot is None else save_screenshot,
             ),
             source_path=self.source_path,
             source=self.source,

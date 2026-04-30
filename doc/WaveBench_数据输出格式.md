@@ -313,7 +313,7 @@ commands.log 的目的不是做漂亮日志，而是回答一个问题：
 
 ## 截图预留
 
-第一阶段可以不实现截图，但 metadata 预留字段：
+当前已支持显式截图保存。未启用时，采集包不写截图；启用后 metadata 记录截图文件路径。
 
 ```json
 "files": {
@@ -321,7 +321,7 @@ commands.log 的目的不是做漂亮日志，而是回答一个问题：
 }
 ```
 
-未来启用：
+启用命令：
 
 ```bash
 wavebench scope capture --channel 1 --screenshot
@@ -332,6 +332,8 @@ wavebench scope capture --channel 1 --screenshot
 ```text
 screenshot.png
 ```
+
+如果截图失败，波形采集结果仍然保留，`metadata.json` 会写入 `screenshot_error`，并将 `files.screenshot` 记为 `null`。
 
 ## 第一阶段结论
 

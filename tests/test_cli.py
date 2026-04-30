@@ -17,6 +17,11 @@ class CliTests(unittest.TestCase):
         self.assertEqual(args.frequency_tolerance, 0.1)
         self.assertTrue(args.no_csv)
 
+    def test_capture_accepts_screenshot_flag(self):
+        args = build_parser().parse_args(["scope", "capture", "--screenshot"])
+        self.assertEqual(args.command, "capture")
+        self.assertTrue(args.screenshot)
+
     def test_capture_accepts_repeated_channels(self):
         args = build_parser().parse_args(["scope", "capture", "--channel", "1", "--channel", "2"])
         self.assertEqual(args.command, "capture")

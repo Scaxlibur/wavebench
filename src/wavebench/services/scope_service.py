@@ -23,6 +23,7 @@ class CaptureResult:
     metadata_path: Path
     csv_path: Path | None
     npy_path: Path | None
+    screenshot_path: Path | None
     commands_log_path: Path | None
 
 @dataclass(frozen=True)
@@ -31,6 +32,7 @@ class MultiCaptureResult:
     waveforms: dict[int, WaveformData]
     metadata_path: Path
     files: dict[str, dict[str, str]]
+    screenshot_path: Path | None
     commands_log_path: Path | None
 
 @dataclass
@@ -105,6 +107,17 @@ class ScopeService:
             files["npy"] = str(npy_path)
         return files
 
+
+    def _write_screenshot_file(self, package_dir: Path, scope: RTM2032Scope) -> tuple[Path | None, dict[str, str] | None]:
+        if not self.config.output.save_screenshot:
+            return None, None
+        screenshot_path = package_dir / "screenshot.png"
+        try:
+            screenshot_path.write_bytes(scope.screenshot_png(include_menu=False, color_scheme="COL"))
+        except Exception as exc:
+            return None, {"type": type(exc).__name__, "message": str(exc)}
+        return screenshot_path, None
+
     def _waveform_metadata(self, waveform: WaveformData) -> dict[str, Any]:
         return {
             "header": {
@@ -156,6 +169,8 @@ class ScopeService:
             "window_frequency_hz": self.config.waveform.window_frequency_hz,
             "frequency_tolerance_ratio": self.config.waveform.frequency_tolerance_ratio,
         }
+        screenshot_path: Path | None = None
+        screenshot_error: dict[str, str] | None = None
         try:
             scope = self._open_scope()
             try:
@@ -166,6 +181,7 @@ class ScopeService:
                     check_errors=self.config.scope.check_errors,
                     time_range_s=self.config.waveform.time_range_s,
                 )
+                screenshot_path, screenshot_error = self._write_screenshot_file(package_dir, scope)
             finally:
                 scope.close()
         except Exception as exc:
@@ -180,12 +196,16 @@ class ScopeService:
             raise
 
         files = self._write_waveform_files(package_dir, channel, waveform)
+        if self.config.output.save_screenshot:
+            files["screenshot"] = str(screenshot_path) if screenshot_path is not None else None
         metadata: dict[str, Any] = {
             "instrument": {"idn": instrument_idn, "resource": self.config.connection.resource},
             "operation": {**operation, "triggered_single": True},
             "waveform": self._waveform_metadata(waveform),
             "files": files,
         }
+        if screenshot_error is not None:
+            metadata["screenshot_error"] = screenshot_error
         metadata_path = package_dir / "metadata.json"
         if self.config.output.save_json:
             metadata_path.write_text(json.dumps(metadata, indent=2, ensure_ascii=False), encoding="utf-8")
@@ -195,6 +215,7 @@ class ScopeService:
             metadata_path=metadata_path,
             csv_path=Path(files["csv"]) if "csv" in files else None,
             npy_path=Path(files["npy"]) if "npy" in files else None,
+            screenshot_path=screenshot_path,
             commands_log_path=commands_log_path,
         )
 
@@ -219,6 +240,8 @@ class ScopeService:
             "frequency_tolerance_ratio": self.config.waveform.frequency_tolerance_ratio,
         }
         waveforms: dict[int, WaveformData] = {}
+        screenshot_path: Path | None = None
+        screenshot_error: dict[str, str] | None = None
         try:
             scope = self._open_scope()
             try:
@@ -230,6 +253,7 @@ class ScopeService:
                         check_errors=self.config.scope.check_errors,
                         time_range_s=self.config.waveform.time_range_s,
                     )
+                screenshot_path, screenshot_error = self._write_screenshot_file(package_dir, scope)
             finally:
                 scope.close()
         except Exception as exc:
@@ -251,12 +275,17 @@ class ScopeService:
             files[key] = self._write_waveform_files(package_dir, channel, waveform)
             channel_metadata[key] = self._waveform_metadata(waveform)
 
+        metadata_files: dict[str, Any] = dict(files)
+        if self.config.output.save_screenshot:
+            metadata_files["screenshot"] = str(screenshot_path) if screenshot_path is not None else None
         metadata: dict[str, Any] = {
             "instrument": {"idn": instrument_idn, "resource": self.config.connection.resource},
             "operation": {**operation, "triggered_single": True, "trigger_mode": "sequential_per_channel"},
             "channels": channel_metadata,
-            "files": files,
+            "files": metadata_files,
         }
+        if screenshot_error is not None:
+            metadata["screenshot_error"] = screenshot_error
         metadata_path = package_dir / "metadata.json"
         if self.config.output.save_json:
             metadata_path.write_text(json.dumps(metadata, indent=2, ensure_ascii=False), encoding="utf-8")
@@ -265,5 +294,6 @@ class ScopeService:
             waveforms=waveforms,
             metadata_path=metadata_path,
             files=files,
+            screenshot_path=screenshot_path,
             commands_log_path=commands_log_path,
         )

@@ -169,13 +169,14 @@ python -m wavebench run plan --config wavebench.toml --plan plans/dp800_scope_pr
 python -m wavebench run report data/runs/<run_dir>
 ```
 
-离线查看采集包：
+离线查看采集包与截图采集：
 
 ```bash
 python -m wavebench capture inspect data/raw/<capture_dir>
+python -m wavebench scope capture --config wavebench.toml --channel 1 --label smoke_with_screen --points def --no-csv --screenshot
 ```
 
-`run report` 和 `capture inspect` 只读已有 `run.json` / `summary.csv` / `metadata.json`，不会连接仪器，也不会改写原始采集数据。
+`run report` 和 `capture inspect` 只读已有 `run.json` / `summary.csv` / `metadata.json`，不会连接仪器，也不会改写原始采集数据。`scope capture --screenshot` 会在采集包中额外写入 `screenshot.png`。
 
 `plans/example_scope_expect_quality.toml` 是公开示例计划，包含 source restore、`quality_gate`、`auto_recover` 和 `[steps.expect]`，只用于展示写法。
 
