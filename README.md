@@ -1,24 +1,59 @@
 # WaveBench
 
-WaveBench is a lightweight Python measurement bench for contest debugging.
+WaveBench is a lightweight Python measurement bench for electronics contest debugging.
 
-Current MVP scope:
+It provides small, explicit CLI commands for LAN-connected lab instruments. The current focus is reliable waveform capture, source-to-scope checks, and basic programmable power-supply control without hidden resets or automatic output changes.
 
-- LAN VISA connection to RTM2032 oscilloscope
+## Current capabilities
+
+### Oscilloscope: R&S RTM2032
+
+- LAN VISA connection
+- `scope idn`, `scope errors`
 - explicit `scope auto` / `scope autoscale`
-- `scope idn`, `scope errors`, `scope fetch`, `scope capture`
-- acquisition packages with NPY/CSV/JSON metadata and `commands.log`
+- `scope fetch` and `scope capture`
 - repeated `--channel` capture for sequential multi-channel acquisition
-- lightweight waveform quality metrics: Vpp/RMS/mean, frequency estimate, duty cycle, rise/fall time when applicable
-- DG4202 source MVP: `source idn`, `source status`, `source set-freq`, `source output`
-- closed-loop discrete frequency sweep: `sweep discrete`
+- acquisition packages with NPY/CSV/JSON metadata and `commands.log`
+- waveform metrics: Vpp/RMS/mean, frequency estimate, duty cycle, rise/fall time when applicable
+
+### Signal generator: RIGOL DG4202
+
+- `source idn`, `source status`
+- `source set-freq`
+- `source set-func`
+- `source set-vpp`
+- `source output`
+- `sweep discrete` source-to-scope frequency sweeps
+- optional `--restore-source-state` for discrete sweep
+
+### Power supply: RIGOL DP800 series
+
+- `power idn`, `power status`
+- `power set --voltage --current-limit`
+- `power output on|off`
+- configurable readback settle delays:
+  - `power.settle_ms_after_set`
+  - `power.settle_ms_after_output`
+
+## Safety defaults
+
+WaveBench deliberately avoids hidden high-impact actions:
+
+- no default `*RST`
+- `scope capture` does not call autoscale unless requested separately
+- `power set` does not turn output on or off
+- `power output` does not change voltage or current limit
+- `sweep discrete` does not restore source function/amplitude unless explicitly requested with `--restore-source-state`
+- no command should silently change oscilloscope input impedance
+
+When measuring a power supply with an oscilloscope, keep the oscilloscope input in a safe high-impedance mode. Do not switch the input to 50 Ω termination unless the voltage and instrument limits are known to be safe.
 
 ## Quick start
 
 ```powershell
 python -m pip install -e .
 copy wavebench.example.toml wavebench.toml
-wavebench scope idn --config wavebench.toml
+python -m wavebench scope idn --config wavebench.toml
 ```
 
 Without editable install, from the project root:
@@ -30,7 +65,7 @@ python -m wavebench scope idn --config wavebench.toml
 
 ## Example commands
 
-Capture one point from the oscilloscope:
+Capture from the oscilloscope:
 
 ```powershell
 python -m wavebench scope capture --config wavebench.toml --channel 1 --label smoke --points def --window-frequency 1000 --target-cycles 10 --expect-frequency 1000 --frequency-tolerance 0.05 --no-csv
@@ -48,4 +83,31 @@ Run a discrete source-to-scope frequency sweep:
 python -m wavebench sweep discrete --config wavebench.toml --source-channel 2 --scope-channel 1 --frequencies 1000,2000,5000,10000 --target-cycles 10 --frequency-tolerance 0.05 --label dg4202_discrete_sweep --no-csv
 ```
 
-`sweep discrete` currently sets each source frequency, captures one scope package per point, and writes a summary CSV under `data/analysis/`.
+Run a sweep with explicit source state restoration:
+
+```powershell
+python -m wavebench sweep discrete --config wavebench.toml --source-channel 2 --scope-channel 1 --frequencies 1000,5000 --source-func SQU --source-vpp 3.3 --restore-source-state --no-csv
+```
+
+Read DP800 power status:
+
+```powershell
+python -m wavebench power status --config wavebench.toml --channel 1
+```
+
+Set DP800 voltage and current limit without changing output state:
+
+```powershell
+python -m wavebench power set --config wavebench.toml --channel 1 --voltage 5.0 --current-limit 0.1
+```
+
+Turn DP800 output on or off explicitly:
+
+```powershell
+python -m wavebench power output --config wavebench.toml --channel 1 off
+python -m wavebench power output --config wavebench.toml --channel 1 on
+```
+
+## Documentation
+
+See [`doc/README.md`](doc/README.md) for design notes, command references, verified instrument states, and implementation constraints.

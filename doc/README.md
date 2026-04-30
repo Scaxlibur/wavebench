@@ -1,20 +1,20 @@
 # WaveBench 文档总览
 
-WaveBench 是面向电赛调试场景的轻量 Python 自动测量台。当前阶段聚焦 R&S RTM2032 示波器的 LAN 远程采集；后续再扩展到普源信号发生器和自动测量流程。
+WaveBench 是面向电赛调试场景的轻量 Python 自动测量台。当前阶段支持 R&S RTM2032 示波器采集、RIGOL DG4202 信号源控制、RIGOL DP800 系列电源控制，并坚持显式命令与可验证的小步实验流程。
 
 ## 当前阶段
 
 ```text
-阶段 1：示波器只读采集 + 显式 Autoscale
+阶段 1：LAN 仪器显式控制 + 可复现实验采集
 ```
 
 目标：
 
 ```text
-可靠地远程执行 Auto，读取 RTM2032 当前波形，并保存 CSV / NPY / metadata / commands.log。
+可靠地远程读取示波器波形、显式控制信号源和电源，并保存 CSV / NPY / metadata / commands.log。
 ```
 
-当前已经支持单次采集、失败采集包、数据质量摘要、采集窗口控制和基础输出控制。正式扫频流程、信号发生器控制、GUI 和自动报告仍不属于 MVP-1。
+当前已经支持单次/多通道采集、失败采集包、数据质量摘要、采集窗口控制、DG4202 离散扫频和 DP800 电源显式控制。GUI、自动报告和隐式实验流程仍不属于当前阶段。
 
 ## 文档索引
 
@@ -107,7 +107,9 @@ source set-frequency settle delay configurable via settle_ms_after_set_frequency
 RIGOL DP832A @ 192.168.123.4
 resource = TCPIP::192.168.123.4::INSTR
 power idn/status read-only smoke verified
-CH1 manual setup: output=ON, mode=CV, set=5.0V/0.1A, measured≈5.0115V
+CH1 output/set/status smoke verified
+power set smoke: 5.0V -> 3.3V -> 5.0V verified with RTM2032 CH2
+power output smoke: ON -> OFF -> ON verified with RTM2032 CH2
 ```
 
 ### 推荐实机命令
@@ -119,14 +121,18 @@ python -m wavebench source idn --config wavebench.toml
 python -m wavebench source status --config wavebench.toml --channel 2
 ```
 
-电源只读探测：
+电源探测与显式控制：
 
 ```bash
 python -m wavebench power idn --config wavebench.toml --resource TCPIP::192.168.123.4::INSTR
 python -m wavebench power status --config wavebench.toml --resource TCPIP::192.168.123.4::INSTR --channel 1
+python -m wavebench power set --config wavebench.toml --resource TCPIP::192.168.123.4::INSTR --channel 1 --voltage 5.0 --current-limit 0.1
+python -m wavebench power output --config wavebench.toml --resource TCPIP::192.168.123.4::INSTR --channel 1 on
 ```
 
-最小可写控制：
+`power set` 不改变 output 状态；`power output` 不改变电压/电流限值。
+
+信号源最小可写控制：
 
 ```bash
 python -m wavebench source set-freq --config wavebench.toml --channel 2 1000
@@ -183,9 +189,9 @@ python -m wavebench scope capture --config wavebench.toml   --channel 1 --channe
 - [x] 将 DG4202 整理进正式 WaveBench 架构最小骨架：`source idn/status/set-freq/output`。
 - [x] 为离散扫点流程增加 source-mode 防呆：在固定频点实验前明确检查 `FREQ:MODE`，必要时从 `SWE` 切到 `FIX`。
 - [x] 正式最小闭环已验证：`source set-freq` -> `scope capture`。
-- [ ] 后续将离散扫点测试封装成统一流程命令或脚本。私有验证层已跑通离散频点闭环。
-- [x] 接入 DP800 电源只读命令：`power idn/status`。
-- [ ] 后续实现电源电压/电流设置命令，但必须显式调用，不允许 capture/sweep 默认修改电源。
+- [x] 正式离散扫点命令：`sweep discrete`。
+- [x] 接入 DP800 电源命令：`power idn/status/set/output`。
+- [ ] 后续设计实验流程层，但必须显式组合 power/source/scope 动作，不允许 capture/sweep 默认修改电源。
 - [ ] 后续再考虑截图、YAML 实验流程。
 
 ## 当前关键约束
@@ -210,3 +216,6 @@ python -m wavebench scope capture --config wavebench.toml   --channel 1 --channe
 - `--time-range` 会设置 RTM2032 的 `TIMebase:RANGe`，改变水平时窗。
 - `--window-frequency` 只用于自动计算窗口；`--expect-frequency` 才用于频率一致性校验。
 - `WaveBench_sweep状态恢复设计.md`：离散扫点前后的信号源状态保存与恢复设计。
+- `power set` 和 `power output` 是两个独立命令：前者不改变 output，后者不改变电压/电流限值。
+- DP800 读回等待通过 `power.settle_ms_after_set` 与 `power.settle_ms_after_output` 配置，不应隐藏为不可见常量。
+- 使用示波器测电源输出时，不要自动切换输入阻抗；50 Ω 输入耐压较低，必须由操作者明确确认。
