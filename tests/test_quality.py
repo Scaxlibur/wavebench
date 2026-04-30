@@ -82,6 +82,19 @@ class QualityTests(unittest.TestCase):
         self.assertAlmostEqual(quality.frequency_error_ratio, 9.0, delta=0.1)
         self.assertTrue(any("frequency_mismatch" in warning for warning in quality.quality_warnings))
 
+    def test_warns_when_points_per_cycle_is_low(self):
+        times = np.linspace(0.0, 0.01, 10000, endpoint=False)
+        voltages = 2.5 * np.sin(2 * np.pi * 100000.0 * times)
+        quality = summarize_waveform(times, voltages)
+        self.assertLess(quality.points_per_cycle, 20.0)
+        self.assertTrue(any("low_points_per_cycle" in warning for warning in quality.quality_warnings))
+
+    def test_warns_when_signal_amplitude_is_low(self):
+        times = np.linspace(0.0, 0.01, 10000, endpoint=False)
+        voltages = 0.001 * np.sin(2 * np.pi * 1000.0 * times)
+        quality = summarize_waveform(times, voltages)
+        self.assertTrue(any("low_signal_amplitude" in warning for warning in quality.quality_warnings))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -108,6 +108,7 @@ class WaveformQuality:
     expected_frequency_hz: float | None
     frequency_error_ratio: float | None
     frequency_in_tolerance: bool | None
+    points_per_cycle: float | None
     quality_warnings: list[str]
 
     def as_dict(self) -> dict[str, object]:
@@ -126,6 +127,7 @@ class WaveformQuality:
             "expected_frequency_hz": self.expected_frequency_hz,
             "frequency_error_ratio": self.frequency_error_ratio,
             "frequency_in_tolerance": self.frequency_in_tolerance,
+            "points_per_cycle": self.points_per_cycle,
             "quality_warnings": self.quality_warnings,
         }
 
@@ -211,10 +213,26 @@ def frequency_error_ratio(frequency_hz: float | None, expected_frequency_hz: flo
     return float(abs(frequency_hz - expected_frequency_hz) / expected_frequency_hz)
 
 
-def quality_warnings(estimated_cycles: float | None, frequency_error: float | None, tolerance_ratio: float) -> list[str]:
+def quality_warnings(
+    *,
+    estimated_cycles: float | None,
+    frequency_hz: float | None,
+    frequency_error: float | None,
+    tolerance_ratio: float,
+    sample_count: int,
+    voltage_vpp_v: float,
+) -> list[str]:
     warnings: list[str] = []
+    if frequency_hz is None:
+        warnings.append("frequency_unavailable: waveform frequency could not be estimated")
     if estimated_cycles is not None and estimated_cycles < 2.0:
         warnings.append("low_cycle_count: waveform window contains fewer than 2 estimated cycles; frequency estimate may be unreliable")
+    if estimated_cycles is not None and estimated_cycles > 0:
+        points_per_cycle = sample_count / estimated_cycles
+        if points_per_cycle < 20.0:
+            warnings.append("low_points_per_cycle: waveform has fewer than 20 samples per estimated cycle; duty and edge metrics may be unreliable")
+    if voltage_vpp_v < 0.02:
+        warnings.append("low_signal_amplitude: waveform Vpp is below 20 mV; check channel scale, probe, or signal connection")
     if frequency_error is not None and frequency_error > tolerance_ratio:
         warnings.append("frequency_mismatch: estimated frequency differs from expected frequency")
     return warnings
@@ -238,12 +256,18 @@ def summarize_waveform(
     rise_time_s = estimate_transition_time(times_s, voltages_v, levels, rising=True)
     fall_time_s = estimate_transition_time(times_s, voltages_v, levels, rising=False)
     freq_error = frequency_error_ratio(frequency, expected_frequency_hz)
+    voltage_min_v = float(np.min(voltages_v))
+    voltage_max_v = float(np.max(voltages_v))
+    voltage_vpp_v = voltage_max_v - voltage_min_v
+    points_per_cycle = None
+    if estimated_cycles is not None and estimated_cycles > 0:
+        points_per_cycle = float(voltages_v.size / estimated_cycles)
     return WaveformQuality(
-        voltage_min_v=float(np.min(voltages_v)),
-        voltage_max_v=float(np.max(voltages_v)),
+        voltage_min_v=voltage_min_v,
+        voltage_max_v=voltage_max_v,
         voltage_mean_v=float(np.mean(voltages_v)),
         voltage_rms_v=float(np.sqrt(np.mean(np.square(voltages_v)))),
-        voltage_vpp_v=float(np.max(voltages_v) - np.min(voltages_v)),
+        voltage_vpp_v=voltage_vpp_v,
         frequency_estimate_hz=frequency,
         frequency_method=method,
         estimated_cycles=estimated_cycles,
@@ -253,5 +277,13 @@ def summarize_waveform(
         expected_frequency_hz=expected_frequency_hz,
         frequency_error_ratio=freq_error,
         frequency_in_tolerance=None if freq_error is None else freq_error <= frequency_tolerance_ratio,
-        quality_warnings=quality_warnings(estimated_cycles, freq_error, frequency_tolerance_ratio),
+        points_per_cycle=points_per_cycle,
+        quality_warnings=quality_warnings(
+            estimated_cycles=estimated_cycles,
+            frequency_hz=frequency,
+            frequency_error=freq_error,
+            tolerance_ratio=frequency_tolerance_ratio,
+            sample_count=int(voltages_v.size),
+            voltage_vpp_v=voltage_vpp_v,
+        ),
     )

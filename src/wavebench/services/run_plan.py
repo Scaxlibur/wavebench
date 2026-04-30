@@ -48,6 +48,8 @@ _OPTIONAL_FIELDS = {
         "frequency_tolerance",
         "save_csv",
         "save_npy",
+        "quality_gate",
+        "auto_recover",
     },
     "source.status": {"channel"},
     "source.set_freq": {"channel"},
@@ -207,7 +209,7 @@ def _normalize_step_fields(index: int, kind: str, fields: dict[str, Any]) -> Non
                 )
             if "time_range_s" not in fields:
                 fields["time_range_s"] = fields["target_cycles"] / window_frequency
-        for field in ("save_csv", "save_npy"):
+        for field in ("save_csv", "save_npy", "quality_gate", "auto_recover"):
             if field in fields and not isinstance(fields[field], bool):
                 raise ConfigError(f"{prefix}.{field} must be true or false")
     elif kind == "power.set":

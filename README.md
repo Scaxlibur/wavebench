@@ -15,6 +15,7 @@ It provides small, explicit CLI commands for LAN-connected lab instruments. The 
 - repeated `--channel` capture for sequential multi-channel acquisition
 - acquisition packages with NPY/CSV/JSON metadata and `commands.log`
 - waveform metrics: Vpp/RMS/mean, frequency estimate, duty cycle, rise/fall time when applicable
+- waveform quality warnings for low cycle count, low samples/cycle, low amplitude, and frequency mismatch
 
 ### Signal generator: RIGOL DG4202
 
@@ -42,7 +43,8 @@ It provides small, explicit CLI commands for LAN-connected lab instruments. The 
 - `run plan --plan <plan.toml>` executes explicit source, power, scope, and sleep steps
 - optional scope coupling guard can query the configured oscilloscope channel and refuse unsafe power-supply probe plans
 - optional `[restore] source_state = true` snapshots and restores the selected source channel in a `finally` path
-- flow-level output is written under `data/runs/<timestamp>_<label>/` with `run.json`, `summary.csv`, step records, and references to normal capture packages
+- flow-level output is written under `data/runs/<timestamp>_<label>/` with `run.json`, `summary.csv`, step records, quality status, and references to normal capture packages
+- `scope.capture` steps can opt into `quality_gate = true`; with `auto_recover = true`, a warning capture triggers one explicit `scope.auto` retry
 
 ## Safety defaults
 
@@ -172,3 +174,19 @@ kind = "scope.capture"
 channel = 1
 label = "after_auto"
 ```
+
+A capture step can also request a quality check and one auto-recovery retry:
+
+```toml
+[[steps]]
+kind = "scope.capture"
+channel = 1
+label = "after_auto_if_needed"
+expect_frequency_hz = 100000
+window_frequency_hz = 100000
+target_cycles = 10
+quality_gate = true
+auto_recover = true
+```
+
+If the first capture reports quality warnings such as low samples per cycle, low amplitude, or frequency mismatch, WaveBench runs `scope.auto` once and captures again with an `_auto_retry` label. The first package path and warnings are kept in `run.json`.

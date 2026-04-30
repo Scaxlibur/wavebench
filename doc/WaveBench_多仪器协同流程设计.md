@@ -131,6 +131,7 @@ state = "off"
 计划解析层可以识别这些显式动作：
 
 ```text
+scope.auto
 scope.capture
 source.status
 source.set_freq
@@ -149,6 +150,7 @@ sleep
 ```text
 power.status
 power.set
+scope.auto
 scope.capture
 source.status
 source.set_freq
@@ -161,6 +163,15 @@ sleep
 
 `source.set_duty` 对 DG4202 使用 `:SOUR<n>:FUNC:SQU:DCYC <percent>`，参数单位是百分比，范围限制为 `0 < duty_percent < 100`。
 
+`scope.capture` 可以额外声明：
+
+```toml
+quality_gate = true
+auto_recover = true
+```
+
+`quality_gate` 会把采集摘要里的质量状态和 warning 写入流程级 `run.json` / `summary.csv`。`auto_recover` 只在出现 warning 时执行一次 `scope.auto`，然后用 `<label>_auto_retry` 再采一次；初次采集包不会丢，会记录在 `quality_recovery` 里。
+
 暂不支持：
 
 ```text
@@ -168,8 +179,8 @@ sleep
 循环
 表达式
 并行执行
-自动状态恢复
-自动判定 pass/fail
+隐式自动状态恢复
+复杂 pass/fail 判定
 ```
 
 循环很诱人，但第一版先不要。可以用多个显式 `[[steps]]` 写清楚，等格式稳定后再考虑 `matrix`。
@@ -246,6 +257,7 @@ data/runs/YYYYMMDD_HHMMSS_<experiment_label>/
 run check: 解析 plan 并打印步骤摘要，不连接仪器
 run plan : 执行 source / power / scope / sleep 显式 step
 safety  : 按 scope_guard_channel 查询 CHAN<n>:COUP?；命中 require_scope_coupling_not 时拒绝执行
+quality : `scope.capture` 可记录质量状态；`auto_recover = true` 时 warning 后执行一次 `scope.auto` 重采
 output  : data/runs/YYYYMMDD_HHMMSS_<label>/run.json + summary.csv + step records
 restore : `[restore] source_state = true` 时 snapshot source 状态，并在成功/失败路径恢复
 ```
@@ -422,3 +434,34 @@ label = "after_auto"
 ```
 
 这对应 RTM2032 的 `AUToscale`，并沿用已有 `*OPC?` 等待完成。它不会被 `scope.capture` 隐式调用，因为 auto 会改变水平、垂直和触发设置。需要它时，把它作为一个清楚的 step 放进计划里。
+
+
+## scope.capture 质量检查与自动重采
+
+`scope.capture` 默认仍然只是采集，不会擅自按示波器 Auto。需要质量判断时显式写：
+
+```toml
+[[steps]]
+kind = "scope.capture"
+channel = 1
+label = "duty_100k"
+expect_frequency_hz = 100000
+window_frequency_hz = 100000
+target_cycles = 10
+quality_gate = true
+auto_recover = true
+```
+
+当前质量提示包括：
+
+```text
+frequency_unavailable
+low_cycle_count
+low_points_per_cycle
+low_signal_amplitude
+frequency_mismatch
+```
+
+如果 `auto_recover = true` 且第一次采集出现 warning，执行器会调用一次 RTM2032 `AUToscale + *OPC?`，再采一次 `<label>_auto_retry`。`run.json` 会保存最终采集包，也会在 `quality_recovery` 中记录初次采集包、初次 warning 和 retry warning。
+
+这样做的边界是：自动调节仍然是显式 opt-in，不会被普通 `scope.capture` 偷偷触发。

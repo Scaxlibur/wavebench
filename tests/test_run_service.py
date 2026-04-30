@@ -74,6 +74,23 @@ def write_plan(tmp: str, content: str) -> Path:
     return path
 
 
+
+
+def fake_capture(tmp: str, name: str, warnings: list[str] | None = None):
+    package = Path(tmp) / name
+    package.mkdir()
+    metadata = package / "metadata.json"
+    metadata.write_text("{}", encoding="utf-8")
+    summary = {
+        "quality_warnings": warnings or [],
+        "frequency_estimate_hz": 1000.0,
+        "estimated_cycles": 10.0,
+        "points_per_cycle": 1000.0,
+        "voltage_vpp_v": 5.0,
+    }
+    waveform = SimpleNamespace(summary=lambda **kwargs: summary)
+    return SimpleNamespace(package_dir=package, metadata_path=metadata, waveform=waveform)
+
 def ok_power_status() -> PowerStatus:
     return PowerStatus(
         channel=1,
@@ -123,10 +140,7 @@ duration_s = 0.01
 """,
                 )
             )
-            metadata = Path(tmp) / "capture" / "metadata.json"
-            metadata.parent.mkdir()
-            metadata.write_text("{}", encoding="utf-8")
-            capture = SimpleNamespace(package_dir=metadata.parent, metadata_path=metadata)
+            capture = fake_capture(tmp, "capture")
 
             with patch("wavebench.services.run_service.PowerService") as power_cls, patch(
                 "wavebench.services.run_service.ScopeService"
@@ -158,6 +172,63 @@ duration_s = 0.01
             self.assertEqual(len(run_data["steps"]), 4)
             self.assertIn("data", str(result.run_dir))
             self.assertIn("runs", str(result.run_dir))
+
+
+    def test_scope_capture_quality_gate_records_warnings_without_recovery(self):
+        with TemporaryDirectory() as tmp:
+            plan = load_run_plan(
+                write_plan(
+                    tmp,
+                    """
+[[steps]]
+kind = "scope.capture"
+label = "weak"
+quality_gate = true
+""",
+                )
+            )
+            capture = fake_capture(tmp, "weak", ["low_signal_amplitude: waveform Vpp is below 20 mV"])
+            with patch("wavebench.services.run_service.ScopeService") as scope_cls:
+                scope = scope_cls.return_value
+                scope.capture_waveform.return_value = capture
+
+                result = RunService(config=make_config(tmp), logger=CommandLogger()).run(plan)
+
+                scope.capture_waveform.assert_called_once_with(channel=1, label="weak")
+                scope.autoscale.assert_not_called()
+                self.assertEqual(result.steps[0].artifact["quality_gate"]["status"], "warning")
+                self.assertIn("low_signal_amplitude", result.steps[0].artifact["quality_gate"]["warnings"][0])
+
+    def test_scope_capture_auto_recovers_once_after_quality_warning(self):
+        with TemporaryDirectory() as tmp:
+            plan = load_run_plan(
+                write_plan(
+                    tmp,
+                    """
+[[steps]]
+kind = "scope.capture"
+label = "weak"
+quality_gate = true
+auto_recover = true
+""",
+                )
+            )
+            first = fake_capture(tmp, "weak", ["low_points_per_cycle: too sparse"])
+            second = fake_capture(tmp, "weak_retry", [])
+            with patch("wavebench.services.run_service.ScopeService") as scope_cls:
+                scope = scope_cls.return_value
+                scope.capture_waveform.side_effect = [first, second]
+
+                result = RunService(config=make_config(tmp), logger=CommandLogger()).run(plan)
+
+                self.assertEqual(scope.capture_waveform.call_count, 2)
+                scope.capture_waveform.assert_any_call(channel=1, label="weak")
+                scope.capture_waveform.assert_any_call(channel=1, label="weak_auto_retry")
+                scope.autoscale.assert_called_once_with()
+                artifact = result.steps[0].artifact
+                self.assertEqual(artifact["quality"]["status"], "ok")
+                self.assertEqual(artifact["quality_recovery"]["autoscale"], "completed")
+                self.assertIn("low_points_per_cycle", artifact["quality_recovery"]["initial_warnings"][0])
 
     def test_runs_scope_auto_step(self):
         with TemporaryDirectory() as tmp:

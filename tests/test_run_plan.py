@@ -165,6 +165,26 @@ target_cycles = 10
         with self.assertRaisesRegex(ConfigError, "target_cycles requires"):
             load_run_plan(path)
 
+    def test_scope_capture_accepts_quality_gate_and_auto_recover(self):
+        path = self._write_plan("""
+[[steps]]
+kind = "scope.capture"
+quality_gate = true
+auto_recover = true
+""")
+        plan = load_run_plan(path)
+        self.assertTrue(plan.steps[0].fields["quality_gate"])
+        self.assertTrue(plan.steps[0].fields["auto_recover"])
+
+    def test_scope_capture_rejects_non_bool_quality_gate(self):
+        path = self._write_plan("""
+[[steps]]
+kind = "scope.capture"
+quality_gate = "yes"
+""")
+        with self.assertRaisesRegex(ConfigError, "quality_gate must be true or false"):
+            load_run_plan(path)
+
 
 if __name__ == "__main__":
     unittest.main()

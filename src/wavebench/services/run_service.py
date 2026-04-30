@@ -206,14 +206,7 @@ class RunService:
             self._scope_service().autoscale()
             artifact = {"autoscale": "completed"}
         elif step.kind == "scope.capture":
-            capture = self._scope_service_for_capture(plan, step).capture_waveform(
-                channel=step.fields.get("channel", self.config.scope.default_channel),
-                label=step.fields.get("label", f"{plan.label}_{step.index:02d}_capture"),
-            )
-            artifact = {
-                "package": str(capture.package_dir),
-                "metadata": str(capture.metadata_path),
-            }
+            artifact = self._run_scope_capture_step(plan, step)
         elif step.kind == "sleep":
             time.sleep(step.fields["duration_s"])
             artifact = {"duration_s": step.fields["duration_s"]}
@@ -226,6 +219,55 @@ class RunService:
             fields=step.fields,
             artifact=artifact,
         )
+
+
+    def _run_scope_capture_step(self, plan: RunPlan, step: RunStep) -> dict[str, Any]:
+        service = self._scope_service_for_capture(plan, step)
+        channel = step.fields.get("channel", self.config.scope.default_channel)
+        label = step.fields.get("label", f"{plan.label}_{step.index:02d}_capture")
+        capture = service.capture_waveform(channel=channel, label=label)
+        artifact = self._capture_artifact(capture, service)
+
+        quality_gate = step.fields.get("quality_gate", False)
+        auto_recover = step.fields.get("auto_recover", False)
+        warnings = list(artifact["quality"]["warnings"])
+        if (quality_gate or auto_recover) and warnings and auto_recover:
+            initial_artifact = artifact
+            service.autoscale()
+            retry = service.capture_waveform(channel=channel, label=f"{label}_auto_retry")
+            artifact = self._capture_artifact(retry, service)
+            artifact["quality_recovery"] = {
+                "trigger": "quality_warnings",
+                "autoscale": "completed",
+                "initial_package": initial_artifact["package"],
+                "initial_metadata": initial_artifact["metadata"],
+                "initial_warnings": warnings,
+                "retry_warnings": list(artifact["quality"]["warnings"]),
+            }
+        elif quality_gate:
+            artifact["quality_gate"] = {
+                "status": "warning" if warnings else "ok",
+                "warnings": warnings,
+            }
+        return artifact
+
+    def _capture_artifact(self, capture: Any, service: ScopeService) -> dict[str, Any]:
+        summary = capture.waveform.summary(
+            expected_frequency_hz=service.config.waveform.expected_frequency_hz,
+            frequency_tolerance_ratio=service.config.waveform.frequency_tolerance_ratio,
+        )
+        return {
+            "package": str(capture.package_dir),
+            "metadata": str(capture.metadata_path),
+            "quality": {
+                "status": "warning" if summary.get("quality_warnings") else "ok",
+                "warnings": list(summary.get("quality_warnings", [])),
+                "frequency_estimate_hz": summary.get("frequency_estimate_hz"),
+                "estimated_cycles": summary.get("estimated_cycles"),
+                "points_per_cycle": summary.get("points_per_cycle"),
+                "voltage_vpp_v": summary.get("voltage_vpp_v"),
+            },
+        }
 
     def _power_service(self) -> PowerService:
         return PowerService(config=self.config, logger=CommandLogger())
@@ -317,7 +359,7 @@ class RunService:
         )
 
         with summary_csv_path.open("w", newline="", encoding="utf-8") as file:
-            fieldnames = ["index", "kind", "status", "package", "metadata"]
+            fieldnames = ["index", "kind", "status", "package", "metadata", "quality_status", "quality_warnings", "recovered"]
             writer = csv.DictWriter(file, fieldnames=fieldnames)
             writer.writeheader()
             for record in records:
@@ -328,6 +370,9 @@ class RunService:
                         "status": record.status,
                         "package": record.artifact.get("package", ""),
                         "metadata": record.artifact.get("metadata", ""),
+                        "quality_status": record.artifact.get("quality", {}).get("status", ""),
+                        "quality_warnings": " | ".join(record.artifact.get("quality", {}).get("warnings", [])),
+                        "recovered": "yes" if "quality_recovery" in record.artifact else "",
                     }
                 )
 
