@@ -97,6 +97,15 @@ fixed-mode write/readback on DG4202 channel output verified
 source set-frequency settle delay configurable via settle_ms_after_set_frequency
 ```
 
+已确认电源目标设备：
+
+```text
+RIGOL DP832A @ 192.168.123.4
+resource = TCPIP::192.168.123.4::INSTR
+power idn/status read-only smoke verified
+CH1 manual setup: output=ON, mode=CV, set=5.0V/0.1A, measured≈5.0115V
+```
+
 ### 推荐实机命令
 
 信号发生器最小探测：
@@ -104,6 +113,13 @@ source set-frequency settle delay configurable via settle_ms_after_set_frequency
 ```bash
 python -m wavebench source idn --config wavebench.toml
 python -m wavebench source status --config wavebench.toml --channel 2
+```
+
+电源只读探测：
+
+```bash
+python -m wavebench power idn --config wavebench.toml --resource TCPIP::192.168.123.4::INSTR
+python -m wavebench power status --config wavebench.toml --resource TCPIP::192.168.123.4::INSTR --channel 1
 ```
 
 最小可写控制：
@@ -164,6 +180,8 @@ python -m wavebench scope capture --config wavebench.toml   --channel 1 --channe
 - [x] 为离散扫点流程增加 source-mode 防呆：在固定频点实验前明确检查 `FREQ:MODE`，必要时从 `SWE` 切到 `FIX`。
 - [x] 正式最小闭环已验证：`source set-freq` -> `scope capture`。
 - [ ] 后续将离散扫点测试封装成统一流程命令或脚本。私有验证层已跑通离散频点闭环。
+- [x] 接入 DP800 电源只读命令：`power idn/status`。
+- [ ] 后续实现电源电压/电流设置命令，但必须显式调用，不允许 capture/sweep 默认修改电源。
 - [ ] 后续再考虑截图、YAML 实验流程。
 
 ## 当前关键约束
