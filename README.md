@@ -41,7 +41,7 @@ It provides small, explicit CLI commands for LAN-connected lab instruments. The 
 
 - `run check --plan <plan.toml>` parses and summarizes a plan without connecting to instruments
 - `run plan --plan <plan.toml>` executes explicit source, power, scope, and sleep steps
-- `run report <run_dir>` generates a static offline HTML report from `run.json` / `summary.csv` and embeds capture screenshots when present
+- `run report <run_dir>` generates a static offline HTML report from `run.json` / `summary.csv`, includes per-capture signal analysis metrics, and embeds capture screenshots when present
 - `capture inspect <capture_dir>` prints a human-readable offline capture summary
 - optional scope coupling guard can query the configured oscilloscope channel and refuse unsafe power-supply probe plans
 - optional `[restore] source_state = true` snapshots and restores the selected source channel in a `finally` path

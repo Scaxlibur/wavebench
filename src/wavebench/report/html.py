@@ -24,16 +24,35 @@ class ReportScreenshot:
     src: str
 
 
+@dataclass(frozen=True)
+class ReportSignalSummary:
+    step_index: str
+    package: str
+    channel: str
+    samples: str
+    frequency_hz: str
+    vpp_v: str
+    rms_v: str
+    mean_v: str
+    duty_cycle: str
+    rise_time_s: str
+    fall_time_s: str
+    warnings: str
+
+
 def render_run_report_html(run: RunPackage, output_dir: str | Path | None = None) -> str:
     experiment = run.run.get("experiment", {}) if isinstance(run.run.get("experiment"), dict) else {}
     restore = run.run.get("restore", {}) if isinstance(run.run.get("restore"), dict) else {}
     error = run.run.get("error", {}) if isinstance(run.run.get("error"), dict) else {}
-    screenshots = _collect_screenshots(run, Path(output_dir) if output_dir is not None else run.path)
+    report_output_dir = Path(output_dir) if output_dir is not None else run.path
+    screenshots = _collect_screenshots(run, report_output_dir)
+    signals = _collect_signal_summaries(run)
     screenshots_by_step = {item.step_index: item for item in screenshots}
     rows = "\n".join(_step_row(step, screenshots_by_step.get(str(step.get("index", "")))) for step in run.steps)
     if not rows:
         rows = '<tr><td colspan="9">No steps recorded.</td></tr>'
     screenshots_block = _screenshots_block(screenshots)
+    signals_block = _signals_block(signals)
     summary_note = "present" if run.summary_csv_path is not None else "missing"
     error_block = ""
     if error:
@@ -76,6 +95,7 @@ code {{ background: #f0f4f8; padding: 0.1rem 0.25rem; border-radius: 3px; }}
 {rows}
 </tbody>
 </table>
+{signals_block}
 {screenshots_block}
 </body>
 </html>
@@ -134,6 +154,38 @@ def _screenshots_block(screenshots: list[ReportScreenshot]) -> str:
 """
 
 
+def _signals_block(signals: list[ReportSignalSummary]) -> str:
+    if not signals:
+        return ""
+    rows = "\n".join(_signal_row(item) for item in signals)
+    return f"""<h2>Signal analysis</h2>
+<table>
+<thead><tr><th>Step</th><th>Channel</th><th>Samples</th><th>Frequency</th><th>Vpp</th><th>RMS</th><th>Mean</th><th>Duty</th><th>Rise</th><th>Fall</th><th>Warnings</th></tr></thead>
+<tbody>
+{rows}
+</tbody>
+</table>
+"""
+
+
+def _signal_row(signal: ReportSignalSummary) -> str:
+    return (
+        "<tr>"
+        f"<td>{escape(signal.step_index)}</td>"
+        f"<td>{escape(signal.channel)}</td>"
+        f"<td>{escape(signal.samples)}</td>"
+        f"<td>{escape(signal.frequency_hz)}</td>"
+        f"<td>{escape(signal.vpp_v)}</td>"
+        f"<td>{escape(signal.rms_v)}</td>"
+        f"<td>{escape(signal.mean_v)}</td>"
+        f"<td>{escape(signal.duty_cycle)}</td>"
+        f"<td>{escape(signal.rise_time_s)}</td>"
+        f"<td>{escape(signal.fall_time_s)}</td>"
+        f"<td>{escape(signal.warnings)}</td>"
+        "</tr>"
+    )
+
+
 def _screenshot_card(screenshot: ReportScreenshot) -> str:
     step = escape(screenshot.step_index)
     src = escape(screenshot.src, quote=True)
@@ -144,6 +196,56 @@ def _screenshot_card(screenshot: ReportScreenshot) -> str:
         f'<figcaption>Step {step}: <code>{package}</code></figcaption>'
         '</figure>'
     )
+
+
+def _collect_signal_summaries(run: RunPackage) -> list[ReportSignalSummary]:
+    summaries: list[ReportSignalSummary] = []
+    for step in run.steps:
+        artifact = step.get("artifact", {}) if isinstance(step.get("artifact"), dict) else {}
+        package_text = artifact.get("package")
+        if not package_text:
+            continue
+        package_dir = _resolve_artifact_path(run.path, str(package_text))
+        metadata = _read_capture_metadata(package_dir, artifact.get("metadata"))
+        for summary in _metadata_signal_summaries(metadata):
+            warnings = summary.get("quality_warnings", [])
+            if isinstance(warnings, list):
+                warnings_text = " | ".join(str(item) for item in warnings)
+            else:
+                warnings_text = str(warnings) if warnings else ""
+            summaries.append(
+                ReportSignalSummary(
+                    step_index=str(step.get("index", "")),
+                    package=str(package_text),
+                    channel=_format_plain(summary.get("channel")),
+                    samples=_format_plain(summary.get("samples")),
+                    frequency_hz=_format_metric(summary.get("frequency_estimate_hz"), "Hz"),
+                    vpp_v=_format_metric(summary.get("voltage_vpp_v"), "V"),
+                    rms_v=_format_metric(summary.get("voltage_rms_v"), "V"),
+                    mean_v=_format_metric(summary.get("voltage_mean_v"), "V"),
+                    duty_cycle=_format_percent(summary.get("duty_cycle")),
+                    rise_time_s=_format_metric(summary.get("rise_time_s"), "s"),
+                    fall_time_s=_format_metric(summary.get("fall_time_s"), "s"),
+                    warnings=warnings_text,
+                )
+            )
+    return summaries
+
+
+def _metadata_signal_summaries(metadata: dict[str, Any]) -> list[dict[str, Any]]:
+    channels = metadata.get("channels")
+    if isinstance(channels, dict):
+        result: list[dict[str, Any]] = []
+        for _raw_channel, payload in sorted(channels.items(), key=lambda item: int(item[0])):
+            channel_payload = payload if isinstance(payload, dict) else {}
+            summary = channel_payload.get("summary")
+            if isinstance(summary, dict):
+                result.append(summary)
+        return result
+    waveform = metadata.get("waveform")
+    if isinstance(waveform, dict) and isinstance(waveform.get("summary"), dict):
+        return [waveform["summary"]]
+    return []
 
 
 def _collect_screenshots(run: RunPackage, output_dir: Path) -> list[ReportScreenshot]:
@@ -192,6 +294,34 @@ def _metadata_screenshot_path(metadata: dict[str, Any]) -> str | None:
         if screenshot:
             return str(screenshot)
     return None
+
+
+def _format_plain(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, float):
+        return f"{value:.6g}"
+    return str(value)
+
+
+def _format_metric(value: Any, unit: str) -> str:
+    if value is None:
+        return ""
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return str(value)
+    return f"{numeric:.6g} {unit}"
+
+
+def _format_percent(value: Any) -> str:
+    if value is None:
+        return ""
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return str(value)
+    return f"{numeric * 100:.3g}%"
 
 
 def _resolve_artifact_path(run_path: Path, artifact_path: str) -> Path:
