@@ -2,7 +2,7 @@
 
 WaveBench is a lightweight Python measurement bench for electronics contest debugging.
 
-It provides small, explicit CLI commands for LAN-connected lab instruments. The current focus is reliable waveform capture, source-to-scope checks, and basic programmable power-supply control without hidden resets or automatic output changes.
+It provides small, explicit CLI commands for LAN-connected lab instruments. The current focus is reliable waveform capture, source-to-scope checks, basic programmable power-supply control, and explicit multi-instrument run plans without hidden resets or automatic output changes.
 
 ## Current capabilities
 
@@ -35,6 +35,13 @@ It provides small, explicit CLI commands for LAN-connected lab instruments. The 
   - `power.settle_ms_after_set`
   - `power.settle_ms_after_output`
 
+### Multi-instrument run plans
+
+- `run check --plan <plan.toml>` parses and summarizes a plan without connecting to instruments
+- `run plan --plan <plan.toml>` executes the current minimal step set: `power.status`, `power.set`, `scope.capture`, and `sleep`
+- optional scope coupling guard can query the configured oscilloscope channel and refuse unsafe power-supply probe plans
+- flow-level output is written under `data/runs/<timestamp>_<label>/` with `run.json`, `summary.csv`, step records, and references to normal capture packages
+
 ## Safety defaults
 
 WaveBench deliberately avoids hidden high-impact actions:
@@ -45,6 +52,7 @@ WaveBench deliberately avoids hidden high-impact actions:
 - `power output` does not change voltage or current limit
 - `sweep discrete` does not restore source function/amplitude unless explicitly requested with `--restore-source-state`
 - no command should silently change oscilloscope input impedance
+- run-plan safety guards may query instrument state and refuse execution, but must not auto-correct hardware settings
 
 When measuring a power supply with an oscilloscope, keep the oscilloscope input in a safe high-impedance mode. Do not switch the input to 50 Ω termination unless the voltage and instrument limits are known to be safe.
 
@@ -113,6 +121,14 @@ Check a multi-instrument run plan without connecting to instruments:
 ```powershell
 python -m wavebench run check --config wavebench.toml --plan plans/dp800_scope_probe_voltage_steps.toml
 ```
+
+Execute the verified DP800-to-scope probe voltage-step plan:
+
+```powershell
+python -m wavebench run plan --config wavebench.toml --plan plans/dp800_scope_probe_voltage_steps.toml
+```
+
+That plan performs a read-only scope coupling guard first, then records the 5 V -> 3.3 V -> 5 V DP800 step sequence into `data/runs/...`.
 
 ## Documentation
 

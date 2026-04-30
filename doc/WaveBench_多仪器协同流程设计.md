@@ -126,9 +126,9 @@ state = "off"
 
 这不是省略项。
 
-## 第一版允许的 step kind
+## 第一版 step kind 边界
 
-第一版只允许组合已经稳定的动作：
+计划解析层可以识别这些显式动作：
 
 ```text
 scope.capture
@@ -142,6 +142,17 @@ power.set
 power.output
 sleep
 ```
+
+当前最小执行器已经实装并实机验证的动作是：
+
+```text
+power.status
+power.set
+scope.capture
+sleep
+```
+
+`source.*` step 已经是计划格式的一部分，但尚未接入执行器。下一步再单独实现，避免把三仪器全开和电源安全验证混在同一次变更里。
 
 暂不支持：
 
@@ -220,9 +231,31 @@ data/runs/YYYYMMDD_HHMMSS_<experiment_label>/
 
 原因：真实仪器 rollback 不是数据库事务。乱恢复比不恢复更危险。
 
+## 当前实现状态
+
+截至 2026-04-30，已完成并验证：
+
+```text
+run check: 解析 plan 并打印步骤摘要，不连接仪器
+run plan : 执行最小 step set：power.status / power.set / scope.capture / sleep
+safety  : 按 scope_guard_channel 查询 CHAN<n>:COUP?；命中 require_scope_coupling_not 时拒绝执行
+output  : data/runs/YYYYMMDD_HHMMSS_<label>/run.json + summary.csv + step records
+```
+
+DP800 电压阶跃实机 smoke：
+
+```text
+plan = plans/dp800_scope_probe_voltage_steps.toml
+run  = data/runs/20260430_150454_dp800_scope_probe_voltage_capture
+steps = 6, status = ok
+sequence = guard -> before capture -> 3.3 V set/capture -> 5 V restore/capture
+scope CH2 mean ≈ 4.8826 V -> 3.1976 V -> 4.8842 V
+DP800 final = output ON, set 5.0 V / 0.1 A, measured ≈ 5.0114 V
+```
+
 ## 实现顺序
 
-### Step 1：只写 parser 和 dataclass
+### Step 1：只写 parser 和 dataclass（已完成）
 
 新增：
 
@@ -248,7 +281,7 @@ SafetyGuard
 缺必需字段拒绝
 ```
 
-### Step 2：实现 run check
+### Step 2：实现 run check（已完成）
 
 新增 CLI：
 
@@ -266,13 +299,13 @@ wavebench run check --plan <file>
 
 暂时不连仪器。
 
-### Step 3：实现可选只读 guard
+### Step 3：实现可选只读 guard（已完成）
 
 仅当 plan 声明 safety guard 时连接 scope，查询 coupling。
 
 如果 `CHAN<scope_guard_channel>:COUP? == DC`，拒绝执行。
 
-### Step 4：实现最小执行器
+### Step 4：实现最小执行器（已完成）
 
 只支持：
 
@@ -283,9 +316,9 @@ scope.capture
 sleep
 ```
 
-用 DP800 电压阶跃作为第一条实机流程。
+用 DP800 电压阶跃作为第一条实机流程。已在 `data/runs/20260430_150454_dp800_scope_probe_voltage_capture/` 验证通过。
 
-### Step 5：再接 source step
+### Step 5：再接 source step（下一步）
 
 接入：
 
