@@ -591,3 +591,38 @@ data/runs/YYYYMMDD_HHMMSS_<label>/
 ```text
 index,kind,status,package,metadata,quality_status,quality_warnings,recovered,expect_status,expect_failures
 ```
+
+## run plan 输出包
+
+`run plan` 不是采集包本身，而是一次实验流程记录。它会引用普通 `scope.capture` 采集包，不复制大波形文件。
+
+目录结构：
+
+```text
+data/runs/YYYYMMDD_HHMMSS_<label>/
+├─ plan.toml
+├─ run.json
+├─ summary.csv
+└─ steps/
+   ├─ 00_power_status.json
+   └─ 01_scope_capture.json
+```
+
+字段约定：
+
+- `run.json.status`：整个流程状态，常见值是 `ok` / `failed`。
+- `run.json.steps[]`：逐 step 记录，包含 `index`、`kind`、`status`、`artifact`，失败时包含 `error`。
+- `run.json.restore`：如果启用 `[restore] source_state = true`，这里记录 snapshot 与 restore 结果。
+- `scope.capture` step 的 `artifact.package` 指向普通采集包目录。
+- `scope.capture` step 的 `artifact.quality` 保存质量摘要。
+- `scope.capture` step 的 `artifact.expect` 保存 `[steps.expect]` 检查结果。
+
+`summary.csv` 是 `run.json` 的轻量表格视图。它适合肉眼扫一遍，但正式脚本应优先读 `run.json`。
+
+常见列：
+
+```text
+step_index,kind,status,package,metadata,quality_status,quality_warnings,expect_status,expect_failures
+```
+
+断言失败时，run 会标记为 `failed`，但采集包仍会保留。这样失败结果也能被复盘，而不是只得到一条错误消息。

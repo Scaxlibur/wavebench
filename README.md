@@ -164,7 +164,7 @@ When enabled, WaveBench snapshots output/function/frequency/amplitude and square
 
 ## Documentation
 
-See [`doc/README.md`](doc/README.md) for design notes, command references, verified instrument states, and implementation constraints.
+See [`doc/README.md`](doc/README.md) for design notes, command references, verified instrument states, and implementation constraints. For writing TOML run plans, start with [`doc/WaveBench_run_plan_使用指南.md`](doc/WaveBench_run_plan_使用指南.md).
 
 
 ### Run plan `scope.auto`

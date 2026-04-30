@@ -189,6 +189,9 @@ duty_consistency = 0.03
 
 ## Run plan schema quick reference
 
+更偏使用手册的说明见 [`WaveBench_run_plan_使用指南.md`](./WaveBench_run_plan_使用指南.md)。这一节保留设计层面的速查。
+
+
 Use this command to print the authoritative step schema from the current code:
 
 ```powershell
@@ -255,7 +258,7 @@ voltage_vpp_v = { min = 2.8, max = 3.8 }
 表达式
 并行执行
 隐式自动状态恢复
-跨步骤表达式和跨步骤表达式和复杂 pass/fail 判定
+跨步骤表达式和复杂 pass/fail 判定
 ```
 
 循环很诱人，但第一版先不要。可以用多个显式 `[[steps]]` 写清楚，等格式稳定后再考虑 `matrix`。
