@@ -10,6 +10,7 @@ from wavebench.config import (
     ConnectionConfig,
     OutputConfig,
     PowerConfig,
+    QualityConfig,
     SourceConfig,
     ScopeConfig,
     WaveBenchConfig,
@@ -22,7 +23,7 @@ from wavebench.services.run_plan import load_run_plan
 from wavebench.services.run_service import RunService
 
 
-def make_config(tmp: str) -> WaveBenchConfig:
+def make_config(tmp: str, quality: QualityConfig | None = None) -> WaveBenchConfig:
     return WaveBenchConfig(
         connection=ConnectionConfig(
             backend="lan",
@@ -65,6 +66,7 @@ def make_config(tmp: str) -> WaveBenchConfig:
             settle_ms_after_set=2000,
             settle_ms_after_output=1000,
         ),
+        quality=quality or QualityConfig(),
     )
 
 
@@ -76,17 +78,28 @@ def write_plan(tmp: str, content: str) -> Path:
 
 
 
-def fake_capture(tmp: str, name: str, warnings: list[str] | None = None):
+def fake_capture(
+    tmp: str,
+    name: str,
+    warnings: list[str] | None = None,
+    *,
+    frequency_hz: float | None = 1000.0,
+    voltage_vpp_v: float = 5.0,
+    voltage_mean_v: float = 0.0,
+    duty_cycle: float | None = None,
+):
     package = Path(tmp) / name
     package.mkdir()
     metadata = package / "metadata.json"
     metadata.write_text("{}", encoding="utf-8")
     summary = {
         "quality_warnings": warnings or [],
-        "frequency_estimate_hz": 1000.0,
+        "frequency_estimate_hz": frequency_hz,
         "estimated_cycles": 10.0,
         "points_per_cycle": 1000.0,
-        "voltage_vpp_v": 5.0,
+        "voltage_vpp_v": voltage_vpp_v,
+        "voltage_mean_v": voltage_mean_v,
+        "duty_cycle": duty_cycle,
     }
     waveform = SimpleNamespace(summary=lambda **kwargs: summary)
     return SimpleNamespace(package_dir=package, metadata_path=metadata, waveform=waveform)
@@ -199,7 +212,7 @@ quality_gate = true
                 self.assertEqual(result.steps[0].artifact["quality_gate"]["status"], "warning")
                 self.assertIn("low_signal_amplitude", result.steps[0].artifact["quality_gate"]["warnings"][0])
 
-    def test_scope_capture_auto_recovers_once_after_quality_warning(self):
+    def test_scope_capture_auto_recovers_until_warning_is_clear(self):
         with TemporaryDirectory() as tmp:
             plan = load_run_plan(
                 write_plan(
@@ -223,12 +236,46 @@ auto_recover = true
 
                 self.assertEqual(scope.capture_waveform.call_count, 2)
                 scope.capture_waveform.assert_any_call(channel=1, label="weak")
-                scope.capture_waveform.assert_any_call(channel=1, label="weak_auto_retry")
+                scope.capture_waveform.assert_any_call(channel=1, label="weak_auto_retry1")
                 scope.autoscale.assert_called_once_with()
                 artifact = result.steps[0].artifact
                 self.assertEqual(artifact["quality"]["status"], "ok")
-                self.assertEqual(artifact["quality_recovery"]["autoscale"], "completed")
-                self.assertIn("low_points_per_cycle", artifact["quality_recovery"]["initial_warnings"][0])
+                self.assertEqual(artifact["quality_recovery"]["max_auto_recover_attempts"], 2)
+                self.assertIn("low_points_per_cycle", artifact["quality_recovery"]["attempts"][0]["quality"]["warnings"][0])
+
+    def test_scope_capture_uses_configured_recovery_attempts_and_accepts_consistency(self):
+        with TemporaryDirectory() as tmp:
+            plan = load_run_plan(
+                write_plan(
+                    tmp,
+                    """
+[[steps]]
+kind = "scope.capture"
+label = "sparse"
+quality_gate = true
+auto_recover = true
+""",
+                )
+            )
+            warning = ["low_points_per_cycle: too sparse"]
+            first = fake_capture(tmp, "sparse", warning, frequency_hz=1000.0, voltage_vpp_v=5.00, voltage_mean_v=0.01, duty_cycle=0.50)
+            second = fake_capture(tmp, "sparse_retry1", warning, frequency_hz=1001.0, voltage_vpp_v=5.02, voltage_mean_v=0.02, duty_cycle=0.51)
+            third = fake_capture(tmp, "sparse_retry2", warning, frequency_hz=1000.5, voltage_vpp_v=5.01, voltage_mean_v=0.015, duty_cycle=0.505)
+            quality = QualityConfig(auto_recover_attempts=3, consistency_required_captures=3)
+            with patch("wavebench.services.run_service.ScopeService") as scope_cls:
+                scope = scope_cls.return_value
+                scope.capture_waveform.side_effect = [first, second, third]
+
+                result = RunService(config=make_config(tmp, quality), logger=CommandLogger()).run(plan)
+
+                self.assertEqual(scope.capture_waveform.call_count, 3)
+                scope.capture_waveform.assert_any_call(channel=1, label="sparse_auto_retry1")
+                scope.capture_waveform.assert_any_call(channel=1, label="sparse_auto_retry2")
+                self.assertEqual(scope.autoscale.call_count, 2)
+                artifact = result.steps[0].artifact
+                self.assertEqual(artifact["quality"]["status"], "ok_by_consistency")
+                self.assertTrue(artifact["quality"]["trusted_by_consistency"])
+                self.assertEqual(artifact["quality_recovery"]["consistency"]["status"], "consistent")
 
     def test_runs_scope_auto_step(self):
         with TemporaryDirectory() as tmp:

@@ -44,7 +44,8 @@ It provides small, explicit CLI commands for LAN-connected lab instruments. The 
 - optional scope coupling guard can query the configured oscilloscope channel and refuse unsafe power-supply probe plans
 - optional `[restore] source_state = true` snapshots and restores the selected source channel in a `finally` path
 - flow-level output is written under `data/runs/<timestamp>_<label>/` with `run.json`, `summary.csv`, step records, quality status, and references to normal capture packages
-- `scope.capture` steps can opt into `quality_gate = true`; with `auto_recover = true`, a warning capture triggers one explicit `scope.auto` retry
+- `scope.capture` steps can opt into `quality_gate = true`; with `auto_recover = true`, warning captures trigger up to `[quality].auto_recover_attempts` autoscale + recapture attempts
+- repeated warning captures can be accepted as `ok_by_consistency` when their measured metrics are stable within `[quality]` tolerances
 
 ## Safety defaults
 
@@ -189,4 +190,4 @@ quality_gate = true
 auto_recover = true
 ```
 
-If the first capture reports quality warnings such as low samples per cycle, low amplitude, or frequency mismatch, WaveBench runs `scope.auto` once and captures again with an `_auto_retry` label. The first package path and warnings are kept in `run.json`.
+If the first capture reports quality warnings such as low samples per cycle, low amplitude, or frequency mismatch, WaveBench runs `scope.auto` and captures again with numbered `_auto_retryN` labels. The maximum retry count and consistency tolerances live in `[quality]` in `wavebench.toml`. If repeated warning captures produce similar frequency/Vpp/mean/duty metrics, the final capture is marked `ok_by_consistency`; all attempt package paths and warnings are kept in `run.json`.

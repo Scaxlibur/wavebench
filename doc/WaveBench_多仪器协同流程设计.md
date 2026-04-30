@@ -170,7 +170,21 @@ quality_gate = true
 auto_recover = true
 ```
 
-`quality_gate` 会把采集摘要里的质量状态和 warning 写入流程级 `run.json` / `summary.csv`。`auto_recover` 只在出现 warning 时执行一次 `scope.auto`，然后用 `<label>_auto_retry` 再采一次；初次采集包不会丢，会记录在 `quality_recovery` 里。
+`quality_gate` 会把采集摘要里的质量状态和 warning 写入流程级 `run.json` / `summary.csv`。`auto_recover` 只在出现 warning 时工作；它会按 `wavebench.toml` 的 `[quality].auto_recover_attempts` 执行多次 `scope.auto` + `<label>_auto_retryN` 重采。初次采集包不会丢，会记录在 `quality_recovery` 里。
+
+相关配置：
+
+```toml
+[quality]
+auto_recover_attempts = 2
+consistency_required_captures = 2
+frequency_consistency_ratio = 0.02
+voltage_vpp_consistency_ratio = 0.05
+voltage_mean_consistency_v = 0.05
+duty_consistency = 0.03
+```
+
+如果多次 warning 采集的频率、Vpp、均值、duty 等可比较指标差别不大，最终采集会标记为 `ok_by_consistency`。这表示“虽然单次质量规则仍有 warning，但重复测量稳定，结果可采信”。
 
 暂不支持：
 
@@ -257,7 +271,7 @@ data/runs/YYYYMMDD_HHMMSS_<experiment_label>/
 run check: 解析 plan 并打印步骤摘要，不连接仪器
 run plan : 执行 source / power / scope / sleep 显式 step
 safety  : 按 scope_guard_channel 查询 CHAN<n>:COUP?；命中 require_scope_coupling_not 时拒绝执行
-quality : `scope.capture` 可记录质量状态；`auto_recover = true` 时 warning 后执行一次 `scope.auto` 重采
+quality : `scope.capture` 可记录质量状态；`auto_recover = true` 时按配置多次 `scope.auto` 重采，并做重复一致性判断
 output  : data/runs/YYYYMMDD_HHMMSS_<label>/run.json + summary.csv + step records
 restore : `[restore] source_state = true` 时 snapshot source 状态，并在成功/失败路径恢复
 ```
@@ -462,6 +476,8 @@ low_signal_amplitude
 frequency_mismatch
 ```
 
-如果 `auto_recover = true` 且第一次采集出现 warning，执行器会调用一次 RTM2032 `AUToscale + *OPC?`，再采一次 `<label>_auto_retry`。`run.json` 会保存最终采集包，也会在 `quality_recovery` 中记录初次采集包、初次 warning 和 retry warning。
+如果 `auto_recover = true` 且第一次采集出现 warning，执行器会按 `[quality].auto_recover_attempts` 调用 RTM2032 `AUToscale + *OPC?` 并重采 `<label>_auto_retryN`。`run.json` 会保存最终采集包，也会在 `quality_recovery` 中记录每次采集包、warning 和一致性判断结果。
+
+如果最近 `consistency_required_captures` 次采集的频率、Vpp、均值、duty 等指标都在 `[quality]` 容差内，即使 warning 还存在，也标记为 `ok_by_consistency`。
 
 这样做的边界是：自动调节仍然是显式 opt-in，不会被普通 `scope.capture` 偷偷触发。

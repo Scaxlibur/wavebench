@@ -70,6 +70,19 @@ class ConfigOverrideTests(unittest.TestCase):
         self.assertEqual(updated.waveform.expected_frequency_hz, 500.0)
         self.assertEqual(updated.waveform.frequency_tolerance_ratio, 0.1)
 
+    def test_quality_config_defaults_and_is_preserved_by_overrides(self):
+        config = WaveBenchConfig(
+            connection=ConnectionConfig("lan", "TCPIP::127.0.0.1::INSTR", 100, 100),
+            scope=ScopeConfig("rtm2032", None, 1, False, True),
+            autoscale=AutoscaleConfig(True, True),
+            waveform=WaveformConfig("real", "lsbf", "dmax"),
+            output=OutputConfig(Path("data/raw"), "timestamp_label", True, True, True, True, False),
+            source_path=Path("test.toml"),
+        )
+        self.assertEqual(config.quality.auto_recover_attempts, 2)
+        updated = config.with_waveform_overrides(points="def")
+        self.assertEqual(updated.quality.auto_recover_attempts, 2)
+
     def test_waveform_overrides_target_cycles(self):
         config = WaveBenchConfig(
             connection=ConnectionConfig("lan", "TCPIP::127.0.0.1::INSTR", 100, 100),
@@ -86,6 +99,73 @@ class ConfigOverrideTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class QualityConfigTests(unittest.TestCase):
+    def test_loads_quality_recovery_config(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "wavebench.toml"
+            path.write_text("""
+[connection]
+backend = "lan"
+resource = "TCPIP::127.0.0.1::INSTR"
+timeout_ms = 1000
+opc_timeout_ms = 1000
+
+[scope]
+driver = "rtm2032"
+default_channel = 1
+reset_before_run = false
+check_errors = true
+
+[autoscale]
+wait_opc = true
+check_errors = true
+
+[waveform]
+format = "real"
+byte_order = "lsbf"
+points = "def"
+
+[output]
+directory = "data/raw"
+package_naming = "timestamp_label"
+save_csv = true
+save_npy = true
+save_json = true
+save_commands_log = true
+save_screenshot = false
+
+[quality]
+auto_recover_attempts = 4
+consistency_required_captures = 3
+frequency_consistency_ratio = 0.01
+voltage_vpp_consistency_ratio = 0.03
+voltage_mean_consistency_v = 0.02
+duty_consistency = 0.01
+""", encoding="utf-8")
+            config = load_config(path)
+            self.assertEqual(config.quality.auto_recover_attempts, 4)
+            self.assertEqual(config.quality.consistency_required_captures, 3)
+            self.assertEqual(config.quality.frequency_consistency_ratio, 0.01)
+            self.assertEqual(config.quality.voltage_vpp_consistency_ratio, 0.03)
+            self.assertEqual(config.quality.voltage_mean_consistency_v, 0.02)
+            self.assertEqual(config.quality.duty_consistency, 0.01)
+
+    def test_rejects_invalid_quality_config(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "wavebench.toml"
+            path.write_text("""
+[connection]
+resource = "TCPIP::127.0.0.1::INSTR"
+
+[scope]
+
+[quality]
+auto_recover_attempts = -1
+""", encoding="utf-8")
+            with self.assertRaisesRegex(Exception, "auto_recover_attempts"):
+                load_config(path)
 
 
 class SourceConfigTests(unittest.TestCase):

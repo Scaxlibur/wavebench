@@ -232,17 +232,31 @@ class RunService:
         auto_recover = step.fields.get("auto_recover", False)
         warnings = list(artifact["quality"]["warnings"])
         if (quality_gate or auto_recover) and warnings and auto_recover:
-            initial_artifact = artifact
-            service.autoscale()
-            retry = service.capture_waveform(channel=channel, label=f"{label}_auto_retry")
-            artifact = self._capture_artifact(retry, service)
+            artifacts = [artifact]
+            attempts: list[dict[str, Any]] = [self._recovery_attempt_record(0, "initial", artifact)]
+            consistency = _capture_consistency(artifacts, self.config.quality)
+            for attempt in range(1, self.config.quality.auto_recover_attempts + 1):
+                service.autoscale()
+                retry = service.capture_waveform(channel=channel, label=f"{label}_auto_retry{attempt}")
+                artifact = self._capture_artifact(retry, service)
+                artifacts.append(artifact)
+                attempts.append(self._recovery_attempt_record(attempt, "auto_retry", artifact))
+                if not artifact["quality"]["warnings"]:
+                    consistency = _capture_consistency(artifacts, self.config.quality)
+                    break
+                consistency = _capture_consistency(artifacts, self.config.quality)
+                if consistency["status"] == "consistent":
+                    artifact["quality"] = {
+                        **artifact["quality"],
+                        "status": "ok_by_consistency",
+                        "trusted_by_consistency": True,
+                    }
+                    break
             artifact["quality_recovery"] = {
                 "trigger": "quality_warnings",
-                "autoscale": "completed",
-                "initial_package": initial_artifact["package"],
-                "initial_metadata": initial_artifact["metadata"],
-                "initial_warnings": warnings,
-                "retry_warnings": list(artifact["quality"]["warnings"]),
+                "max_auto_recover_attempts": self.config.quality.auto_recover_attempts,
+                "attempts": attempts,
+                "consistency": consistency,
             }
         elif quality_gate:
             artifact["quality_gate"] = {
@@ -250,6 +264,15 @@ class RunService:
                 "warnings": warnings,
             }
         return artifact
+
+    def _recovery_attempt_record(self, index: int, kind: str, artifact: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "index": index,
+            "kind": kind,
+            "package": artifact["package"],
+            "metadata": artifact["metadata"],
+            "quality": artifact["quality"],
+        }
 
     def _capture_artifact(self, capture: Any, service: ScopeService) -> dict[str, Any]:
         summary = capture.waveform.summary(
@@ -266,6 +289,8 @@ class RunService:
                 "estimated_cycles": summary.get("estimated_cycles"),
                 "points_per_cycle": summary.get("points_per_cycle"),
                 "voltage_vpp_v": summary.get("voltage_vpp_v"),
+                "voltage_mean_v": summary.get("voltage_mean_v"),
+                "duty_cycle": summary.get("duty_cycle"),
             },
         }
 
@@ -375,6 +400,60 @@ class RunService:
                         "recovered": "yes" if "quality_recovery" in record.artifact else "",
                     }
                 )
+
+
+def _capture_consistency(artifacts: list[dict[str, Any]], quality_config: Any) -> dict[str, Any]:
+    required = quality_config.consistency_required_captures
+    if len(artifacts) < required:
+        return {"status": "insufficient_captures", "required_captures": required, "actual_captures": len(artifacts)}
+    window = artifacts[-required:]
+    checks: dict[str, Any] = {}
+    checks["frequency_estimate_hz"] = _relative_consistency(
+        _metric_values(window, "frequency_estimate_hz"), quality_config.frequency_consistency_ratio
+    )
+    checks["voltage_vpp_v"] = _relative_consistency(
+        _metric_values(window, "voltage_vpp_v"), quality_config.voltage_vpp_consistency_ratio
+    )
+    checks["voltage_mean_v"] = _absolute_consistency(
+        _metric_values(window, "voltage_mean_v"), quality_config.voltage_mean_consistency_v
+    )
+    checks["duty_cycle"] = _absolute_consistency(
+        _metric_values(window, "duty_cycle"), quality_config.duty_consistency
+    )
+    usable = {name: check for name, check in checks.items() if check["status"] != "unavailable"}
+    if not usable:
+        return {"status": "no_comparable_metrics", "required_captures": required, "actual_captures": len(artifacts), "checks": checks}
+    status = "consistent" if all(check["status"] == "ok" for check in usable.values()) else "diverged"
+    return {"status": status, "required_captures": required, "actual_captures": len(artifacts), "checks": checks}
+
+
+def _metric_values(artifacts: list[dict[str, Any]], metric: str) -> list[float] | None:
+    values: list[float] = []
+    for artifact in artifacts:
+        value = artifact.get("quality", {}).get(metric)
+        if value is None:
+            return None
+        try:
+            values.append(float(value))
+        except (TypeError, ValueError):
+            return None
+    return values
+
+
+def _relative_consistency(values: list[float] | None, tolerance_ratio: float) -> dict[str, Any]:
+    if not values:
+        return {"status": "unavailable"}
+    span = max(values) - min(values)
+    reference = max(max(abs(value) for value in values), 1e-12)
+    ratio = span / reference
+    return {"status": "ok" if ratio <= tolerance_ratio else "diverged", "span": span, "ratio": ratio, "tolerance_ratio": tolerance_ratio}
+
+
+def _absolute_consistency(values: list[float] | None, tolerance: float) -> dict[str, Any]:
+    if not values:
+        return {"status": "unavailable"}
+    span = max(values) - min(values)
+    return {"status": "ok" if span <= tolerance else "diverged", "span": span, "tolerance": tolerance}
 
 
 def _has_waveform_overrides(step: RunStep) -> bool:

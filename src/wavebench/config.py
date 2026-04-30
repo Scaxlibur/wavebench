@@ -83,6 +83,15 @@ class OutputConfig:
     save_screenshot: bool
 
 @dataclass(frozen=True)
+class QualityConfig:
+    auto_recover_attempts: int = 2
+    consistency_required_captures: int = 2
+    frequency_consistency_ratio: float = 0.02
+    voltage_vpp_consistency_ratio: float = 0.05
+    voltage_mean_consistency_v: float = 0.05
+    duty_consistency: float = 0.03
+
+@dataclass(frozen=True)
 class WaveBenchConfig:
     connection: ConnectionConfig
     scope: ScopeConfig
@@ -92,6 +101,7 @@ class WaveBenchConfig:
     source_path: Path
     source: SourceConfig | None = None
     power: PowerConfig | None = None
+    quality: QualityConfig = QualityConfig()
 
     def with_resource(self, resource: str) -> "WaveBenchConfig":
         return WaveBenchConfig(
@@ -108,6 +118,7 @@ class WaveBenchConfig:
             source_path=self.source_path,
             source=self.source,
             power=self.power,
+            quality=self.quality,
         )
 
     def with_output_overrides(self, *, save_csv: bool | None = None, save_npy: bool | None = None) -> "WaveBenchConfig":
@@ -128,6 +139,7 @@ class WaveBenchConfig:
             source_path=self.source_path,
             source=self.source,
             power=self.power,
+            quality=self.quality,
         )
 
     def with_waveform_overrides(
@@ -164,6 +176,7 @@ class WaveBenchConfig:
             source_path=self.source_path,
             source=self.source,
             power=self.power,
+            quality=self.quality,
         )
 
     def with_source_resource(self, resource: str) -> "WaveBenchConfig":
@@ -191,6 +204,7 @@ class WaveBenchConfig:
                 settle_ms_after_set_frequency=source.settle_ms_after_set_frequency,
             ),
             power=self.power,
+            quality=self.quality,
         )
 
     def with_power_resource(self, resource: str) -> "WaveBenchConfig":
@@ -218,6 +232,7 @@ class WaveBenchConfig:
                 settle_ms_after_set=power.settle_ms_after_set,
                 settle_ms_after_output=power.settle_ms_after_output,
             ),
+            quality=self.quality,
         )
 
 def load_config(path: str | Path = "wavebench.toml") -> WaveBenchConfig:
@@ -237,6 +252,7 @@ def load_config(path: str | Path = "wavebench.toml") -> WaveBenchConfig:
         a = raw.get("autoscale", {})
         w = raw.get("waveform", {})
         o = raw.get("output", {})
+        q = raw.get("quality", {})
         src = raw.get("source")
         source = None
         if src is not None:
@@ -299,6 +315,14 @@ def load_config(path: str | Path = "wavebench.toml") -> WaveBenchConfig:
             source_path=config_path,
             source=source,
             power=power,
+            quality=QualityConfig(
+                auto_recover_attempts=int(q.get("auto_recover_attempts", 2)),
+                consistency_required_captures=int(q.get("consistency_required_captures", 2)),
+                frequency_consistency_ratio=float(q.get("frequency_consistency_ratio", 0.02)),
+                voltage_vpp_consistency_ratio=float(q.get("voltage_vpp_consistency_ratio", 0.05)),
+                voltage_mean_consistency_v=float(q.get("voltage_mean_consistency_v", 0.05)),
+                duty_consistency=float(q.get("duty_consistency", 0.03)),
+            ),
         )
     except KeyError as exc:
         raise ConfigError(f"missing required config key: {exc}") from exc
@@ -321,6 +345,18 @@ def load_config(path: str | Path = "wavebench.toml") -> WaveBenchConfig:
         raise ConfigError("waveform.target_cycles must be > 0")
     if config.waveform.window_frequency_hz is not None and config.waveform.window_frequency_hz <= 0:
         raise ConfigError("waveform.window_frequency_hz must be > 0")
+    if config.quality.auto_recover_attempts < 0:
+        raise ConfigError("quality.auto_recover_attempts must be >= 0")
+    if config.quality.consistency_required_captures < 2:
+        raise ConfigError("quality.consistency_required_captures must be >= 2")
+    if config.quality.frequency_consistency_ratio <= 0:
+        raise ConfigError("quality.frequency_consistency_ratio must be > 0")
+    if config.quality.voltage_vpp_consistency_ratio <= 0:
+        raise ConfigError("quality.voltage_vpp_consistency_ratio must be > 0")
+    if config.quality.voltage_mean_consistency_v < 0:
+        raise ConfigError("quality.voltage_mean_consistency_v must be >= 0")
+    if config.quality.duty_consistency <= 0:
+        raise ConfigError("quality.duty_consistency must be > 0")
     if config.source is not None:
         if config.source.driver.lower() != "dg4202":
             raise ConfigError("source.driver must be 'dg4202'")

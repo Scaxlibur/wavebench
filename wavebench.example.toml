@@ -1,4 +1,4 @@
-﻿# WaveBench local configuration example
+# WaveBench local configuration example
 # Copy this file to `wavebench.toml` and edit it for your lab setup.
 # `wavebench.toml` is ignored by git because it may contain real instrument IPs and local paths.
 
@@ -74,6 +74,20 @@ save_commands_log = true
 
 # Screenshot export is reserved for later; disabled in MVP-1 by default.
 save_screenshot = false
+
+
+[quality]
+# Maximum number of autoscale + recapture attempts after a quality-gated capture reports warnings.
+auto_recover_attempts = 2
+
+# Number of recent captures required before repeated warning results can be trusted by consistency.
+consistency_required_captures = 2
+
+# Repeated captures are considered consistent when these metric spans stay within tolerance.
+frequency_consistency_ratio = 0.02
+voltage_vpp_consistency_ratio = 0.05
+voltage_mean_consistency_v = 0.05
+duty_consistency = 0.03
 
 
 [source]
