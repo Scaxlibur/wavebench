@@ -65,6 +65,7 @@ class CliTests(unittest.TestCase):
             "--frequency-tolerance", "0.02",
             "--source-func", "sin",
             "--source-vpp", "3.3",
+            "--restore-source-state",
             "--no-csv",
         ])
         self.assertEqual(args.domain, "sweep")
@@ -77,6 +78,7 @@ class CliTests(unittest.TestCase):
         self.assertEqual(args.frequency_tolerance, 0.02)
         self.assertEqual(args.source_func, "sin")
         self.assertEqual(args.source_vpp, 3.3)
+        self.assertTrue(args.restore_source_state)
         self.assertTrue(args.no_csv)
 
 

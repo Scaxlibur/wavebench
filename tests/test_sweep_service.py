@@ -121,6 +121,84 @@ class SweepServiceTests(unittest.TestCase):
                 source.set_amplitude_vpp.assert_called_once_with(channel=2, value_vpp=3.3)
                 source.set_frequency.assert_called_once_with(channel=2, value_hz=1000.0)
 
+    def test_discrete_sweep_restore_source_state_in_finally(self):
+        with TemporaryDirectory() as tmp:
+            config = make_config(tmp)
+            service = SweepService(config=config, logger=CommandLogger())
+            on_status = SourceStatus(
+                channel=2,
+                output='ON',
+                function='SIN',
+                frequency_hz=1000.0,
+                amplitude=5.0,
+                amplitude_unit='VPP',
+                offset_v=0.0,
+                phase_deg=0.0,
+                frequency_mode='FIX',
+                sweep_enabled='OFF',
+                apply_raw=None,
+            )
+            with patch('wavebench.services.sweep_service.SourceService') as source_cls,                  patch('wavebench.services.sweep_service.ScopeService') as scope_cls:
+                source = source_cls.return_value
+                source.snapshot_restorable_state.return_value = 'ORIGINAL'
+                source.set_frequency.return_value = on_status
+                scope_cls.return_value.capture_waveform.side_effect = RuntimeError('capture failed')
+
+                with self.assertRaisesRegex(RuntimeError, 'capture failed'):
+                    service.run_discrete(
+                        frequencies_hz=[1000.0],
+                        source_channel=2,
+                        scope_channel=1,
+                        target_cycles=10.0,
+                        frequency_tolerance=0.05,
+                        label='test',
+                        save_csv=False,
+                        save_npy=True,
+                        restore_source_state=True,
+                    )
+
+                source.snapshot_restorable_state.assert_called_once_with(channel=2)
+                source.restore_restorable_state.assert_called_once_with('ORIGINAL')
+
+    def test_discrete_sweep_does_not_snapshot_by_default(self):
+        with TemporaryDirectory() as tmp:
+            config = make_config(tmp)
+            service = SweepService(config=config, logger=CommandLogger())
+            on_status = SourceStatus(
+                channel=2,
+                output='ON',
+                function='SIN',
+                frequency_hz=1000.0,
+                amplitude=5.0,
+                amplitude_unit='VPP',
+                offset_v=0.0,
+                phase_deg=0.0,
+                frequency_mode='FIX',
+                sweep_enabled='OFF',
+                apply_raw=None,
+            )
+            with patch('wavebench.services.sweep_service.SourceService') as source_cls,                  patch('wavebench.services.sweep_service.ScopeService') as scope_cls:
+                source = source_cls.return_value
+                source.set_frequency.return_value = on_status
+                metadata = Path(tmp) / 'metadata.json'
+                metadata.write_text('{"waveform":{"summary":{"frequency_estimate_hz":1000.0,"frequency_in_tolerance":true,"quality_warnings":[]}}}', encoding='utf-8')
+                capture = type('Capture', (), {'metadata_path': metadata, 'package_dir': Path(tmp) / 'pkg'})()
+                scope_cls.return_value.capture_waveform.return_value = capture
+
+                service.run_discrete(
+                    frequencies_hz=[1000.0],
+                    source_channel=2,
+                    scope_channel=1,
+                    target_cycles=10.0,
+                    frequency_tolerance=0.05,
+                    label='test',
+                    save_csv=False,
+                    save_npy=True,
+                )
+
+                source.snapshot_restorable_state.assert_not_called()
+                source.restore_restorable_state.assert_not_called()
+
 
 if __name__ == '__main__':
     unittest.main()

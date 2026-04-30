@@ -80,6 +80,7 @@ class SweepService:
         save_npy: bool,
         source_function: str | None = None,
         source_vpp: float | None = None,
+        restore_source_state: bool = False,
     ) -> DiscreteSweepResult:
         source_service = SourceService(config=self.config, logger=self.logger)
         scope_channel = self.config.scope.default_channel if scope_channel is None else scope_channel
@@ -91,67 +92,75 @@ class SweepService:
         if source_channel is None:
             source_channel = 1
 
-        if source_function is not None:
-            source_status = source_service.set_function(channel=source_channel, function=source_function)
-            if source_status.output.strip().upper() != 'ON':
-                raise InstrumentError(
-                    f'source CH{source_channel} output is {source_status.output}; '
-                    'turn it on with `wavebench source output --channel <n> on` before running sweep'
+        original_state = None
+        if restore_source_state:
+            original_state = source_service.snapshot_restorable_state(channel=source_channel)
+
+        try:
+            if source_function is not None:
+                source_status = source_service.set_function(channel=source_channel, function=source_function)
+                if source_status.output.strip().upper() != 'ON':
+                    raise InstrumentError(
+                        f'source CH{source_channel} output is {source_status.output}; '
+                        'turn it on with `wavebench source output --channel <n> on` before running sweep'
+                    )
+            if source_vpp is not None:
+                source_status = source_service.set_amplitude_vpp(channel=source_channel, value_vpp=source_vpp)
+                if source_status.output.strip().upper() != 'ON':
+                    raise InstrumentError(
+                        f'source CH{source_channel} output is {source_status.output}; '
+                        'turn it on with `wavebench source output --channel <n> on` before running sweep'
+                    )
+
+            summary_dir = self.config.output.directory.parent / 'analysis'
+            summary_dir.mkdir(parents=True, exist_ok=True)
+            stamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            summary_path = summary_dir / f'{stamp}_{label}_summary.csv'
+            rows: list[DiscreteSweepRow] = []
+
+            for index, frequency_hz in enumerate(frequencies_hz):
+                source_status = source_service.set_frequency(channel=source_channel, value_hz=frequency_hz)
+                if source_status.output.strip().upper() != 'ON':
+                    raise InstrumentError(
+                        f'source CH{source_channel} output is {source_status.output}; '
+                        'turn it on with `wavebench source output --channel <n> on` before running sweep'
+                    )
+                point_label = f'{label}_{index:02d}_{int(frequency_hz)}hz'
+                point_config = self.config.with_waveform_overrides(
+                    time_range_s=target_cycles / frequency_hz,
+                    expected_frequency_hz=frequency_hz,
+                    frequency_tolerance_ratio=frequency_tolerance,
+                    target_cycles=target_cycles,
+                    window_frequency_hz=frequency_hz,
+                ).with_output_overrides(save_csv=save_csv, save_npy=save_npy)
+                capture = ScopeService(config=point_config, logger=CommandLogger()).capture_waveform(
+                    channel=scope_channel,
+                    label=point_label,
                 )
-        if source_vpp is not None:
-            source_status = source_service.set_amplitude_vpp(channel=source_channel, value_vpp=source_vpp)
-            if source_status.output.strip().upper() != 'ON':
-                raise InstrumentError(
-                    f'source CH{source_channel} output is {source_status.output}; '
-                    'turn it on with `wavebench source output --channel <n> on` before running sweep'
+                metadata: dict[str, Any] = json.loads(capture.metadata_path.read_text(encoding='utf-8'))
+                summary = metadata['waveform']['summary']
+                rows.append(
+                    DiscreteSweepRow(
+                        index=index,
+                        set_frequency_hz=frequency_hz,
+                        measured_frequency_hz=summary.get('frequency_estimate_hz'),
+                        frequency_error_ratio=summary.get('frequency_error_ratio'),
+                        frequency_in_tolerance=summary.get('frequency_in_tolerance'),
+                        voltage_vpp_v=summary.get('voltage_vpp_v'),
+                        voltage_rms_v=summary.get('voltage_rms_v'),
+                        estimated_cycles=summary.get('estimated_cycles'),
+                        quality_warnings=list(summary.get('quality_warnings', [])),
+                        package=str(capture.package_dir),
+                    )
                 )
 
-        summary_dir = self.config.output.directory.parent / 'analysis'
-        summary_dir.mkdir(parents=True, exist_ok=True)
-        stamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        summary_path = summary_dir / f'{stamp}_{label}_summary.csv'
-        rows: list[DiscreteSweepRow] = []
-
-        for index, frequency_hz in enumerate(frequencies_hz):
-            source_status = source_service.set_frequency(channel=source_channel, value_hz=frequency_hz)
-            if source_status.output.strip().upper() != 'ON':
-                raise InstrumentError(
-                    f'source CH{source_channel} output is {source_status.output}; '
-                    'turn it on with `wavebench source output --channel <n> on` before running sweep'
-                )
-            point_label = f'{label}_{index:02d}_{int(frequency_hz)}hz'
-            point_config = self.config.with_waveform_overrides(
-                time_range_s=target_cycles / frequency_hz,
-                expected_frequency_hz=frequency_hz,
-                frequency_tolerance_ratio=frequency_tolerance,
-                target_cycles=target_cycles,
-                window_frequency_hz=frequency_hz,
-            ).with_output_overrides(save_csv=save_csv, save_npy=save_npy)
-            capture = ScopeService(config=point_config, logger=CommandLogger()).capture_waveform(
-                channel=scope_channel,
-                label=point_label,
-            )
-            metadata: dict[str, Any] = json.loads(capture.metadata_path.read_text(encoding='utf-8'))
-            summary = metadata['waveform']['summary']
-            rows.append(
-                DiscreteSweepRow(
-                    index=index,
-                    set_frequency_hz=frequency_hz,
-                    measured_frequency_hz=summary.get('frequency_estimate_hz'),
-                    frequency_error_ratio=summary.get('frequency_error_ratio'),
-                    frequency_in_tolerance=summary.get('frequency_in_tolerance'),
-                    voltage_vpp_v=summary.get('voltage_vpp_v'),
-                    voltage_rms_v=summary.get('voltage_rms_v'),
-                    estimated_cycles=summary.get('estimated_cycles'),
-                    quality_warnings=list(summary.get('quality_warnings', [])),
-                    package=str(capture.package_dir),
-                )
-            )
-
-        with summary_path.open('w', newline='', encoding='utf-8') as file:
-            fieldnames = list(rows[0].as_csv_row().keys()) if rows else ['index']
-            writer = csv.DictWriter(file, fieldnames=fieldnames)
-            writer.writeheader()
-            for row in rows:
-                writer.writerow(row.as_csv_row())
-        return DiscreteSweepResult(summary_path=summary_path, rows=rows)
+            with summary_path.open('w', newline='', encoding='utf-8') as file:
+                fieldnames = list(rows[0].as_csv_row().keys()) if rows else ['index']
+                writer = csv.DictWriter(file, fieldnames=fieldnames)
+                writer.writeheader()
+                for row in rows:
+                    writer.writerow(row.as_csv_row())
+            return DiscreteSweepResult(summary_path=summary_path, rows=rows)
+        finally:
+            if original_state is not None:
+                source_service.restore_restorable_state(original_state)
