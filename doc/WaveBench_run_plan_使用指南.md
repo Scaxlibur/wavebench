@@ -102,7 +102,7 @@ wavebench: steps[0] power.set missing required field 'current_limit_a'. Required
 
 ## `scope.capture` 的质量检查和断言
 
-`scope.capture` 默认只采集。需要质量检查时显式写：
+`scope.capture` 默认只采集。需要截图、质量检查或断言时都要显式写：
 
 ```toml
 [[steps]]
@@ -111,6 +111,7 @@ channel = 1
 label = "duty_50"
 window_frequency_hz = 10000
 target_cycles = 10
+screenshot = true
 quality_gate = true
 auto_recover = true
 
@@ -122,6 +123,7 @@ voltage_vpp_v = { min = 2.8, max = 3.8 }
 
 含义：
 
+- `screenshot = true`：本次采集额外保存 `screenshot.png`，并在 `metadata.json.files.screenshot` 记录路径；截图失败不会吞掉波形包。
 - `quality_gate = true`：把采集质量状态写入 `run.json` / `summary.csv`。
 - `auto_recover = true`：如果质量有 warning，显式执行 `scope.auto` 并重采，最多次数由 `[quality].auto_recover_attempts` 控制。
 - `[steps.expect]`：对采集摘要指标做 min/max 断言。断言失败时 run 标记为 `failed`，但采集包仍保留。

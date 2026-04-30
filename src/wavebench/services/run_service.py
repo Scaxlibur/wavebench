@@ -339,10 +339,11 @@ class RunService:
                 target_cycles=step.fields.get("target_cycles"),
                 window_frequency_hz=step.fields.get("window_frequency_hz"),
             )
-        if "save_csv" in step.fields or "save_npy" in step.fields:
+        if "save_csv" in step.fields or "save_npy" in step.fields or "screenshot" in step.fields:
             config = config.with_output_overrides(
                 save_csv=step.fields.get("save_csv"),
                 save_npy=step.fields.get("save_npy"),
+                save_screenshot=step.fields.get("screenshot"),
             )
         return ScopeService(config=config, logger=CommandLogger())
 

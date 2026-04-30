@@ -137,6 +137,14 @@ Run the verified duty-cycle analysis plan while also checking DP800 CH1 through 
 python -m wavebench run plan --config wavebench.toml --plan plans/dg4202_duty_10k_power_ch2_check.toml
 ```
 
+Run a minimal v0.2 screenshot-report demo. This plan drives DG4202 CH2, captures RTM2032 CH1 with a screenshot, restores the source state, checks frequency plus visible signal amplitude, then generates a static report from the saved run package:
+
+```powershell
+python -m wavebench run check --config wavebench.toml --plan plans/demo_dg4202_10k_screenshot_report.toml
+python -m wavebench run plan --config wavebench.toml --plan plans/demo_dg4202_10k_screenshot_report.toml
+python -m wavebench run report data/runs/<run_dir>
+```
+
 Check the run-plan schema and validate plans without connecting to instruments:
 
 ```powershell
@@ -184,7 +192,7 @@ channel = 1
 label = "after_auto"
 ```
 
-A capture step can also request a quality check and one auto-recovery retry:
+A capture step can also request a screenshot, a quality check, and one auto-recovery retry:
 
 ```toml
 [[steps]]
@@ -194,6 +202,7 @@ label = "after_auto_if_needed"
 expect_frequency_hz = 100000
 window_frequency_hz = 100000
 target_cycles = 10
+screenshot = true
 quality_gate = true
 auto_recover = true
 ```

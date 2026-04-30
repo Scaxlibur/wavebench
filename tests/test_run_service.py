@@ -413,6 +413,31 @@ kind = "scope.auto"
                 self.assertEqual(len(result.steps), 1)
                 self.assertEqual(result.steps[0].artifact, {"autoscale": "completed"})
 
+    def test_scope_capture_screenshot_overrides_output_config(self):
+        with TemporaryDirectory() as tmp:
+            plan = load_run_plan(
+                write_plan(
+                    tmp,
+                    """
+[[steps]]
+kind = "scope.capture"
+label = "with_screen"
+screenshot = true
+save_csv = false
+""",
+                )
+            )
+            capture = fake_capture(tmp, "with_screen")
+            with patch("wavebench.services.run_service.ScopeService") as scope_cls:
+                scope_cls.return_value.capture_waveform.return_value = capture
+
+                RunService(config=make_config(tmp), logger=CommandLogger()).run(plan)
+
+                capture_config = scope_cls.call_args.kwargs["config"]
+                self.assertTrue(capture_config.output.save_screenshot)
+                self.assertFalse(capture_config.output.save_csv)
+                scope_cls.return_value.capture_waveform.assert_called_once_with(channel=1, label="with_screen")
+
     def test_allows_safety_guard_on_configured_ch1_when_coupling_is_safe(self):
         with TemporaryDirectory() as tmp:
             plan = load_run_plan(

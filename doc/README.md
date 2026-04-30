@@ -165,7 +165,9 @@ python -m wavebench power output --config wavebench.toml --resource TCPIP::<dp80
 python -m wavebench run schema
 python -m wavebench run check --config wavebench.toml --plan plans/dp800_scope_probe_voltage_steps.toml
 python -m wavebench run check --config wavebench.toml --plan plans/example_scope_expect_quality.toml
+python -m wavebench run check --config wavebench.toml --plan plans/demo_dg4202_10k_screenshot_report.toml
 python -m wavebench run plan --config wavebench.toml --plan plans/dp800_scope_probe_voltage_steps.toml
+python -m wavebench run plan --config wavebench.toml --plan plans/demo_dg4202_10k_screenshot_report.toml
 python -m wavebench run report data/runs/<run_dir>
 ```
 
@@ -178,7 +180,7 @@ python -m wavebench scope capture --config wavebench.toml --channel 1 --label sm
 
 `run report` 和 `capture inspect` 只读已有 `run.json` / `summary.csv` / `metadata.json`，不会连接仪器，也不会改写原始采集数据。`scope capture --screenshot` 会在采集包中额外写入 `screenshot.png`。
 
-`plans/example_scope_expect_quality.toml` 是公开示例计划，包含 source restore、`quality_gate`、`auto_recover` 和 `[steps.expect]`，只用于展示写法。
+`plans/example_scope_expect_quality.toml` 是公开示例计划，包含 source restore、`quality_gate`、`auto_recover` 和 `[steps.expect]`，只用于展示写法。`plans/demo_dg4202_10k_screenshot_report.toml` 是 v0.2 实机 demo：DG4202 CH2 输出 10 kHz 方波，RTM2032 CH1 采集波形和截图，断言频率和可见信号幅度，随后用 `run report` 生成 HTML。
 
 `run plan` 会真实连接仪器并执行计划；DP800 直连示波器探头的计划必须保留显式 scope coupling guard。
 

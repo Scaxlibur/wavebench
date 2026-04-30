@@ -198,6 +198,27 @@ auto_recover = true
         self.assertTrue(plan.steps[0].fields["auto_recover"])
 
 
+    def test_scope_capture_accepts_screenshot_flag(self):
+        path = self._write_plan("""
+[[steps]]
+kind = "scope.capture"
+label = "screen"
+screenshot = true
+""")
+        plan = load_run_plan(path)
+        self.assertTrue(plan.steps[0].fields["screenshot"])
+        self.assertIn("screenshot", STEP_SCHEMAS["scope.capture"].optional)
+
+    def test_scope_capture_rejects_non_bool_screenshot_flag(self):
+        path = self._write_plan("""
+[[steps]]
+kind = "scope.capture"
+screenshot = "yes"
+""")
+        with self.assertRaisesRegex(ConfigError, "screenshot must be true or false"):
+            load_run_plan(path)
+
+
     def test_scope_capture_accepts_expect_limits(self):
         path = self._write_plan("""
 [[steps]]

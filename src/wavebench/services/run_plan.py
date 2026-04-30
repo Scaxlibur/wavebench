@@ -49,6 +49,7 @@ _OPTIONAL_FIELDS = {
         "frequency_tolerance",
         "save_csv",
         "save_npy",
+        "screenshot",
         "quality_gate",
         "auto_recover",
         "expect",
@@ -304,7 +305,7 @@ def _normalize_step_fields(index: int, kind: str, fields: dict[str, Any]) -> Non
                 )
             if "time_range_s" not in fields:
                 fields["time_range_s"] = fields["target_cycles"] / window_frequency
-        for field in ("save_csv", "save_npy", "quality_gate", "auto_recover"):
+        for field in ("save_csv", "save_npy", "screenshot", "quality_gate", "auto_recover"):
             if field in fields and not isinstance(fields[field], bool):
                 raise ConfigError(f"{prefix}.{field} must be true or false")
         if "expect" in fields:
