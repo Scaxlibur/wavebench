@@ -247,6 +247,7 @@ run check: 解析 plan 并打印步骤摘要，不连接仪器
 run plan : 执行 source / power / scope / sleep 显式 step
 safety  : 按 scope_guard_channel 查询 CHAN<n>:COUP?；命中 require_scope_coupling_not 时拒绝执行
 output  : data/runs/YYYYMMDD_HHMMSS_<label>/run.json + summary.csv + step records
+restore : `[restore] source_state = true` 时 snapshot source 状态，并在成功/失败路径恢复
 ```
 
 DP800 电压阶跃实机 smoke：
@@ -264,15 +265,15 @@ DG4202 duty-cycle + DP800 对照实机 smoke：
 
 ```text
 plan = plans/dg4202_duty_10k_power_ch2_check.toml
-run  = data/runs/20260430_153204_dg4202_duty_10k_power_ch2_check
-steps = 24, status = ok
+run  = data/runs/20260430_154307_dg4202_duty_10k_power_ch2_check
+steps = 18, status = ok, restore = ok
 source CH2 = 10 kHz square, 3.3 Vpp, duty 25% -> 50% -> 75%
 scope CH1 measured duty = 0.25 -> 0.50 -> 0.75
-scope CH2 measured DP800 mean ≈ 4.8919 V -> 4.8876 V
-final source CH2 = SIN / 5000 Hz / 5 Vpp / output ON
+scope CH2 measured DP800 mean ≈ 4.8864 V -> 4.8824 V
+final source CH2 = SIN / 5000 Hz / 5 Vpp / output ON / duty 50%
 ```
 
-100 kHz duty stress note：同样流程在 100 kHz 下 75% 会被当前简单阈值算法读成约 70%，边沿时间已经开始影响高电平占比估计。用于算法验证时优先使用 10 kHz。
+100 kHz duty 复验：修复 `target_cycles/window_frequency_hz` 到 `time_range_s` 的换算后，100 kHz / 75% duty 的采样间隔为 10 ns、约 1000 points/cycle，实测 duty = 0.75。此前读成约 0.70 的根因是 run plan 没有把目标周期数转换为示波器时窗，导致默认 10 ms 窗口下每周期只有约 10 个点。
 
 ## 实现顺序
 
@@ -375,3 +376,32 @@ scope capture restore_5v
 多仪器协同的第一版不应该追求“聪明”。它应该像实验记录本一样直接：每一步写清楚，执行后留下证据。
 
 WaveBench 的流程层要做的不是代替人判断风险，而是减少人重复拼脚本时犯错的机会。
+
+
+## Source 状态恢复
+
+计划可以显式开启 source 状态恢复：
+
+```toml
+[restore]
+source_state = true
+source_channel = 2
+```
+
+当前 snapshot / restore 覆盖：
+
+```text
+output
+function
+frequency_hz
+amplitude_vpp
+square_duty_cycle_percent
+```
+
+恢复顺序：
+
+```text
+set_function -> set_amplitude_vpp -> set_frequency -> set_square_duty_cycle -> set_output
+```
+
+仍然不恢复 DG4202 sweep mode、offset、phase、load、modulation。原因和 sweep restore 一样：这些字段还没有完整安全设计，不能假装可以无风险恢复。

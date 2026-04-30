@@ -41,6 +41,7 @@ It provides small, explicit CLI commands for LAN-connected lab instruments. The 
 - `run check --plan <plan.toml>` parses and summarizes a plan without connecting to instruments
 - `run plan --plan <plan.toml>` executes explicit source, power, scope, and sleep steps
 - optional scope coupling guard can query the configured oscilloscope channel and refuse unsafe power-supply probe plans
+- optional `[restore] source_state = true` snapshots and restores the selected source channel in a `finally` path
 - flow-level output is written under `data/runs/<timestamp>_<label>/` with `run.json`, `summary.csv`, step records, and references to normal capture packages
 
 ## Safety defaults
@@ -142,6 +143,16 @@ python -m wavebench run plan --config wavebench.toml --plan plans/dp800_scope_pr
 ```
 
 That plan performs a read-only scope coupling guard first, then records the 5 V -> 3.3 V -> 5 V DP800 step sequence into `data/runs/...`.
+
+Run plans can opt into source restoration:
+
+```toml
+[restore]
+source_state = true
+source_channel = 2
+```
+
+When enabled, WaveBench snapshots output/function/frequency/amplitude and square duty cycle before executing steps, then restores them on success or failure.
 
 ## Documentation
 

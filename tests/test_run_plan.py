@@ -15,6 +15,10 @@ label = "dp800_voltage_capture"
 require_scope_coupling_not = ["DC"]
 scope_guard_channel = 2
 
+[restore]
+source_state = true
+source_channel = 2
+
 [[steps]]
 kind = "power.status"
 channel = 1
@@ -49,6 +53,8 @@ class RunPlanTests(unittest.TestCase):
         self.assertEqual(plan.label, "dp800_voltage_capture")
         self.assertEqual(plan.safety.scope_guard_channel, 2)
         self.assertEqual(plan.safety.require_scope_coupling_not, ("DC",))
+        self.assertTrue(plan.restore.source_state)
+        self.assertEqual(plan.restore.source_channel, 2)
         self.assertEqual(
             [step.kind for step in plan.steps], ["power.status", "scope.capture", "power.set"]
         )
@@ -69,6 +75,17 @@ kind = "power.magic"
 [[steps]]
 kind = "power.set"
 voltage_v = 3.3
+""")
+        with self.assertRaises(ConfigError):
+            load_run_plan(path)
+
+    def test_restore_source_channel_requires_source_state(self):
+        path = self._write_plan("""
+[restore]
+source_channel = 2
+
+[[steps]]
+kind = "source.status"
 """)
         with self.assertRaises(ConfigError):
             load_run_plan(path)
@@ -110,6 +127,25 @@ duration_s = 0.5
         self.assertEqual(plan.steps[1].fields["state"], "on")
         self.assertEqual(plan.steps[2].fields["duty_percent"], 25.0)
         self.assertEqual(plan.steps[3].fields["duration_s"], 0.5)
+
+    def test_scope_target_cycles_derives_time_range(self):
+        path = self._write_plan("""
+[[steps]]
+kind = "scope.capture"
+window_frequency_hz = 100000
+target_cycles = 10
+""")
+        plan = load_run_plan(path)
+        self.assertAlmostEqual(plan.steps[0].fields["time_range_s"], 0.0001)
+
+    def test_scope_target_cycles_requires_frequency(self):
+        path = self._write_plan("""
+[[steps]]
+kind = "scope.capture"
+target_cycles = 10
+""")
+        with self.assertRaisesRegex(ConfigError, "target_cycles requires"):
+            load_run_plan(path)
 
 
 if __name__ == "__main__":

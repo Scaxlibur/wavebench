@@ -14,6 +14,7 @@ class RestorableSourceState:
     frequency_hz: float
     amplitude_vpp: float
     amplitude_unit: str
+    square_duty_cycle_percent: float | None = None
 
     @classmethod
     def from_status(cls, status: SourceStatus) -> "RestorableSourceState":
@@ -32,6 +33,7 @@ class RestorableSourceState:
             frequency_hz=status.frequency_hz,
             amplitude_vpp=status.amplitude,
             amplitude_unit=status.amplitude_unit.strip().upper(),
+            square_duty_cycle_percent=status.square_duty_cycle_percent,
         )
 
     def as_dict(self) -> dict[str, object]:
@@ -42,4 +44,5 @@ class RestorableSourceState:
             "frequency_hz": self.frequency_hz,
             "amplitude_vpp": self.amplitude_vpp,
             "amplitude_unit": self.amplitude_unit,
+            "square_duty_cycle_percent": self.square_duty_cycle_percent,
         }

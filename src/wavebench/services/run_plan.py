@@ -67,6 +67,12 @@ class SafetyGuard:
 
 
 @dataclass(frozen=True)
+class SourceRestorePolicy:
+    source_state: bool
+    source_channel: int | None
+
+
+@dataclass(frozen=True)
 class RunStep:
     index: int
     kind: str
@@ -79,6 +85,7 @@ class RunPlan:
     name: str
     label: str
     safety: SafetyGuard
+    restore: SourceRestorePolicy
     steps: list[RunStep]
 
 
@@ -103,11 +110,28 @@ def load_run_plan(path: str | Path) -> RunPlan:
         raise ConfigError("experiment.label must not be empty")
 
     safety = _parse_safety(raw.get("safety", {}))
+    restore = _parse_restore(raw.get("restore", {}))
     steps_raw = raw.get("steps")
     if not isinstance(steps_raw, list) or not steps_raw:
         raise ConfigError("run plan requires at least one [[steps]] entry")
     steps = [_parse_step(index, item) for index, item in enumerate(steps_raw)]
-    return RunPlan(path=plan_path, name=name, label=label, safety=safety, steps=steps)
+    return RunPlan(path=plan_path, name=name, label=label, safety=safety, restore=restore, steps=steps)
+
+
+def _parse_restore(raw: Any) -> SourceRestorePolicy:
+    table = _table(raw, "restore")
+    allowed = {"source_state", "source_channel"}
+    _reject_unknown_keys(table, allowed, "restore")
+
+    source_state = table.get("source_state", False)
+    if not isinstance(source_state, bool):
+        raise ConfigError("restore.source_state must be true or false")
+    source_channel = table.get("source_channel")
+    if source_channel is not None:
+        source_channel = _positive_int(source_channel, "restore.source_channel")
+    if source_channel is not None and not source_state:
+        raise ConfigError("restore.source_channel requires restore.source_state = true")
+    return SourceRestorePolicy(source_state=source_state, source_channel=source_channel)
 
 
 def _parse_safety(raw: Any) -> SafetyGuard:
@@ -173,6 +197,14 @@ def _normalize_step_fields(index: int, kind: str, fields: dict[str, Any]) -> Non
         ):
             if field in fields:
                 fields[field] = _positive_float(fields[field], f"{prefix}.{field}")
+        if "target_cycles" in fields:
+            window_frequency = fields.get("window_frequency_hz") or fields.get("expect_frequency_hz")
+            if window_frequency is None:
+                raise ConfigError(
+                    f"{prefix}.target_cycles requires window_frequency_hz or expect_frequency_hz"
+                )
+            if "time_range_s" not in fields:
+                fields["time_range_s"] = fields["target_cycles"] / window_frequency
         for field in ("save_csv", "save_npy"):
             if field in fields and not isinstance(fields[field], bool):
                 raise ConfigError(f"{prefix}.{field} must be true or false")

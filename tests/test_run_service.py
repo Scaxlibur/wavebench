@@ -271,6 +271,68 @@ state = "on"
                 source.set_output.assert_called_once_with(channel=2, enabled=True)
                 self.assertEqual(len(result.steps), 6)
 
+    def test_restores_source_state_after_success_when_enabled(self):
+        with TemporaryDirectory() as tmp:
+            plan = load_run_plan(
+                write_plan(
+                    tmp,
+                    """
+[restore]
+source_state = true
+source_channel = 2
+
+[[steps]]
+kind = "source.set_func"
+channel = 2
+function = "SQU"
+""",
+                )
+            )
+            fake_state = SimpleNamespace(channel=2, as_dict=lambda: {"channel": 2, "function": "SIN", "square_duty_cycle_percent": 50.0})
+            fake_status = SimpleNamespace(as_dict=lambda: {"channel": 2})
+            with patch("wavebench.services.run_service.SourceService") as source_cls:
+                source = source_cls.return_value
+                source.snapshot_restorable_state.return_value = fake_state
+                source.set_function.return_value = fake_status
+
+                result = RunService(config=make_config(tmp), logger=CommandLogger()).run(plan)
+
+                source.snapshot_restorable_state.assert_called_once_with(channel=2)
+                source.set_function.assert_called_once_with(channel=2, function="SQU")
+                source.restore_restorable_state.assert_called_once_with(fake_state)
+                run_data = json.loads(result.run_json_path.read_text(encoding="utf-8"))
+                self.assertEqual(run_data["restore"]["status"], "ok")
+                self.assertEqual(run_data["restore"]["snapshot"]["square_duty_cycle_percent"], 50.0)
+
+    def test_restores_source_state_after_step_failure_when_enabled(self):
+        with TemporaryDirectory() as tmp:
+            plan = load_run_plan(
+                write_plan(
+                    tmp,
+                    """
+[restore]
+source_state = true
+source_channel = 2
+
+[[steps]]
+kind = "source.set_func"
+channel = 2
+function = "SQU"
+""",
+                )
+            )
+            fake_state = SimpleNamespace(channel=2, as_dict=lambda: {"channel": 2, "function": "SIN", "square_duty_cycle_percent": 50.0})
+            with patch("wavebench.services.run_service.SourceService") as source_cls:
+                source = source_cls.return_value
+                source.snapshot_restorable_state.return_value = fake_state
+                source.set_function.side_effect = ConfigError("boom")
+
+                with self.assertRaisesRegex(ConfigError, "boom"):
+                    RunService(config=make_config(tmp), logger=CommandLogger()).run(plan)
+
+                source.restore_restorable_state.assert_called_once_with(fake_state)
+
+
 
 if __name__ == "__main__":
     unittest.main()

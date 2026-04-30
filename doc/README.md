@@ -125,10 +125,11 @@ sequence = scope guard -> 5 V capture -> 3.3 V set/capture -> 5 V restore/captur
 scope CH2 mean ≈ 4.8826 V -> 3.1976 V -> 4.8842 V
 
 plan = plans/dg4202_duty_10k_power_ch2_check.toml
-run  = data/runs/20260430_153204_dg4202_duty_10k_power_ch2_check
-steps = 24, status = ok
+run  = data/runs/20260430_154307_dg4202_duty_10k_power_ch2_check
+steps = 18, status = ok, restore = ok
 source CH2 duty request/readback = 25% / 50% / 75%
 scope CH1 measured duty = 0.25 / 0.50 / 0.75 at 10 kHz
+source snapshot restored = ON / SIN / 5000 Hz / 5 Vpp / duty 50%
 scope CH2 power mean ≈ 4.8919 V -> 4.8876 V
 ```
 
@@ -226,6 +227,8 @@ python -m wavebench scope capture --config wavebench.toml   --channel 1 --channe
 - [x] DP800 电压阶跃 run plan 实机 smoke 通过：5 V -> 3.3 V -> 5 V，并写入 `data/runs/...`。
 - [x] 把 source step 接入 `run plan`，并新增 `source.set_duty`。
 - [x] 三仪器流程 smoke 通过：DG4202 CH2 动态 duty -> RTM2032 CH1 分析；DP800 CH1 -> RTM2032 CH2 对照。
+- [x] `run plan` source restore 通过：`[restore] source_state = true` 会在成功/失败路径恢复 output/function/frequency/amplitude/duty。
+- [x] 修复 run plan 中 `target_cycles/window_frequency_hz` 未换算为 `time_range_s` 的问题；100 kHz duty 75% 复验为 0.75。
 - [ ] 后续再考虑截图、YAML 实验流程。
 
 ## 当前关键约束

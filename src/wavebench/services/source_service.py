@@ -62,6 +62,11 @@ class SourceService:
         self.set_function(channel=state.channel, function=state.function)
         self.set_amplitude_vpp(channel=state.channel, value_vpp=state.amplitude_vpp)
         self.set_frequency(channel=state.channel, value_hz=state.frequency_hz)
+        if state.square_duty_cycle_percent is not None:
+            self.set_square_duty_cycle(
+                channel=state.channel,
+                duty_percent=state.square_duty_cycle_percent,
+            )
         return self.set_output(channel=state.channel, enabled=state.output == "ON")
 
     def set_frequency(self, channel: int | None, value_hz: float) -> SourceStatus:

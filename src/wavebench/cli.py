@@ -230,6 +230,11 @@ def _print_run_plan_summary(plan: RunPlan) -> None:
         print(f"safety: scope CH{plan.safety.scope_guard_channel} coupling not in [{blocked}]")
     else:
         print("safety: none")
+    if plan.restore.source_state:
+        channel = "default" if plan.restore.source_channel is None else plan.restore.source_channel
+        print(f"restore: source state channel={channel}")
+    else:
+        print("restore: none")
     print(f"steps={len(plan.steps)}")
     for step in plan.steps:
         print(_format_step_summary(step))

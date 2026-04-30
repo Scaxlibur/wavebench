@@ -20,6 +20,7 @@ def make_status(**overrides):
         "frequency_mode": "FIX",
         "sweep_enabled": "OFF",
         "apply_raw": None,
+        "square_duty_cycle_percent": 50.0,
     }
     values.update(overrides)
     return SourceStatus(**values)
@@ -34,6 +35,7 @@ class RestorableSourceStateTests(unittest.TestCase):
         self.assertEqual(state.frequency_hz, 5000.0)
         self.assertEqual(state.amplitude_vpp, 5.0)
         self.assertEqual(state.amplitude_unit, "VPP")
+        self.assertEqual(state.square_duty_cycle_percent, 50.0)
         self.assertNotIn("frequency_mode", state.as_dict())
         self.assertNotIn("sweep_enabled", state.as_dict())
 
@@ -64,6 +66,7 @@ class SourceServiceSnapshotTests(unittest.TestCase):
             "frequency_hz": 5000.0,
             "amplitude_vpp": 5.0,
             "amplitude_unit": "VPP",
+            "square_duty_cycle_percent": 50.0,
         })
 
     def test_restore_restorable_state_uses_safe_order(self):
@@ -84,6 +87,10 @@ class SourceServiceSnapshotTests(unittest.TestCase):
             calls.append(("set_frequency", channel, value_hz))
             return make_status(frequency_hz=value_hz)
 
+        def set_square_duty_cycle(channel, duty_percent):
+            calls.append(("set_square_duty_cycle", channel, duty_percent))
+            return make_status(square_duty_cycle_percent=duty_percent)
+
         def set_output(channel, enabled):
             calls.append(("set_output", channel, enabled))
             return final_status
@@ -91,6 +98,7 @@ class SourceServiceSnapshotTests(unittest.TestCase):
         service.set_function = set_function
         service.set_amplitude_vpp = set_amplitude_vpp
         service.set_frequency = set_frequency
+        service.set_square_duty_cycle = set_square_duty_cycle
         service.set_output = set_output
 
         result = service.restore_restorable_state(state)
@@ -100,6 +108,7 @@ class SourceServiceSnapshotTests(unittest.TestCase):
             ("set_function", 2, "SIN"),
             ("set_amplitude_vpp", 2, 5.0),
             ("set_frequency", 2, 5000.0),
+            ("set_square_duty_cycle", 2, 50.0),
             ("set_output", 2, False),
         ])
 
@@ -110,6 +119,7 @@ class SourceServiceSnapshotTests(unittest.TestCase):
         service.set_function = lambda channel, function: calls.append(("set_function", channel, function)) or make_status()
         service.set_amplitude_vpp = lambda channel, value_vpp: calls.append(("set_amplitude_vpp", channel, value_vpp)) or make_status()
         service.set_frequency = lambda channel, value_hz: calls.append(("set_frequency", channel, value_hz)) or make_status()
+        service.set_square_duty_cycle = lambda channel, duty_percent: calls.append(("set_square_duty_cycle", channel, duty_percent)) or make_status()
         service.set_output = lambda channel, enabled: calls.append(("set_output", channel, enabled)) or make_status(output="ON")
 
         service.restore_restorable_state(state)

@@ -16,6 +16,7 @@ from wavebench.services.power_service import PowerService
 from wavebench.services.run_plan import RunPlan, RunStep
 from wavebench.services.scope_service import ScopeService
 from wavebench.services.source_service import SourceService
+from wavebench.services.source_state import RestorableSourceState
 
 
 _EXECUTABLE_STEP_KINDS = {
@@ -79,12 +80,16 @@ class RunService:
         records: list[RunStepRecord] = []
         run_json_path = run_dir / "run.json"
         summary_csv_path = run_dir / "summary.csv"
+        restore_state: RestorableSourceState | None = None
+        restore_error: dict[str, str] | None = None
         try:
+            restore_state = self._snapshot_source_state(plan)
             for step in plan.steps:
                 record = self._run_step(plan, step)
                 records.append(record)
                 self._write_step_record(steps_dir, record)
         except Exception as exc:
+            restore_error = self._restore_source_state(restore_state)
             self._write_run_files(
                 plan=plan,
                 run_json_path=run_json_path,
@@ -92,10 +97,26 @@ class RunService:
                 status="failed",
                 records=records,
                 error={"type": type(exc).__name__, "message": str(exc)},
+                restore_state=restore_state,
+                restore_error=restore_error,
             )
             if isinstance(exc, WaveBenchError):
                 raise
             raise
+
+        restore_error = self._restore_source_state(restore_state)
+        if restore_error is not None:
+            self._write_run_files(
+                plan=plan,
+                run_json_path=run_json_path,
+                summary_csv_path=summary_csv_path,
+                status="failed",
+                records=records,
+                error={"type": "ConfigError", "message": "source state restore failed"},
+                restore_state=restore_state,
+                restore_error=restore_error,
+            )
+            raise ConfigError("run plan source state restore failed: " + restore_error["message"])
 
         self._write_run_files(
             plan=plan,
@@ -104,6 +125,8 @@ class RunService:
             status="ok",
             records=records,
             error=None,
+            restore_state=restore_state,
+            restore_error=None,
         )
         return RunResult(
             run_dir=run_dir,
@@ -206,6 +229,20 @@ class RunService:
     def _source_service(self) -> SourceService:
         return SourceService(config=self.config, logger=CommandLogger())
 
+    def _snapshot_source_state(self, plan: RunPlan) -> RestorableSourceState | None:
+        if not plan.restore.source_state:
+            return None
+        return self._source_service().snapshot_restorable_state(channel=plan.restore.source_channel)
+
+    def _restore_source_state(self, state: RestorableSourceState | None) -> dict[str, str] | None:
+        if state is None:
+            return None
+        try:
+            self._source_service().restore_restorable_state(state)
+        except Exception as exc:  # pragma: no cover - defensive, covered through mocks
+            return {"type": type(exc).__name__, "message": str(exc)}
+        return None
+
     def _scope_service_for_capture(self, plan: RunPlan, step: RunStep) -> ScopeService:
         config = self.config
         if _has_waveform_overrides(step):
@@ -241,6 +278,8 @@ class RunService:
         status: str,
         records: list[RunStepRecord],
         error: dict[str, str] | None,
+        restore_state: RestorableSourceState | None = None,
+        restore_error: dict[str, str] | None = None,
     ) -> None:
         run_data: dict[str, Any] = {
             "status": status,
@@ -248,6 +287,21 @@ class RunService:
             "plan": str(plan.path),
             "steps": [record.as_dict() for record in records],
         }
+        if restore_state is not None:
+            run_data["restore"] = {
+                "source_state": True,
+                "source_channel": restore_state.channel,
+                "snapshot": restore_state.as_dict(),
+                "status": "failed" if restore_error is not None else "ok",
+            }
+            if restore_error is not None:
+                run_data["restore"]["error"] = restore_error
+        elif plan.restore.source_state:
+            run_data["restore"] = {
+                "source_state": True,
+                "source_channel": plan.restore.source_channel,
+                "status": "not_started",
+            }
         if error is not None:
             run_data["error"] = error
         run_json_path.write_text(
