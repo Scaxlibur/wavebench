@@ -137,7 +137,7 @@ Run the verified duty-cycle analysis plan while also checking DP800 CH1 through 
 python -m wavebench run plan --config wavebench.toml --plan plans/dg4202_duty_10k_power_ch2_check.toml
 ```
 
-Run a minimal v0.2 screenshot-report demo. This plan drives DG4202 CH2, captures RTM2032 CH1 with a screenshot, restores the source state, checks frequency plus visible signal amplitude, then generates a static report from the saved run package:
+Run a screenshot-report demo. This plan drives DG4202 CH2, captures RTM2032 CH1 with a screenshot, restores the source state, checks frequency plus visible signal amplitude, then generates a static report from the saved run package:
 
 ```powershell
 python -m wavebench run check --config wavebench.toml --plan plans/demo_dg4202_10k_screenshot_report.toml
@@ -175,7 +175,7 @@ When enabled, WaveBench snapshots output/function/frequency/amplitude and square
 
 ## Documentation
 
-See [`doc/README.md`](doc/README.md) for design notes, command references, verified instrument states, and implementation constraints. For writing TOML run plans, start with [`doc/WaveBench_run_plan_使用指南.md`](doc/WaveBench_run_plan_使用指南.md). For release readiness, see [`doc/WaveBench_v0.2_收口清单.md`](doc/WaveBench_v0.2_收口清单.md).
+See [`doc/README.md`](doc/README.md) for design notes, command references, verified instrument states, and implementation constraints. For writing TOML run plans, start with [`doc/WaveBench_run_plan_使用指南.md`](doc/WaveBench_run_plan_使用指南.md). For release readiness, see [`doc/WaveBench_v0.3_收口清单.md`](doc/WaveBench_v0.3_收口清单.md).
 
 
 ### Run plan `scope.auto`

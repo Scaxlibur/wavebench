@@ -125,22 +125,28 @@ def render_run_report_html(run: RunPackage, output_dir: str | Path | None = None
 <meta charset="utf-8">
 <title>WaveBench run report - {escape(str(experiment.get('label', run.path.name)))}</title>
 <style>
-body {{ font-family: system-ui, sans-serif; line-height: 1.45; margin: 2rem; color: #1f2933; }}
-table {{ border-collapse: collapse; width: 100%; }}
+body {{ font-family: system-ui, sans-serif; line-height: 1.45; margin: 2rem; color: #1f2933; background: #f8fafc; }}
+h1, h2 {{ color: #102a43; }}
+h2 {{ margin-top: 1.75rem; }}
+table {{ border-collapse: collapse; width: 100%; margin: 0.5rem 0 1.25rem; background: #fff; }}
 th, td {{ border: 1px solid #d9e2ec; padding: 0.35rem 0.5rem; text-align: left; vertical-align: top; }}
-th {{ background: #f0f4f8; }}
+th {{ background: #f0f4f8; color: #334e68; }}
 code {{ background: #f0f4f8; padding: 0.1rem 0.25rem; border-radius: 3px; }}
 .screenshot-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr)); gap: 1rem; }}
-.screenshot-card {{ border: 1px solid #d9e2ec; border-radius: 6px; padding: 0.75rem; background: #fff; }}
+.screenshot-card {{ border: 1px solid #d9e2ec; border-radius: 8px; padding: 0.75rem; background: #fff; }}
 .screenshot-card img {{ display: block; max-width: 100%; height: auto; border: 1px solid #d9e2ec; }}
-.screenshot-thumb {{ max-width: 12rem; height: auto; border: 1px solid #d9e2ec; }}
+.screenshot-thumb {{ max-width: 12rem; height: auto; border: 1px solid #d9e2ec; border-radius: 4px; }}
 .waveform-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(22rem, 1fr)); gap: 1rem; }}
-.waveform-card {{ border: 1px solid #d9e2ec; border-radius: 6px; padding: 0.75rem; background: #fff; }}
-.waveform-card svg {{ display: block; max-width: 100%; height: auto; }}
+.waveform-card {{ border: 1px solid #d9e2ec; border-radius: 8px; padding: 0.75rem; background: #fff; }}
+.waveform-card svg {{ display: block; max-width: 100%; height: auto; margin-top: 0.5rem; }}
 .summary-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); gap: 0.75rem; margin: 1rem 0 1.25rem; }}
-.summary-card {{ border: 1px solid #d9e2ec; border-radius: 6px; padding: 0.75rem; background: #f8fafc; }}
+.summary-card {{ border: 1px solid #d9e2ec; border-radius: 8px; padding: 0.75rem; background: #fff; box-shadow: 0 1px 2px rgba(16, 42, 67, 0.05); }}
 .summary-card .label {{ color: #627d98; font-size: 0.85rem; }}
-.summary-card .value {{ font-size: 1.25rem; font-weight: 700; margin-top: 0.15rem; }}
+.summary-card .value {{ display: inline-block; font-size: 1.25rem; font-weight: 700; margin-top: 0.15rem; }}
+.summary-card .value.ok, .summary-card .value.failed, .summary-card .value.warning {{ border-radius: 999px; padding: 0.05rem 0.45rem; font-size: 1rem; }}
+.summary-card .value.ok {{ background: #e3f9e5; }}
+.summary-card .value.failed {{ background: #ffe3e3; }}
+.summary-card .value.warning {{ background: #fff3c4; }}
 .ok {{ color: #0b6b3a; }}
 .failed {{ color: #a61b1b; }}
 .warning {{ color: #915930; }}

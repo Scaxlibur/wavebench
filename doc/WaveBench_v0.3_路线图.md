@@ -285,6 +285,19 @@ wavebench run report <run_dir> --include-spectrum
 - FFT 值得做，但要先作为可选离线分析，不抢默认报告第一屏。
 - manifest 是为后续导出铺路，但不应该抢 v0.3 第一刀。
 
+## 收口状态
+
+截至 v0.3.0 release candidate，路线图中的核心工作包已经完成：
+
+- [x] Report summary card
+- [x] Expected vs measured table
+- [x] Waveform preview SVG
+- [x] Optional FFT / spectrum summary（`capture inspect --fft` 文本摘要）
+- [x] Report artifact manifest
+- [x] Report visual polish（小范围 CSS，不引入前端框架）
+
+最终 release 门禁与暂缓事项见：`doc/WaveBench_v0.3_收口清单.md`。
+
 ## v0.3 暂不做
 
 - GUI。
