@@ -1,0 +1,110 @@
+from pathlib import Path
+import tempfile
+import unittest
+
+from wavebench.errors import ConfigError
+from wavebench.services.run_plan import load_run_plan
+
+
+VALID_PLAN = """
+[experiment]
+name = "dp800_voltage_capture"
+label = "dp800_voltage_capture"
+
+[safety]
+require_scope_coupling_not = ["DC"]
+scope_guard_channel = 2
+
+[[steps]]
+kind = "power.status"
+channel = 1
+
+[[steps]]
+kind = "scope.capture"
+channel = 2
+label = "before"
+points = "def"
+time_range_s = 0.01
+save_csv = false
+
+[[steps]]
+kind = "power.set"
+channel = 1
+voltage_v = 3.3
+current_limit_a = 0.1
+"""
+
+
+class RunPlanTests(unittest.TestCase):
+    def _write_plan(self, content: str) -> Path:
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        path = Path(directory.name) / "plan.toml"
+        path.write_text(content, encoding="utf-8")
+        return path
+
+    def test_loads_power_scope_plan_and_safety_guard(self):
+        plan = load_run_plan(self._write_plan(VALID_PLAN))
+        self.assertEqual(plan.name, "dp800_voltage_capture")
+        self.assertEqual(plan.label, "dp800_voltage_capture")
+        self.assertEqual(plan.safety.scope_guard_channel, 2)
+        self.assertEqual(plan.safety.require_scope_coupling_not, ("DC",))
+        self.assertEqual(
+            [step.kind for step in plan.steps], ["power.status", "scope.capture", "power.set"]
+        )
+        self.assertEqual(plan.steps[1].fields["points"], "DEF")
+        self.assertFalse(plan.steps[1].fields["save_csv"])
+        self.assertEqual(plan.steps[2].fields["voltage_v"], 3.3)
+
+    def test_unknown_step_kind_is_rejected(self):
+        path = self._write_plan("""
+[[steps]]
+kind = "power.magic"
+""")
+        with self.assertRaises(ConfigError):
+            load_run_plan(path)
+
+    def test_missing_required_step_field_is_rejected(self):
+        path = self._write_plan("""
+[[steps]]
+kind = "power.set"
+voltage_v = 3.3
+""")
+        with self.assertRaises(ConfigError):
+            load_run_plan(path)
+
+    def test_safety_coupling_guard_requires_channel(self):
+        path = self._write_plan("""
+[safety]
+require_scope_coupling_not = ["DC"]
+
+[[steps]]
+kind = "power.status"
+""")
+        with self.assertRaises(ConfigError):
+            load_run_plan(path)
+
+    def test_source_and_sleep_steps_validate_fields(self):
+        path = self._write_plan("""
+[[steps]]
+kind = "source.set_freq"
+channel = 2
+frequency_hz = 1000
+
+[[steps]]
+kind = "source.output"
+channel = 2
+state = "ON"
+
+[[steps]]
+kind = "sleep"
+duration_s = 0.5
+""")
+        plan = load_run_plan(path)
+        self.assertEqual(plan.steps[0].fields["frequency_hz"], 1000.0)
+        self.assertEqual(plan.steps[1].fields["state"], "on")
+        self.assertEqual(plan.steps[2].fields["duration_s"], 0.5)
+
+
+if __name__ == "__main__":
+    unittest.main()

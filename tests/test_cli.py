@@ -104,6 +104,15 @@ class CliTests(unittest.TestCase):
         self.assertTrue(args.restore_source_state)
         self.assertTrue(args.no_csv)
 
+    def test_run_check_accepts_plan_and_config(self):
+        args = build_parser().parse_args([
+            "run", "check", "--config", "wavebench.toml", "--plan", "plans/example.toml"
+        ])
+        self.assertEqual(args.domain, "run")
+        self.assertEqual(args.command, "check")
+        self.assertEqual(args.config, "wavebench.toml")
+        self.assertEqual(args.plan, "plans/example.toml")
+
 
 if __name__ == "__main__":
     unittest.main()

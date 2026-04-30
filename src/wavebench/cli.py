@@ -12,6 +12,7 @@ from .logging import CommandLogger
 from .services.scope_service import ScopeService
 from .services.source_service import SourceService
 from .services.power_service import PowerService
+from .services.run_plan import RunPlan, RunStep, load_run_plan
 from .services.sweep_service import SweepService, parse_frequency_list
 
 
@@ -28,6 +29,14 @@ def build_parser() -> argparse.ArgumentParser:
     source_parser = subparsers.add_parser("source", help="Signal generator commands")
     power_parser = subparsers.add_parser("power", help="Power supply commands")
     sweep_parser = subparsers.add_parser("sweep", help="Source/scope sweep commands")
+    run_parser = subparsers.add_parser("run", help="Multi-instrument run plan commands")
+
+    run_sub = run_parser.add_subparsers(dest="command", required=True)
+    run_check = run_sub.add_parser(
+        "check", help="Parse and validate a run plan without connecting to instruments"
+    )
+    run_check.add_argument("--plan", required=True, help="Path to a WaveBench run plan TOML file")
+    add_runtime_options(run_check)
 
     power_sub = power_parser.add_subparsers(dest="command", required=True)
     power_idn = power_sub.add_parser("idn", help="Query power supply *IDN?")
@@ -190,6 +199,25 @@ def _load_sweep_service(args: argparse.Namespace) -> SweepService:
     return SweepService(config=config, logger=CommandLogger())
 
 
+def _format_step_summary(step: RunStep) -> str:
+    if not step.fields:
+        return f"{step.index}: {step.kind}"
+    fields = " ".join(f"{key}={value}" for key, value in step.fields.items())
+    return f"{step.index}: {step.kind} {fields}"
+
+
+def _print_run_plan_summary(plan: RunPlan) -> None:
+    print(f"plan={plan.path}")
+    print(f"experiment={plan.name} label={plan.label}")
+    if plan.safety.require_scope_coupling_not:
+        blocked = ",".join(plan.safety.require_scope_coupling_not)
+        print(f"safety: scope CH{plan.safety.scope_guard_channel} coupling not in [{blocked}]")
+    else:
+        print("safety: none")
+    print(f"steps={len(plan.steps)}")
+    for step in plan.steps:
+        print(_format_step_summary(step))
+
 def _print_power_status(status: PowerStatus) -> None:
     set_value = f"{status.set_voltage_v}V/{status.set_current_a}A"
     measured = f"{status.measured_voltage_v}V/{status.measured_current_a}A/{status.measured_power_w}W"
@@ -230,6 +258,11 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     try:
+        if args.domain == "run":
+            if args.command == "check":
+                plan = load_run_plan(args.plan)
+                _print_run_plan_summary(plan)
+                return 0
         if args.domain == "power":
             service = _load_power_service(args)
             if args.command == "idn":
