@@ -4,7 +4,7 @@ from tempfile import TemporaryDirectory
 
 import numpy as np
 
-from wavebench.arbitrary import load_arbitrary_waveform, normalize_peak, normalized_to_dac14
+from wavebench.arbitrary import load_arbitrary_waveform, normalize_peak, normalized_to_dac14, validate_waveform_name, write_arbitrary_payload_json
 from wavebench.errors import DataError
 
 
@@ -31,6 +31,43 @@ class ArbitraryWaveformTests(unittest.TestCase):
             self.assertEqual(waveform.points, 3)
             self.assertAlmostEqual(waveform.sample_rate_hz, 1000.0)
             self.assertTrue(waveform.summary()["has_time_axis"])
+
+
+    def test_payload_dict_contains_target_and_dac_values(self):
+        with TemporaryDirectory() as tmp:
+            path = Path(tmp) / "waveform.npy"
+            np.save(path, np.array([-1.0, 0.0, 1.0]))
+            waveform = load_arbitrary_waveform(path, sample_rate_hz=1000.0)
+
+            payload = waveform.payload_dict(name="REI_ARB", channel=2, amplitude_vpp=1.0, offset_v=0.0)
+
+            self.assertEqual(payload["format"], "wavebench.arbitrary.v1")
+            self.assertEqual(payload["target"]["name"], "REI_ARB")
+            self.assertEqual(payload["target"]["channel"], 2)
+            self.assertEqual(payload["target"]["sample_rate_hz"], 1000.0)
+            self.assertEqual(payload["payload"]["encoding"], "dac14_unsigned_integer")
+            self.assertEqual(payload["payload"]["values"], [0, 8192, 16383])
+
+    def test_write_payload_json_creates_artifact(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "waveform.npy"
+            output = root / "payload" / "rei.json"
+            np.save(source, np.array([-1.0, 1.0]))
+            waveform = load_arbitrary_waveform(source)
+
+            written = write_arbitrary_payload_json(
+                waveform, output, name="REI_ARB", channel=2, amplitude_vpp=1.0, offset_v=0.0
+            )
+
+            self.assertEqual(written, output)
+            text = output.read_text(encoding="utf-8")
+            self.assertIn('"format": "wavebench.arbitrary.v1"', text)
+            self.assertIn('"values": [', text)
+
+    def test_validate_waveform_name_rejects_spaces(self):
+        with self.assertRaises(DataError):
+            validate_waveform_name("bad name")
 
     def test_rejects_nan_samples(self):
         with TemporaryDirectory() as tmp:

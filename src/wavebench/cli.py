@@ -14,7 +14,7 @@ from .drivers.dg4202 import SourceStatus
 from .drivers.dp800 import PowerStatus
 from .drivers.rtm2032 import WaveformData
 from .errors import ConfigError, WaveBenchError
-from .arbitrary import load_arbitrary_waveform
+from .arbitrary import load_arbitrary_waveform, validate_waveform_name, write_arbitrary_payload_json
 from .logging import CommandLogger
 from .services.scope_service import ScopeService
 from .services.source_service import SourceService
@@ -119,8 +119,9 @@ def build_parser() -> argparse.ArgumentParser:
     source_arb_load.add_argument("--amplitude", type=float, required=True, help="Target output amplitude in Vpp")
     source_arb_load.add_argument("--offset", type=float, default=0.0, help="Target output offset in V")
     source_arb_load.add_argument("--sample-rate", type=float, default=None, help="Sample rate in Hz when the file has no time axis")
-    source_arb_load.add_argument("--max-points", type=int, default=None, help="Optional point-count guard, e.g. 16384")
+    source_arb_load.add_argument("--max-points", type=int, default=16384, help="Point-count guard; DG4000 specs list 16K arbitrary length")
     source_arb_load.add_argument("--output-on", action="store_true", help="Allow output state change after upload; ignored by dry-run")
+    source_arb_load.add_argument("--export-payload", default=None, help="Write a WaveBench JSON payload artifact for manual review or future upload")
     source_arb_load.add_argument("--dry-run", action="store_true", help="Only validate/build payload summary; do not connect to the instrument")
     add_runtime_options(source_arb_load)
 
@@ -452,13 +453,14 @@ def _project_root_from_capture_path(package_dir: Path) -> Path:
 
 
 def _print_arbitrary_waveform_summary(args: argparse.Namespace) -> None:
+    name = validate_waveform_name(args.name)
     waveform = load_arbitrary_waveform(
         args.file,
         sample_rate_hz=args.sample_rate,
         max_points=args.max_points,
     )
     summary = waveform.summary()
-    print(f"arb_name={args.name}")
+    print(f"arb_name={name}")
     print(f"channel={args.channel}")
     print(f"file={summary['source_path']}")
     print(f"points={summary['points']}")
@@ -470,6 +472,16 @@ def _print_arbitrary_waveform_summary(args: argparse.Namespace) -> None:
     print(f"amplitude={args.amplitude:.6g} Vpp")
     print(f"offset={args.offset:.6g} V")
     print(f"output_on={bool(args.output_on)}")
+    if args.export_payload:
+        output = write_arbitrary_payload_json(
+            waveform,
+            args.export_payload,
+            name=name,
+            channel=args.channel,
+            amplitude_vpp=args.amplitude,
+            offset_v=args.offset,
+        )
+        print(f"payload={output}")
     print("dry_run=true")
     print("upload=blocked_until_dg4202_scpi_is_confirmed")
 

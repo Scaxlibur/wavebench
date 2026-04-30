@@ -109,6 +109,7 @@ class CliTests(unittest.TestCase):
             "--sample-rate", "1000",
             "--max-points", "16384",
             "--output-on",
+            "--export-payload", "payload.json",
             "--dry-run",
         ])
         self.assertEqual(args.domain, "source")
@@ -121,11 +122,14 @@ class CliTests(unittest.TestCase):
         self.assertEqual(args.sample_rate, 1000.0)
         self.assertEqual(args.max_points, 16384)
         self.assertTrue(args.output_on)
+        self.assertEqual(args.export_payload, "payload.json")
         self.assertTrue(args.dry_run)
 
     def test_source_arb_load_dry_run_prints_payload_summary(self):
         with TemporaryDirectory() as tmp:
-            path = Path(tmp) / "waveform.npy"
+            root = Path(tmp)
+            path = root / "waveform.npy"
+            payload = root / "payload.json"
             np.save(path, np.array([-1.0, 0.0, 1.0]))
             stdout = io.StringIO()
 
@@ -137,6 +141,7 @@ class CliTests(unittest.TestCase):
                     "--name", "REI_ARB",
                     "--amplitude", "1.0",
                     "--offset", "0.0",
+                    "--export-payload", str(payload),
                     "--dry-run",
                 ])
 
@@ -146,8 +151,10 @@ class CliTests(unittest.TestCase):
             self.assertIn("channel=2", output)
             self.assertIn("points=3", output)
             self.assertIn("dac14=0..16383", output)
+            self.assertIn(f"payload={payload}", output)
             self.assertIn("dry_run=true", output)
             self.assertIn("upload=blocked_until_dg4202_scpi_is_confirmed", output)
+            self.assertIn('"format": "wavebench.arbitrary.v1"', payload.read_text(encoding="utf-8"))
 
     def test_sweep_discrete_accepts_frequencies_and_channels(self):
         args = build_parser().parse_args([

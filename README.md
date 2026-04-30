@@ -135,7 +135,7 @@ python -m wavebench source set-duty --config wavebench.toml --channel 2 25
 Prepare an arbitrary waveform payload offline. This validates a CSV/NPY waveform and prints normalized + 14-bit DAC payload ranges, but does not connect to the instrument until DG4202 arbitrary-waveform SCPI is confirmed:
 
 ```powershell
-python -m wavebench source arb-load --channel 2 --file waveform.npy --name REI_ARB --amplitude 1.0 --offset 0.0 --dry-run
+python -m wavebench source arb-load --channel 2 --file waveform.npy --name REI_ARB --amplitude 1.0 --offset 0.0 --export-payload data/arb/REI_ARB.json --dry-run
 ```
 
 Run the verified duty-cycle analysis plan while also checking DP800 CH1 through scope CH2:

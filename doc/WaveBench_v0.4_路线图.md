@@ -124,6 +124,7 @@ CSV / NPY -> normalized waveform payload
 
 - `src/wavebench/arbitrary.py` 已提供离线 builder。
 - `wavebench source arb-load ... --dry-run` 已提供 payload 摘要。
+- `--export-payload` 可写出 `wavebench.arbitrary.v1` JSON artifact，便于人工复核和后续 upload driver 复用。
 - 非 dry-run 上传仍被阻止，等待 DG4202 SCPI 确认。
 
 ### C. DG4202 driver upload 方法
@@ -151,7 +152,7 @@ DG4202Source.upload_arbitrary_waveform(
 候选命令：
 
 ```bash
-wavebench source arb-load --channel 2 --file waveform.npy --name REI_ARB --amplitude 1.0 --offset 0.0
+wavebench source arb-load --channel 2 --file waveform.npy --name REI_ARB --amplitude 1.0 --offset 0.0 --dry-run
 ```
 
 可选：

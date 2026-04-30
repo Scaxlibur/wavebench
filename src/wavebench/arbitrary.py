@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
 from pathlib import Path
 from typing import Any
 
@@ -39,6 +40,63 @@ class ArbitraryWaveform:
             "sample_rate_hz": self.sample_rate_hz,
             "has_time_axis": self.time_s is not None,
         }
+
+    def payload_dict(self, *, name: str, channel: int, amplitude_vpp: float, offset_v: float) -> dict[str, Any]:
+        if channel < 1:
+            raise DataError("channel must be >= 1")
+        clean_name = validate_waveform_name(name)
+        if amplitude_vpp <= 0:
+            raise DataError("amplitude must be > 0")
+        return {
+            "format": "wavebench.arbitrary.v1",
+            "target": {
+                "driver": "dg4202",
+                "channel": channel,
+                "name": clean_name,
+                "amplitude_vpp": float(amplitude_vpp),
+                "offset_v": float(offset_v),
+                "sample_rate_hz": self.sample_rate_hz,
+            },
+            "source": self.summary(),
+            "payload": {
+                "encoding": "dac14_unsigned_integer",
+                "range": [DAC14_MIN, DAC14_MAX],
+                "values": [int(item) for item in self.dac14.tolist()],
+            },
+        }
+
+
+def validate_waveform_name(name: str) -> str:
+    normalized = name.strip()
+    if not normalized:
+        raise DataError("waveform name must not be empty")
+    if len(normalized) > 32:
+        raise DataError("waveform name must be <= 32 characters")
+    allowed = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-")
+    if any(char not in allowed for char in normalized):
+        raise DataError("waveform name may only contain letters, digits, underscore, and hyphen")
+    return normalized
+
+
+def write_arbitrary_payload_json(
+    waveform: ArbitraryWaveform,
+    output_path: str | Path,
+    *,
+    name: str,
+    channel: int,
+    amplitude_vpp: float,
+    offset_v: float,
+) -> Path:
+    payload = waveform.payload_dict(
+        name=name,
+        channel=channel,
+        amplitude_vpp=amplitude_vpp,
+        offset_v=offset_v,
+    )
+    path = Path(output_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return path
 
 
 def load_arbitrary_waveform(
