@@ -65,6 +65,8 @@ def build_parser() -> argparse.ArgumentParser:
     sweep_discrete.add_argument("--frequencies", required=True, help="Comma-separated frequency list in Hz, e.g. 1000,2000,5000")
     sweep_discrete.add_argument("--target-cycles", type=float, default=10.0)
     sweep_discrete.add_argument("--frequency-tolerance", type=float, default=None)
+    sweep_discrete.add_argument("--source-func", default=None, help="Optional source function to set once before sweep")
+    sweep_discrete.add_argument("--source-vpp", type=float, default=None, help="Optional source amplitude in Vpp to set once before sweep")
     sweep_discrete.add_argument("--label", default="discrete_sweep")
     sweep_discrete.add_argument("--no-csv", action="store_true", help="Do not save per-point CSV waveform output")
     sweep_discrete.add_argument("--no-npy", action="store_true", help="Do not save per-point NPY waveform output")
@@ -234,6 +236,8 @@ def main(argv: list[str] | None = None) -> int:
                     label=args.label,
                     save_csv=not args.no_csv,
                     save_npy=not args.no_npy,
+                    source_function=args.source_func,
+                    source_vpp=args.source_vpp,
                 )
                 for row in result.rows:
                     measured = "n/a" if row.measured_frequency_hz is None else f"{row.measured_frequency_hz:.6g}"

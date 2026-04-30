@@ -78,6 +78,8 @@ class SweepService:
         label: str,
         save_csv: bool,
         save_npy: bool,
+        source_function: str | None = None,
+        source_vpp: float | None = None,
     ) -> DiscreteSweepResult:
         source_service = SourceService(config=self.config, logger=self.logger)
         scope_channel = self.config.scope.default_channel if scope_channel is None else scope_channel
@@ -88,6 +90,21 @@ class SweepService:
         )
         if source_channel is None:
             source_channel = 1
+
+        if source_function is not None:
+            source_status = source_service.set_function(channel=source_channel, function=source_function)
+            if source_status.output.strip().upper() != 'ON':
+                raise InstrumentError(
+                    f'source CH{source_channel} output is {source_status.output}; '
+                    'turn it on with `wavebench source output --channel <n> on` before running sweep'
+                )
+        if source_vpp is not None:
+            source_status = source_service.set_amplitude_vpp(channel=source_channel, value_vpp=source_vpp)
+            if source_status.output.strip().upper() != 'ON':
+                raise InstrumentError(
+                    f'source CH{source_channel} output is {source_status.output}; '
+                    'turn it on with `wavebench source output --channel <n> on` before running sweep'
+                )
 
         summary_dir = self.config.output.directory.parent / 'analysis'
         summary_dir.mkdir(parents=True, exist_ok=True)
