@@ -66,6 +66,56 @@ class SourceServiceSnapshotTests(unittest.TestCase):
             "amplitude_unit": "VPP",
         })
 
+    def test_restore_restorable_state_uses_safe_order(self):
+        service = SourceService(config=None, logger=CommandLogger())
+        calls = []
+        final_status = make_status(output="OFF")
+        state = RestorableSourceState.from_status(make_status(output="OFF"))
+
+        def set_function(channel, function):
+            calls.append(("set_function", channel, function))
+            return make_status(function=function)
+
+        def set_amplitude_vpp(channel, value_vpp):
+            calls.append(("set_amplitude_vpp", channel, value_vpp))
+            return make_status(amplitude=value_vpp)
+
+        def set_frequency(channel, value_hz):
+            calls.append(("set_frequency", channel, value_hz))
+            return make_status(frequency_hz=value_hz)
+
+        def set_output(channel, enabled):
+            calls.append(("set_output", channel, enabled))
+            return final_status
+
+        service.set_function = set_function
+        service.set_amplitude_vpp = set_amplitude_vpp
+        service.set_frequency = set_frequency
+        service.set_output = set_output
+
+        result = service.restore_restorable_state(state)
+
+        self.assertIs(result, final_status)
+        self.assertEqual(calls, [
+            ("set_function", 2, "SIN"),
+            ("set_amplitude_vpp", 2, 5.0),
+            ("set_frequency", 2, 5000.0),
+            ("set_output", 2, False),
+        ])
+
+    def test_restore_restorable_state_turns_output_on_when_snapshot_was_on(self):
+        service = SourceService(config=None, logger=CommandLogger())
+        calls = []
+        state = RestorableSourceState.from_status(make_status(output="ON"))
+        service.set_function = lambda channel, function: calls.append(("set_function", channel, function)) or make_status()
+        service.set_amplitude_vpp = lambda channel, value_vpp: calls.append(("set_amplitude_vpp", channel, value_vpp)) or make_status()
+        service.set_frequency = lambda channel, value_hz: calls.append(("set_frequency", channel, value_hz)) or make_status()
+        service.set_output = lambda channel, enabled: calls.append(("set_output", channel, enabled)) or make_status(output="ON")
+
+        service.restore_restorable_state(state)
+
+        self.assertEqual(calls[-1], ("set_output", 2, True))
+
 
 if __name__ == "__main__":
     unittest.main()

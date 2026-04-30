@@ -58,6 +58,12 @@ class SourceService:
     def snapshot_restorable_state(self, channel: int | None = None) -> RestorableSourceState:
         return RestorableSourceState.from_status(self.status(channel=channel))
 
+    def restore_restorable_state(self, state: RestorableSourceState) -> SourceStatus:
+        self.set_function(channel=state.channel, function=state.function)
+        self.set_amplitude_vpp(channel=state.channel, value_vpp=state.amplitude_vpp)
+        self.set_frequency(channel=state.channel, value_hz=state.frequency_hz)
+        return self.set_output(channel=state.channel, enabled=state.output == "ON")
+
     def set_frequency(self, channel: int | None, value_hz: float) -> SourceStatus:
         source_cfg = self._source_config()
         channel = source_cfg.default_channel if channel is None else channel
