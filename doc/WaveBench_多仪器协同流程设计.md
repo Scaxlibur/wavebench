@@ -54,7 +54,7 @@ wavebench run check --config wavebench.toml --plan plans/dp800_voltage_steps.tom
 
 其中：
 
-- `run check`：只解析计划并检查资源/安全 guard，不写仪器；
+- `run check`：只解析计划并检查资源；若计划显式声明离线安全 guard，则只做离线结构校验，不写仪器；
 - `run plan`：执行计划。
 
 `run` 是独立 domain，不塞进 `scope` / `source` / `power`。
@@ -158,9 +158,9 @@ sleep
 
 ## 安全 guard
 
-流程执行前先做 guard。
+guard 不是所有流程的标准步骤。只有计划显式声明了某个 guard 时，执行器才应该检查它。
 
-第一版建议支持：
+第一版可以支持这个特殊 guard：
 
 ```toml
 [safety]
@@ -175,7 +175,7 @@ scope_guard_channel = 2
 如果返回 DC，则拒绝执行
 ```
 
-这是为 DP800 接示波器输入的场景准备的。RTM2032 的 `DC` 是 50Ω 直连，测电源时可能损坏输入。
+这是为“把 DP800 输出直接接到示波器探头上验证电源控制是否生效”的特殊接线准备的，不是普通电源控制流程的默认要求。RTM2032 的 `DC` 是 50Ω 直连，在这种接线下测电源可能损坏输入。
 
 注意：guard 只能查询，不能自动修改示波器输入阻抗。
 
@@ -266,9 +266,9 @@ wavebench run check --plan <file>
 
 暂时不连仪器。
 
-### Step 3：实现只读 guard
+### Step 3：实现可选只读 guard
 
-连接 scope，查询 coupling。
+仅当 plan 声明 safety guard 时连接 scope，查询 coupling。
 
 如果 `CHAN2:COUP? == DC`，拒绝执行。
 
