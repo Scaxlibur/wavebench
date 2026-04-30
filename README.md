@@ -192,3 +192,22 @@ auto_recover = true
 ```
 
 If the first capture reports quality warnings such as low samples per cycle, low amplitude, or frequency mismatch, WaveBench runs `scope.auto` and captures again with numbered `_auto_retryN` labels. The maximum retry count and consistency tolerances live in `[quality]` in `wavebench.toml`. If repeated warning captures produce similar frequency/Vpp/mean/duty metrics, the final capture is marked `ok_by_consistency`; all attempt package paths and warnings are kept in `run.json`.
+
+A capture step can also assert summary metrics with `[steps.expect]`:
+
+```toml
+[[steps]]
+kind = "scope.capture"
+channel = 1
+label = "duty_50"
+expect_frequency_hz = 10000
+frequency_tolerance = 0.05
+quality_gate = true
+
+[steps.expect]
+duty_cycle = { min = 0.45, max = 0.55 }
+frequency_estimate_hz = { min = 9500, max = 10500 }
+voltage_vpp_v = { min = 2.8, max = 3.8 }
+```
+
+Failed expectations mark the step and run as `failed`, while keeping the capture package, step record, `run.json`, and `summary.csv` for debugging.

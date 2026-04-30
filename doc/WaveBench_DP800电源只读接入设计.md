@@ -5,11 +5,11 @@
 下一阶段 WaveBench 准备接入 RIGOL DP800 系列可编程直流电源。当前实物为：
 
 ```text
-RIGOL DP832A @ 192.168.123.4
-resource = TCPIP::192.168.123.4::INSTR
+RIGOL DP832A @ <dp800-ip>
+resource = TCPIP::<dp800-ip>::INSTR
 ```
 
-2026-04-30 的实验台状态：DP800 CH1 已由人工设置为 5V 并使能输出，连接到 RTM2032 CH2；示波器上能看到该电压。
+2026-04-30 的实验台状态：DP800 CH1 已由人工设置为 5V 并使能输出，连接到 RTM2032 CH2；示波器上能看到该电压。公开文档不记录真实实验台 IP。公开文档不记录真实实验台 IP。
 
 本设计只覆盖第一步：**只读接入**。不写电压，不写电流，不打开/关闭输出。
 
@@ -68,7 +68,7 @@ CH1: output=ON mode=CV set=5.000V/0.100A measured=5.0114V/0.0000A/0.000W rating=
 
 ```toml
 [power]
-resource = "TCPIP::192.168.123.4::INSTR"
+resource = "TCPIP::<dp800-ip>::INSTR"
 default_channel = 1
 check_errors = true
 ```
@@ -131,7 +131,7 @@ class PowerStatus:
 2026-04-30 已做只读探测：
 
 ```text
-*IDN? -> RIGOL TECHNOLOGIES,DP832A,DP8B225002331,00.01.16
+*IDN? -> RIGOL TECHNOLOGIES,DP832A,<serial>,<firmware>
 :APPL? CH1 -> CH1:30V/3A,5.000,0.100
 :OUTP? CH1 -> ON
 :OUTP:MODE? CH1 -> CV
@@ -141,7 +141,7 @@ class PowerStatus:
 HTTP 也可直连：
 
 ```text
-http://192.168.123.4/ -> HTTP 200
+http://<dp800-ip>/ -> HTTP 200
 ```
 
 HTTP 第一版只作为人工诊断入口，不进入正式 driver。

@@ -186,6 +186,30 @@ duty_consistency = 0.03
 
 如果多次 warning 采集的频率、Vpp、均值、duty 等可比较指标差别不大，最终采集会标记为 `ok_by_consistency`。这表示“虽然单次质量规则仍有 warning，但重复测量稳定，结果可采信”。
 
+## 实验指标断言
+
+`scope.capture` step 可以用 `[steps.expect]` 对采集摘要指标做 min/max 检查：
+
+```toml
+[[steps]]
+kind = "scope.capture"
+channel = 1
+label = "duty_50"
+expect_frequency_hz = 10000
+frequency_tolerance = 0.05
+quality_gate = true
+auto_recover = true
+
+[steps.expect]
+frequency_estimate_hz = { min = 9500, max = 10500 }
+duty_cycle = { min = 0.45, max = 0.55 }
+voltage_vpp_v = { min = 2.8, max = 3.8 }
+```
+
+断言读取的是流程 artifact 中的 `quality` 指标，也就是采集包 `metadata.json` 里的 `waveform.summary` 提炼结果。指标缺失、非数字、低于 `min` 或高于 `max` 都会让该 step 标记为 `failed`，随后整个 run 标记为 `failed`。
+
+失败不会抛掉证据：采集包、step record、`run.json` 与 `summary.csv` 都会保留。这样比较适合电赛调试——先留下波形，再判断实验是否通过。
+
 暂不支持：
 
 ```text
@@ -194,7 +218,7 @@ duty_consistency = 0.03
 表达式
 并行执行
 隐式自动状态恢复
-复杂 pass/fail 判定
+跨步骤表达式和跨步骤表达式和复杂 pass/fail 判定
 ```
 
 循环很诱人，但第一版先不要。可以用多个显式 `[[steps]]` 写清楚，等格式稳定后再考虑 `matrix`。

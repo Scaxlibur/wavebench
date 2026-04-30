@@ -194,11 +194,11 @@ UINT 路线需要 `XORigin? / XINCrement? / YORigin? / YINCrement? / YRESolution
 
 ## 实机验证状态（2026-04-29）
 
-已在 RTM2032（以太网 `192.168.123.2`）上验证：
+已在 RTM2032（以太网 `<rtm2032-ip>`）上验证：
 
 | 项目 | 结果 | 备注 |
 |---|---|---|
-| `*IDN?` | 通过 | `Rohde&Schwarz,RTM2032,5710.0999k32/101662,06.010` |
+| `*IDN?` | 通过 | `Rohde&Schwarz,RTM2032,<serial>,<firmware>` |
 | `AUToscale` + `*OPC?` | 通过 | 接入示波器自带约 1 kHz 方波后，前面板显示恢复正常 |
 | `FORM REAL` / `FORM:BORD LSBF` | 通过 | `RsInstrument.query_bin_or_ascii_float_list()` 可直接解析 REAL binary block |
 | `CHAN1:DATA:HEAD?` | 通过 | 示例返回 `-1.0000E-03,9.9980E-04,10000,1` |

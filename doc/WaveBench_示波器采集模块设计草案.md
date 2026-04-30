@@ -1,4 +1,4 @@
-# 基于 VISA/Python 控制 R&S RTM2032 示波器的开发思路草案
+﻿# 基于 VISA/Python 控制 R&S RTM2032 示波器的开发思路草案
 
 > 目标设备：Rohde & Schwarz RTM2032，属于 RTM2000 系列。
 > 目标语言：Python。
@@ -44,7 +44,7 @@
    本地已下载官方 PDF 到：
 
    ```text
-   C:\Users\username\Desktop\RTM2_UserManual_en_10.pdf
+   <user-home>\Desktop\RTM2_UserManual_en_10.pdf
    ```
 
 3. R&S 使用 `RsInstrument` 远程控制示波器的官方说明
@@ -60,7 +60,7 @@
      ```python
      from RsInstrument import *
 
-     instr = RsInstrument('TCPIP::192.168.1.100::INSTR')
+     instr = RsInstrument('TCPIP::192.0.2.10::INSTR')
      print(instr.query('*IDN?'))
      ```
 
@@ -286,7 +286,7 @@ def open_scope(resource: str, *, id_query: bool = True) -> RsInstrument:
 需要支持的资源字符串：
 
 ```text
-TCPIP::192.168.2.10::INSTR
+TCPIP::192.0.2.10::INSTR
 USB0::0x0AAD::...::INSTR
 ```
 
@@ -391,7 +391,7 @@ trace = rtb.query_bin_or_ascii_float_list('FORM REAL,32;:CHAN1:DATA?')
    ```json
    {
      "instrument": "Rohde&Schwarz,RTM2032,...",
-     "resource": "TCPIP::192.168.2.10::INSTR",
+     "resource": "TCPIP::192.0.2.10::INSTR",
      "channel": 1,
      "points": 10000,
      "format": "REAL,32",
@@ -448,7 +448,7 @@ query_opc() 等待采集完成
 
 ```yaml
 visa:
-  resource: "TCPIP::192.168.2.10::INSTR"
+  resource: "TCPIP::192.0.2.10::INSTR"
   timeout_ms: 10000
   opc_timeout_ms: 30000
 
@@ -505,7 +505,7 @@ import numpy as np
 from RsInstrument import RsInstrument, BinFloatFormat
 
 
-RESOURCE = "TCPIP::192.168.2.10::INSTR"
+RESOURCE = "TCPIP::192.0.2.10::INSTR"
 OUT_DIR = Path("data/raw")
 
 
@@ -576,7 +576,7 @@ if __name__ == "__main__":
 ```python
 import pyvisa
 
-RESOURCE = "TCPIP::192.168.2.10::INSTR"
+RESOURCE = "TCPIP::192.0.2.10::INSTR"
 
 rm = pyvisa.ResourceManager()
 inst = rm.open_resource(RESOURCE)

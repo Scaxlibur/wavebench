@@ -8,7 +8,7 @@ backend = "lan"
 
 # VISA resource string for the oscilloscope.
 # Replace the IP address with your RTM2032 LAN address.
-resource = "TCPIP::192.168.1.100::INSTR"
+resource = "TCPIP::192.0.2.10::INSTR"
 
 # General VISA I/O timeout in milliseconds.
 timeout_ms = 10000
@@ -95,7 +95,7 @@ duty_consistency = 0.03
 driver = "dg4202"
 
 # VISA resource string for the signal generator.
-resource = "TCPIP::192.168.1.101::INSTR"
+resource = "TCPIP::192.0.2.11::INSTR"
 
 # Default channel used when source CLI does not pass --channel.
 default_channel = 1
@@ -115,7 +115,7 @@ settle_ms_after_set_frequency = 500
 driver = "dp800"
 
 # VISA resource string for the power supply.
-resource = "TCPIP::192.168.1.102::INSTR"
+resource = "TCPIP::192.0.2.12::INSTR"
 
 # Default channel used when power CLI does not pass --channel.
 default_channel = 1

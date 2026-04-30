@@ -41,7 +41,7 @@ wavebench scope ...
 ### 查询仪器身份
 
 ```bash
-wavebench scope idn --resource TCPIP::192.168.1.100::INSTR
+wavebench scope idn --resource TCPIP::192.0.2.10::INSTR
 ```
 
 如果没有传入 `--resource`，则从配置文件读取。
@@ -124,7 +124,7 @@ wavebench scope capture --channel 1
 
 ```bash
 wavebench scope capture \
-  --resource TCPIP::192.168.1.100::INSTR \
+  --resource TCPIP::192.0.2.10::INSTR \
   --channel 1 \
   --format real \
   --points dmax \
@@ -188,7 +188,7 @@ wavebench scope shell
 
 ```text
 WaveBench Scope Shell
-Resource: TCPIP::192.168.1.100::INSTR
+Resource: TCPIP::192.0.2.10::INSTR
 
 1. IDN
 2. Status
@@ -249,7 +249,7 @@ TCPIP::<instrument-ip>::INSTR
 ```yaml
 connection:
   backend: lan
-  resource: "TCPIP::192.168.1.100::INSTR"
+  resource: "TCPIP::192.0.2.10::INSTR"
   timeout_ms: 10000
   opc_timeout_ms: 30000
 

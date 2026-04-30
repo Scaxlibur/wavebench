@@ -50,7 +50,7 @@ Set it in wavebench.toml or pass --resource TCPIP::<ip>::INSTR.
 示例提示：
 
 ```text
-ConnectionError: failed to open TCPIP::192.168.1.100::INSTR.
+ConnectionError: failed to open TCPIP::192.0.2.10::INSTR.
 
 Check:
 1. Is the oscilloscope powered on?
@@ -173,7 +173,7 @@ WaveBench 第一阶段有两类日志。
 示例：
 
 ```text
-[INFO] Opening TCPIP::192.168.1.100::INSTR
+[INFO] Opening TCPIP::192.0.2.10::INSTR
 [INFO] IDN: Rohde&Schwarz,RTM2032,...
 [INFO] Running autoscale...
 [INFO] Autoscale done.

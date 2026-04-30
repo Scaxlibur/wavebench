@@ -218,7 +218,7 @@ JSON 只保存元信息，不保存大数组。
   "instrument": {
     "kind": "scope",
     "driver": "RTM2032Scope",
-    "resource": "TCPIP::192.168.1.100::INSTR",
+    "resource": "TCPIP::192.0.2.10::INSTR",
     "idn": "Rohde&Schwarz,RTM2032,..."
   },
   "acquisition": {
@@ -496,3 +496,98 @@ commands.log
 - `rise_time_s` 使用 10% → 90% 定义。
 - `fall_time_s` 使用 90% → 10% 定义。
 - 对正弦或无法可靠识别为两电平的波形，这三个字段返回 `null`，不强行给数。
+
+
+## Run plan 质量恢复与指标断言输出
+
+`run plan` 的流程级输出写入：
+
+```text
+data/runs/YYYYMMDD_HHMMSS_<label>/
+  plan.toml
+  run.json
+  summary.csv
+  steps/
+    00_<kind>.json
+```
+
+`scope.capture` step 的 artifact 会引用采集包，而不是复制波形大文件：
+
+```json
+{
+  "package": "data/raw/20260430_...",
+  "metadata": "data/raw/20260430_.../metadata.json",
+  "quality": {
+    "status": "ok",
+    "warnings": [],
+    "frequency_estimate_hz": 10000.0,
+    "estimated_cycles": 10.0,
+    "points_per_cycle": 1000.0,
+    "voltage_vpp_v": 3.3,
+    "voltage_mean_v": 0.0,
+    "duty_cycle": 0.5,
+    "frequency_error_ratio": 0.0
+  }
+}
+```
+
+当 step 设置 `quality_gate = true` 且没有自动恢复时，会额外写入：
+
+```json
+{
+  "quality_gate": {
+    "status": "warning",
+    "warnings": ["low_cycle_count"]
+  }
+}
+```
+
+当 step 同时设置 `auto_recover = true`，并且初次采集存在 warning，会额外写入：
+
+```json
+{
+  "quality_recovery": {
+    "trigger": "quality_warnings",
+    "max_auto_recover_attempts": 2,
+    "attempts": [
+      {"index": 0, "kind": "initial", "package": "...", "metadata": "...", "quality": {}},
+      {"index": 1, "kind": "auto_retry", "package": "...", "metadata": "...", "quality": {}}
+    ],
+    "consistency": {
+      "status": "consistent",
+      "required_captures": 2,
+      "actual_captures": 2,
+      "checks": {}
+    }
+  }
+}
+```
+
+如果多次 warning 采集的可比较指标稳定，最终 artifact 的 `quality.status` 会变成 `ok_by_consistency`，并带上 `trusted_by_consistency = true`。
+
+当 step 设置 `[steps.expect]`，会额外写入：
+
+```json
+{
+  "expect": {
+    "status": "failed",
+    "checks": {
+      "voltage_mean_v": {
+        "status": "failed",
+        "value": 3.19,
+        "limits": {"min": 4.8, "max": 5.2},
+        "reasons": ["below min 4.8"]
+      }
+    },
+    "failures": ["voltage_mean_v: 3.19 below min 4.8"]
+  }
+}
+```
+
+`expect.status = failed` 会让 step status 变成 `failed`，也会让整个 `run.json.status` 变成 `failed`。采集包仍然保留，方便复盘失败原因。
+
+`summary.csv` 当前包含这些流程级列：
+
+```text
+index,kind,status,package,metadata,quality_status,quality_warnings,recovered,expect_status,expect_failures
+```
