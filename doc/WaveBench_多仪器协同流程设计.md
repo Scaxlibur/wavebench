@@ -137,22 +137,29 @@ source.set_freq
 source.set_func
 source.set_vpp
 source.output
+source.set_duty
 power.status
 power.set
 power.output
 sleep
 ```
 
-当前最小执行器已经实装并实机验证的动作是：
+当前执行器已经实装并实机验证的动作是：
 
 ```text
 power.status
 power.set
 scope.capture
+source.status
+source.set_freq
+source.set_func
+source.set_vpp
+source.set_duty
+source.output
 sleep
 ```
 
-`source.*` step 已经是计划格式的一部分，但尚未接入执行器。下一步再单独实现，避免把三仪器全开和电源安全验证混在同一次变更里。
+`source.set_duty` 对 DG4202 使用 `:SOUR<n>:FUNC:SQU:DCYC <percent>`，参数单位是百分比，范围限制为 `0 < duty_percent < 100`。
 
 暂不支持：
 
@@ -237,7 +244,7 @@ data/runs/YYYYMMDD_HHMMSS_<experiment_label>/
 
 ```text
 run check: 解析 plan 并打印步骤摘要，不连接仪器
-run plan : 执行最小 step set：power.status / power.set / scope.capture / sleep
+run plan : 执行 source / power / scope / sleep 显式 step
 safety  : 按 scope_guard_channel 查询 CHAN<n>:COUP?；命中 require_scope_coupling_not 时拒绝执行
 output  : data/runs/YYYYMMDD_HHMMSS_<label>/run.json + summary.csv + step records
 ```
@@ -252,6 +259,20 @@ sequence = guard -> before capture -> 3.3 V set/capture -> 5 V restore/capture
 scope CH2 mean ≈ 4.8826 V -> 3.1976 V -> 4.8842 V
 DP800 final = output ON, set 5.0 V / 0.1 A, measured ≈ 5.0114 V
 ```
+
+DG4202 duty-cycle + DP800 对照实机 smoke：
+
+```text
+plan = plans/dg4202_duty_10k_power_ch2_check.toml
+run  = data/runs/20260430_153204_dg4202_duty_10k_power_ch2_check
+steps = 24, status = ok
+source CH2 = 10 kHz square, 3.3 Vpp, duty 25% -> 50% -> 75%
+scope CH1 measured duty = 0.25 -> 0.50 -> 0.75
+scope CH2 measured DP800 mean ≈ 4.8919 V -> 4.8876 V
+final source CH2 = SIN / 5000 Hz / 5 Vpp / output ON
+```
+
+100 kHz duty stress note：同样流程在 100 kHz 下 75% 会被当前简单阈值算法读成约 70%，边沿时间已经开始影响高电平占比估计。用于算法验证时优先使用 10 kHz。
 
 ## 实现顺序
 
@@ -318,18 +339,20 @@ sleep
 
 用 DP800 电压阶跃作为第一条实机流程。已在 `data/runs/20260430_150454_dp800_scope_probe_voltage_capture/` 验证通过。
 
-### Step 5：再接 source step（下一步）
+### Step 5：再接 source step（已完成）
 
-接入：
+已接入：
 
 ```text
+source.status
 source.set_freq
 source.set_func
 source.set_vpp
+source.set_duty
 source.output
 ```
 
-不要一开始就全塞进去。
+已用 10 kHz square duty 25% / 50% / 75% 的实机流程验证。
 
 ## 第一条推荐实机流程
 

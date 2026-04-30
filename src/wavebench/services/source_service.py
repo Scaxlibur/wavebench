@@ -102,6 +102,15 @@ class SourceService:
         finally:
             source.close()
 
+    def set_square_duty_cycle(self, channel: int | None, duty_percent: float) -> SourceStatus:
+        source_cfg = self._source_config()
+        channel = source_cfg.default_channel if channel is None else channel
+        source = self._open_source()
+        try:
+            return source.set_square_duty_cycle(channel, duty_percent, check_errors=source_cfg.check_errors)
+        finally:
+            source.close()
+
     def set_amplitude_vpp(self, channel: int | None, value_vpp: float) -> SourceStatus:
         source_cfg = self._source_config()
         channel = source_cfg.default_channel if channel is None else channel

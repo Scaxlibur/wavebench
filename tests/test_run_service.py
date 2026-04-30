@@ -10,6 +10,7 @@ from wavebench.config import (
     ConnectionConfig,
     OutputConfig,
     PowerConfig,
+    SourceConfig,
     ScopeConfig,
     WaveBenchConfig,
     WaveformConfig,
@@ -48,6 +49,14 @@ def make_config(tmp: str) -> WaveBenchConfig:
             save_screenshot=False,
         ),
         source_path=Path(tmp) / "wavebench.toml",
+        source=SourceConfig(
+            driver="dg4202",
+            resource="TCPIP::source::INSTR",
+            default_channel=2,
+            check_errors=True,
+            ensure_fix_mode_on_set_frequency=True,
+            settle_ms_after_set_frequency=0,
+        ),
         power=PowerConfig(
             driver="dp800",
             resource="TCPIP::power::INSTR",
@@ -205,7 +214,7 @@ channel = 1
                 scope_cls.return_value.channel_coupling.assert_called_once_with(2)
                 power_cls.assert_not_called()
 
-    def test_rejects_source_steps_until_executor_supports_them(self):
+    def test_runs_source_steps(self):
         with TemporaryDirectory() as tmp:
             plan = load_run_plan(
                 write_plan(
@@ -214,11 +223,53 @@ channel = 1
 [[steps]]
 kind = "source.status"
 channel = 2
+
+[[steps]]
+kind = "source.set_func"
+channel = 2
+function = "SQU"
+
+[[steps]]
+kind = "source.set_freq"
+channel = 2
+frequency_hz = 1000
+
+[[steps]]
+kind = "source.set_vpp"
+channel = 2
+value_vpp = 3.3
+
+[[steps]]
+kind = "source.set_duty"
+channel = 2
+duty_percent = 25
+
+[[steps]]
+kind = "source.output"
+channel = 2
+state = "on"
 """,
                 )
             )
-            with self.assertRaisesRegex(ConfigError, "does not support step kind"):
-                RunService(config=make_config(tmp), logger=CommandLogger()).run(plan)
+            fake_status = SimpleNamespace(as_dict=lambda: {"channel": 2})
+            with patch("wavebench.services.run_service.SourceService") as source_cls:
+                source = source_cls.return_value
+                source.status.return_value = fake_status
+                source.set_function.return_value = fake_status
+                source.set_frequency.return_value = fake_status
+                source.set_amplitude_vpp.return_value = fake_status
+                source.set_square_duty_cycle.return_value = fake_status
+                source.set_output.return_value = fake_status
+
+                result = RunService(config=make_config(tmp), logger=CommandLogger()).run(plan)
+
+                source.status.assert_called_once_with(channel=2)
+                source.set_function.assert_called_once_with(channel=2, function="SQU")
+                source.set_frequency.assert_called_once_with(channel=2, value_hz=1000.0)
+                source.set_amplitude_vpp.assert_called_once_with(channel=2, value_vpp=3.3)
+                source.set_square_duty_cycle.assert_called_once_with(channel=2, duty_percent=25.0)
+                source.set_output.assert_called_once_with(channel=2, enabled=True)
+                self.assertEqual(len(result.steps), 6)
 
 
 if __name__ == "__main__":

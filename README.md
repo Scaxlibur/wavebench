@@ -22,6 +22,7 @@ It provides small, explicit CLI commands for LAN-connected lab instruments. The 
 - `source set-freq`
 - `source set-func`
 - `source set-vpp`
+- `source set-duty`
 - `source output`
 - `sweep discrete` source-to-scope frequency sweeps
 - optional `--restore-source-state` for discrete sweep
@@ -38,7 +39,7 @@ It provides small, explicit CLI commands for LAN-connected lab instruments. The 
 ### Multi-instrument run plans
 
 - `run check --plan <plan.toml>` parses and summarizes a plan without connecting to instruments
-- `run plan --plan <plan.toml>` executes the current minimal step set: `power.status`, `power.set`, `scope.capture`, and `sleep`
+- `run plan --plan <plan.toml>` executes explicit source, power, scope, and sleep steps
 - optional scope coupling guard can query the configured oscilloscope channel and refuse unsafe power-supply probe plans
 - flow-level output is written under `data/runs/<timestamp>_<label>/` with `run.json`, `summary.csv`, step records, and references to normal capture packages
 
@@ -114,6 +115,18 @@ Turn DP800 output on or off explicitly:
 ```powershell
 python -m wavebench power output --config wavebench.toml --channel 1 off
 python -m wavebench power output --config wavebench.toml --channel 1 on
+```
+
+Set DG4202 square-wave duty cycle in percent:
+
+```powershell
+python -m wavebench source set-duty --config wavebench.toml --channel 2 25
+```
+
+Run the verified duty-cycle analysis plan while also checking DP800 CH1 through scope CH2:
+
+```powershell
+python -m wavebench run plan --config wavebench.toml --plan plans/dg4202_duty_10k_power_ch2_check.toml
 ```
 
 Check a multi-instrument run plan without connecting to instruments:

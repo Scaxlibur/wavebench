@@ -77,6 +77,14 @@ class CliTests(unittest.TestCase):
         self.assertEqual(args.value_vpp, 3.3)
 
 
+    def test_source_set_duty_accepts_percent(self):
+        args = build_parser().parse_args(["source", "set-duty", "--channel", "2", "25"] )
+        self.assertEqual(args.domain, "source")
+        self.assertEqual(args.command, "set-duty")
+        self.assertEqual(args.channel, 2)
+        self.assertEqual(args.duty_percent, 25.0)
+
+
     def test_sweep_discrete_accepts_frequencies_and_channels(self):
         args = build_parser().parse_args([
             "sweep", "discrete",

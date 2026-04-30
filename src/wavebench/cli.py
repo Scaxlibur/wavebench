@@ -90,6 +90,11 @@ def build_parser() -> argparse.ArgumentParser:
     source_set_vpp.add_argument("value_vpp", type=float)
     add_runtime_options(source_set_vpp)
 
+    source_set_duty = source_sub.add_parser("set-duty", help="Set square-wave duty cycle in percent")
+    source_set_duty.add_argument("--channel", type=int, default=None)
+    source_set_duty.add_argument("duty_percent", type=float)
+    add_runtime_options(source_set_duty)
+
     sweep_sub = sweep_parser.add_subparsers(dest="command", required=True)
     sweep_discrete = sweep_sub.add_parser("discrete", help="Run a discrete source-frequency sweep and capture each point")
     sweep_discrete.add_argument("--source-channel", type=int, default=None)
@@ -236,7 +241,8 @@ def _print_power_status(status: PowerStatus) -> None:
 
 
 def _print_source_status(status: SourceStatus) -> None:
-    print(f"CH{status.channel}: output={status.output} func={status.function} freq={status.frequency_hz}Hz amp={status.amplitude}{status.amplitude_unit or ''} offset={status.offset_v}V phase={status.phase_deg}deg")
+    duty = "" if status.square_duty_cycle_percent is None else f" duty={status.square_duty_cycle_percent}%"
+    print(f"CH{status.channel}: output={status.output} func={status.function} freq={status.frequency_hz}Hz amp={status.amplitude}{status.amplitude_unit or ''}{duty} offset={status.offset_v}V phase={status.phase_deg}deg")
     print(f"mode={status.frequency_mode} sweep={status.sweep_enabled}")
     if status.apply_raw is not None:
         print(f"apply={status.apply_raw}")
@@ -325,6 +331,9 @@ def main(argv: list[str] | None = None) -> int:
                 return 0
             if args.command == "set-vpp":
                 _print_source_status(service.set_amplitude_vpp(channel=args.channel, value_vpp=args.value_vpp))
+                return 0
+            if args.command == "set-duty":
+                _print_source_status(service.set_square_duty_cycle(channel=args.channel, duty_percent=args.duty_percent))
                 return 0
         if args.domain == "sweep":
             service = _load_sweep_service(args)

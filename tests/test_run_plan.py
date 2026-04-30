@@ -97,13 +97,19 @@ channel = 2
 state = "ON"
 
 [[steps]]
+kind = "source.set_duty"
+channel = 2
+duty_percent = 25
+
+[[steps]]
 kind = "sleep"
 duration_s = 0.5
 """)
         plan = load_run_plan(path)
         self.assertEqual(plan.steps[0].fields["frequency_hz"], 1000.0)
         self.assertEqual(plan.steps[1].fields["state"], "on")
-        self.assertEqual(plan.steps[2].fields["duration_s"], 0.5)
+        self.assertEqual(plan.steps[2].fields["duty_percent"], 25.0)
+        self.assertEqual(plan.steps[3].fields["duration_s"], 0.5)
 
 
 if __name__ == "__main__":

@@ -15,9 +15,21 @@ from wavebench.logging import CommandLogger
 from wavebench.services.power_service import PowerService
 from wavebench.services.run_plan import RunPlan, RunStep
 from wavebench.services.scope_service import ScopeService
+from wavebench.services.source_service import SourceService
 
 
-_EXECUTABLE_STEP_KINDS = {"power.status", "power.set", "scope.capture", "sleep"}
+_EXECUTABLE_STEP_KINDS = {
+    "power.status",
+    "power.set",
+    "scope.capture",
+    "source.status",
+    "source.set_freq",
+    "source.set_func",
+    "source.set_vpp",
+    "source.set_duty",
+    "source.output",
+    "sleep",
+}
 
 
 @dataclass(frozen=True)
@@ -133,6 +145,39 @@ class RunService:
                 current_limit_a=step.fields["current_limit_a"],
             )
             artifact = {"power_status": _status_payload(status)}
+        elif step.kind == "source.status":
+            status = self._source_service().status(channel=step.fields.get("channel"))
+            artifact = {"source_status": _status_payload(status)}
+        elif step.kind == "source.set_freq":
+            status = self._source_service().set_frequency(
+                channel=step.fields.get("channel"),
+                value_hz=step.fields["frequency_hz"],
+            )
+            artifact = {"source_status": _status_payload(status)}
+        elif step.kind == "source.set_func":
+            status = self._source_service().set_function(
+                channel=step.fields.get("channel"),
+                function=step.fields["function"],
+            )
+            artifact = {"source_status": _status_payload(status)}
+        elif step.kind == "source.set_vpp":
+            status = self._source_service().set_amplitude_vpp(
+                channel=step.fields.get("channel"),
+                value_vpp=step.fields["value_vpp"],
+            )
+            artifact = {"source_status": _status_payload(status)}
+        elif step.kind == "source.set_duty":
+            status = self._source_service().set_square_duty_cycle(
+                channel=step.fields.get("channel"),
+                duty_percent=step.fields["duty_percent"],
+            )
+            artifact = {"source_status": _status_payload(status)}
+        elif step.kind == "source.output":
+            status = self._source_service().set_output(
+                channel=step.fields.get("channel"),
+                enabled=step.fields["state"] == "on",
+            )
+            artifact = {"source_status": _status_payload(status)}
         elif step.kind == "scope.capture":
             capture = self._scope_service_for_capture(plan, step).capture_waveform(
                 channel=step.fields.get("channel", self.config.scope.default_channel),
@@ -157,6 +202,9 @@ class RunService:
 
     def _power_service(self) -> PowerService:
         return PowerService(config=self.config, logger=CommandLogger())
+
+    def _source_service(self) -> SourceService:
+        return SourceService(config=self.config, logger=CommandLogger())
 
     def _scope_service_for_capture(self, plan: RunPlan, step: RunStep) -> ScopeService:
         config = self.config

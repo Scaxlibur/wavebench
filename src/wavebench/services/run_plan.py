@@ -15,6 +15,7 @@ ALLOWED_STEP_KINDS = {
     "source.set_freq",
     "source.set_func",
     "source.set_vpp",
+    "source.set_duty",
     "source.output",
     "power.status",
     "power.set",
@@ -28,6 +29,7 @@ _REQUIRED_FIELDS = {
     "source.set_freq": ("frequency_hz",),
     "source.set_func": ("function",),
     "source.set_vpp": ("value_vpp",),
+    "source.set_duty": ("duty_percent",),
     "source.output": ("state",),
     "sleep": ("duration_s",),
 }
@@ -49,6 +51,7 @@ _OPTIONAL_FIELDS = {
     "source.set_freq": {"channel"},
     "source.set_func": {"channel"},
     "source.set_vpp": {"channel"},
+    "source.set_duty": {"channel"},
     "source.output": {"channel"},
     "power.status": {"channel"},
     "power.set": {"channel"},
@@ -189,6 +192,8 @@ def _normalize_step_fields(index: int, kind: str, fields: dict[str, Any]) -> Non
         fields["function"] = _non_empty_str(fields["function"], f"{prefix}.function")
     elif kind == "source.set_vpp":
         fields["value_vpp"] = _positive_float(fields["value_vpp"], f"{prefix}.value_vpp")
+    elif kind == "source.set_duty":
+        fields["duty_percent"] = _duty_percent(fields["duty_percent"], f"{prefix}.duty_percent")
     elif kind == "sleep":
         fields["duration_s"] = _positive_float(fields["duration_s"], f"{prefix}.duration_s")
 
@@ -235,4 +240,11 @@ def _non_empty_str(value: Any, name: str) -> str:
     result = str(value).strip()
     if not result:
         raise ConfigError(f"{name} must not be empty")
+    return result
+
+
+def _duty_percent(value: Any, name: str) -> float:
+    result = _positive_float(value, name)
+    if result >= 100:
+        raise ConfigError(f"{name} must be < 100")
     return result

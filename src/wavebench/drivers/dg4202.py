@@ -18,6 +18,7 @@ class SourceStatus:
     frequency_mode: str
     sweep_enabled: str
     apply_raw: str | None
+    square_duty_cycle_percent: float | None = None
 
     def as_dict(self) -> dict[str, object]:
         return {
@@ -32,6 +33,7 @@ class SourceStatus:
             "frequency_mode": self.frequency_mode,
             "sweep_enabled": self.sweep_enabled,
             "apply_raw": self.apply_raw,
+            "square_duty_cycle_percent": self.square_duty_cycle_percent,
         }
 
 
@@ -79,6 +81,7 @@ class DG4202Source:
             frequency_mode=self.transport.query(f":SOUR{channel}:FREQ:MODE?"),
             sweep_enabled=self.transport.query(f":SOUR{channel}:SWE:STAT?"),
             apply_raw=self.transport.query(f":SOUR{channel}:APPL?"),
+            square_duty_cycle_percent=self._query_float(f":SOUR{channel}:FUNC:SQU:DCYC?"),
         )
 
     def set_frequency(
@@ -139,6 +142,18 @@ class DG4202Source:
             raise DataError("amplitude must be > 0")
         self.transport.write(f":SOUR{channel}:VOLT:UNIT VPP")
         self.transport.write(f":SOUR{channel}:VOLT {value_vpp:.12g}")
+        status = self.get_status(channel)
+        if check_errors:
+            self.assert_no_errors()
+        return status
+
+
+    def set_square_duty_cycle(self, channel: int, duty_percent: float, *, check_errors: bool = True) -> SourceStatus:
+        if channel < 1:
+            raise DataError("channel must be >= 1")
+        if duty_percent <= 0 or duty_percent >= 100:
+            raise DataError("duty cycle percent must be > 0 and < 100")
+        self.transport.write(f":SOUR{channel}:FUNC:SQU:DCYC {duty_percent:.12g}")
         status = self.get_status(channel)
         if check_errors:
             self.assert_no_errors()
