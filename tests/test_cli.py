@@ -40,6 +40,27 @@ class CliTests(unittest.TestCase):
         self.assertEqual(args.command, "fetch")
         self.assertEqual(args.points, "dmax")
 
+    def test_sweep_discrete_accepts_frequencies_and_channels(self):
+        args = build_parser().parse_args([
+            "sweep", "discrete",
+            "--source-channel", "2",
+            "--scope-channel", "1",
+            "--source-resource", "TCPIP::192.168.123.3::INSTR",
+            "--frequencies", "1000,2000,5000",
+            "--target-cycles", "8",
+            "--frequency-tolerance", "0.02",
+            "--no-csv",
+        ])
+        self.assertEqual(args.domain, "sweep")
+        self.assertEqual(args.command, "discrete")
+        self.assertEqual(args.source_channel, 2)
+        self.assertEqual(args.scope_channel, 1)
+        self.assertEqual(args.source_resource, "TCPIP::192.168.123.3::INSTR")
+        self.assertEqual(args.frequencies, "1000,2000,5000")
+        self.assertEqual(args.target_cycles, 8.0)
+        self.assertEqual(args.frequency_tolerance, 0.02)
+        self.assertTrue(args.no_csv)
+
 
 if __name__ == "__main__":
     unittest.main()

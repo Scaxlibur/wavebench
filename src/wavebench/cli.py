@@ -10,6 +10,7 @@ from .errors import ConfigError, WaveBenchError
 from .logging import CommandLogger
 from .services.scope_service import ScopeService
 from .services.source_service import SourceService
+from .services.sweep_service import SweepService, parse_frequency_list
 
 
 def add_runtime_options(parser: argparse.ArgumentParser) -> None:
@@ -23,6 +24,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     scope_parser = subparsers.add_parser("scope", help="Oscilloscope commands")
     source_parser = subparsers.add_parser("source", help="Signal generator commands")
+    sweep_parser = subparsers.add_parser("sweep", help="Source/scope sweep commands")
     source_sub = source_parser.add_subparsers(dest="command", required=True)
 
     source_idn = source_sub.add_parser("idn", help="Query source *IDN?")
@@ -44,6 +46,19 @@ def build_parser() -> argparse.ArgumentParser:
     source_output.add_argument("--channel", type=int, default=None)
     source_output.add_argument("state", choices=["on", "off", "ON", "OFF"])
     add_runtime_options(source_output)
+
+    sweep_sub = sweep_parser.add_subparsers(dest="command", required=True)
+    sweep_discrete = sweep_sub.add_parser("discrete", help="Run a discrete source-frequency sweep and capture each point")
+    sweep_discrete.add_argument("--source-channel", type=int, default=None)
+    sweep_discrete.add_argument("--scope-channel", type=int, default=None)
+    sweep_discrete.add_argument("--source-resource", default=None, help="Override source VISA resource")
+    sweep_discrete.add_argument("--frequencies", required=True, help="Comma-separated frequency list in Hz, e.g. 1000,2000,5000")
+    sweep_discrete.add_argument("--target-cycles", type=float, default=10.0)
+    sweep_discrete.add_argument("--frequency-tolerance", type=float, default=None)
+    sweep_discrete.add_argument("--label", default="discrete_sweep")
+    sweep_discrete.add_argument("--no-csv", action="store_true", help="Do not save per-point CSV waveform output")
+    sweep_discrete.add_argument("--no-npy", action="store_true", help="Do not save per-point NPY waveform output")
+    add_runtime_options(sweep_discrete)
 
     scope_sub = scope_parser.add_subparsers(dest="command", required=True)
 
@@ -126,6 +141,15 @@ def _load_source_service(args: argparse.Namespace) -> SourceService:
     return SourceService(config=config, logger=CommandLogger())
 
 
+def _load_sweep_service(args: argparse.Namespace) -> SweepService:
+    config = load_config(args.config)
+    if args.resource:
+        config = config.with_resource(args.resource)
+    if getattr(args, "source_resource", None):
+        config = config.with_source_resource(args.source_resource)
+    return SweepService(config=config, logger=CommandLogger())
+
+
 def _print_source_status(status: SourceStatus) -> None:
     print(f"CH{status.channel}: output={status.output} func={status.function} freq={status.frequency_hz}Hz amp={status.amplitude}{status.amplitude_unit or ''} offset={status.offset_v}V phase={status.phase_deg}deg")
     print(f"mode={status.frequency_mode} sweep={status.sweep_enabled}")
@@ -177,6 +201,29 @@ def main(argv: list[str] | None = None) -> int:
                 return 0
             if args.command == "output":
                 _print_source_status(service.set_output(channel=args.channel, enabled=args.state.lower() == "on"))
+                return 0
+        if args.domain == "sweep":
+            service = _load_sweep_service(args)
+            if args.command == "discrete":
+                try:
+                    frequencies = parse_frequency_list(args.frequencies)
+                except ValueError as exc:
+                    raise ConfigError(str(exc)) from exc
+                result = service.run_discrete(
+                    frequencies_hz=frequencies,
+                    source_channel=args.source_channel,
+                    scope_channel=args.scope_channel,
+                    target_cycles=args.target_cycles,
+                    frequency_tolerance=args.frequency_tolerance,
+                    label=args.label,
+                    save_csv=not args.no_csv,
+                    save_npy=not args.no_npy,
+                )
+                for row in result.rows:
+                    measured = "n/a" if row.measured_frequency_hz is None else f"{row.measured_frequency_hz:.6g}"
+                    ok = "n/a" if row.frequency_in_tolerance is None else str(row.frequency_in_tolerance)
+                    print(f"{row.index}: set={row.set_frequency_hz:.6g}Hz measured≈{measured}Hz ok={ok} package={row.package}")
+                print(f"summary={result.summary_path}")
                 return 0
         if args.domain == "scope":
             service = _load_service(args)
