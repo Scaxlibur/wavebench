@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import StrEnum
 import json
 from pathlib import Path
 from typing import Any
@@ -11,6 +12,30 @@ from wavebench.errors import DataError
 
 DAC14_MIN = 0
 DAC14_MAX = 16383
+
+
+class DG4000ByteOrder(StrEnum):
+    BIG = "big"
+    LITTLE = "little"
+
+
+@dataclass(frozen=True)
+class DG4000DacBlock:
+    command: bytes
+    points: int
+    data_bytes: int
+    byte_order: DG4000ByteOrder
+
+    @property
+    def header(self) -> bytes:
+        prefix = b":DATA:DAC VOLATILE,"
+        if not self.command.startswith(prefix):
+            raise DataError("unexpected DG4000 DAC command prefix")
+        payload = self.command[len(prefix):]
+        if not payload.startswith(b"#"):
+            raise DataError("unexpected DG4000 DAC binary block header")
+        digits = int(chr(payload[1]))
+        return payload[: 2 + digits]
 
 
 @dataclass(frozen=True)
@@ -76,6 +101,50 @@ def validate_waveform_name(name: str) -> str:
     if any(char not in allowed for char in normalized):
         raise DataError("waveform name may only contain letters, digits, underscore, and hyphen")
     return normalized
+
+
+def build_dg4000_dac14_binary_block(
+    waveform: ArbitraryWaveform,
+    *,
+    byte_order: str | DG4000ByteOrder = DG4000ByteOrder.BIG,
+) -> DG4000DacBlock:
+    """Build a DG4000 DATA:DAC VOLATILE binary block without talking to the instrument.
+
+    The DG4000 guide confirms the 14-bit DAC value range and the IEEE-style
+    # length block. It does not explicitly document byte order, so hardware
+    validation must confirm the selected order before live upload is enabled.
+    """
+
+    try:
+        order = DG4000ByteOrder(byte_order)
+    except ValueError as exc:
+        raise DataError("byte_order must be big or little") from exc
+    points = waveform.dac14.astype(np.uint16, copy=False)
+    if points.size < 2 or points.size > 16384:
+        raise DataError("DG4000 DATA:DAC requires 2..16384 points")
+    if np.any(points < DAC14_MIN) or np.any(points > DAC14_MAX):
+        raise DataError("DG4000 DATA:DAC values must be within 0..16383")
+    endian_dtype = ">u2" if order is DG4000ByteOrder.BIG else "<u2"
+    payload = points.astype(endian_dtype, copy=False).tobytes()
+    length = str(len(payload)).encode("ascii")
+    if len(length) > 9:
+        raise DataError("DG4000 binary block payload is too large")
+    header = b"#" + str(len(length)).encode("ascii") + length
+    command = b":DATA:DAC VOLATILE," + header + payload
+    return DG4000DacBlock(command=command, points=int(points.size), data_bytes=len(payload), byte_order=order)
+
+
+def write_dg4000_dac14_binary_block(
+    waveform: ArbitraryWaveform,
+    output_path: str | Path,
+    *,
+    byte_order: str | DG4000ByteOrder = DG4000ByteOrder.BIG,
+) -> Path:
+    block = build_dg4000_dac14_binary_block(waveform, byte_order=byte_order)
+    path = Path(output_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(block.command)
+    return path
 
 
 def write_arbitrary_payload_json(

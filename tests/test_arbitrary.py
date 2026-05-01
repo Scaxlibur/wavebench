@@ -4,7 +4,7 @@ from tempfile import TemporaryDirectory
 
 import numpy as np
 
-from wavebench.arbitrary import load_arbitrary_waveform, normalize_peak, normalized_to_dac14, validate_waveform_name, write_arbitrary_payload_json
+from wavebench.arbitrary import build_dg4000_dac14_binary_block, load_arbitrary_waveform, normalize_peak, normalized_to_dac14, validate_waveform_name, write_arbitrary_payload_json, write_dg4000_dac14_binary_block
 from wavebench.errors import DataError
 
 
@@ -64,6 +64,33 @@ class ArbitraryWaveformTests(unittest.TestCase):
             text = output.read_text(encoding="utf-8")
             self.assertIn('"format": "wavebench.arbitrary.v1"', text)
             self.assertIn('"values": [', text)
+
+
+    def test_builds_dg4000_dac_binary_block_big_endian_by_default(self):
+        with TemporaryDirectory() as tmp:
+            path = Path(tmp) / "waveform.npy"
+            np.save(path, np.array([-1.0, 0.0, 1.0]))
+            waveform = load_arbitrary_waveform(path)
+
+            block = build_dg4000_dac14_binary_block(waveform)
+
+            self.assertEqual(block.points, 3)
+            self.assertEqual(block.data_bytes, 6)
+            self.assertTrue(block.command.startswith(b":DATA:DAC VOLATILE,#16"))
+            self.assertEqual(block.command[-6:], bytes([0x00, 0x00, 0x20, 0x00, 0x3F, 0xFF]))
+
+    def test_writes_dg4000_dac_binary_block_little_endian_when_requested(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            path = root / "waveform.npy"
+            output = root / "arb.scpi"
+            np.save(path, np.array([-1.0, 0.0, 1.0]))
+            waveform = load_arbitrary_waveform(path)
+
+            written = write_dg4000_dac14_binary_block(waveform, output, byte_order="little")
+
+            self.assertEqual(written, output)
+            self.assertEqual(output.read_bytes()[-6:], bytes([0x00, 0x00, 0x00, 0x20, 0xFF, 0x3F]))
 
     def test_validate_waveform_name_rejects_spaces(self):
         with self.assertRaises(DataError):

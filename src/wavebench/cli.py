@@ -14,7 +14,7 @@ from .drivers.dg4202 import SourceStatus
 from .drivers.dp800 import PowerStatus
 from .drivers.rtm2032 import WaveformData
 from .errors import ConfigError, WaveBenchError
-from .arbitrary import load_arbitrary_waveform, validate_waveform_name, write_arbitrary_payload_json
+from .arbitrary import load_arbitrary_waveform, validate_waveform_name, write_arbitrary_payload_json, write_dg4000_dac14_binary_block
 from .logging import CommandLogger
 from .services.scope_service import ScopeService
 from .services.source_service import SourceService
@@ -130,6 +130,8 @@ def build_parser() -> argparse.ArgumentParser:
     source_arb_load.add_argument("--max-points", type=int, default=16384, help="Point-count guard; DG4000 specs list 16K arbitrary length")
     source_arb_load.add_argument("--output-on", action="store_true", help="Allow output state change after upload; ignored by dry-run")
     source_arb_load.add_argument("--export-payload", default=None, help="Write a WaveBench JSON payload artifact for manual review or future upload")
+    source_arb_load.add_argument("--export-dg4000-dac-block", default=None, help="Write a DG4000 DATA:DAC VOLATILE binary SCPI command; offline artifact only")
+    source_arb_load.add_argument("--dg4000-byte-order", choices=("big", "little"), default="big", help="Byte order for DG4000 uint16 DAC block; hardware validation still required")
     source_arb_load.add_argument("--dry-run", action="store_true", help="Only validate/build payload summary; do not connect to the instrument")
     add_runtime_options(source_arb_load)
 
@@ -525,6 +527,15 @@ def _print_arbitrary_waveform_summary(args: argparse.Namespace) -> None:
             offset_v=args.offset,
         )
         print(f"payload={output}")
+    if args.export_dg4000_dac_block:
+        output = write_dg4000_dac14_binary_block(
+            waveform,
+            args.export_dg4000_dac_block,
+            byte_order=args.dg4000_byte_order,
+        )
+        print(f"dg4000_dac_block={output}")
+        print(f"dg4000_byte_order={args.dg4000_byte_order}")
+        print("dg4000_byte_order_status=pending_hardware_validation")
     print("dry_run=true")
     print("upload=blocked_until_dg4202_scpi_is_confirmed")
 

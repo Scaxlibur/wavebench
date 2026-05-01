@@ -296,7 +296,7 @@ wavebench run report <run_dir> --include-spectrum
 - [x] Report artifact manifest
 - [x] Report visual polish（小范围 CSS，不引入前端框架）
 
-最终 release 门禁与暂缓事项见：`doc/WaveBench_v0.3_收口清单.md`。
+最终 release 门禁与暂缓事项见：`WaveBench_v0.3_收口清单.md`。
 
 ## v0.3 暂不做
 

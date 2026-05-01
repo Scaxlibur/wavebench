@@ -82,7 +82,7 @@ source arb upload -> source output -> scope capture -> run report / capture insp
 
 ### A. DG4202 任意波形命令确认表
 
-新增 `doc/DG4202_任意波形命令确认表.md`。
+新增 `../instruments/DG4202_任意波形命令确认表.md`。
 
 要确认：
 
