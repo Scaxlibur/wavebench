@@ -93,19 +93,19 @@ python -m wavebench scope capture --config wavebench.toml --channel 1 --label sm
 Set DG4202 source frequency:
 
 ```powershell
-python -m wavebench source set-freq --config wavebench.toml --channel 2 1000
+python -m wavebench source set-freq --config wavebench.toml --channel 1 1000
 ```
 
 Run a discrete source-to-scope frequency sweep:
 
 ```powershell
-python -m wavebench sweep discrete --config wavebench.toml --source-channel 2 --scope-channel 1 --frequencies 1000,2000,5000,10000 --target-cycles 10 --frequency-tolerance 0.05 --label dg4202_discrete_sweep --no-csv
+python -m wavebench sweep discrete --config wavebench.toml --source-channel 1 --scope-channel 1 --frequencies 1000,2000,5000,10000 --target-cycles 10 --frequency-tolerance 0.05 --label dg4202_discrete_sweep --no-csv
 ```
 
 Run a sweep with explicit source state restoration:
 
 ```powershell
-python -m wavebench sweep discrete --config wavebench.toml --source-channel 2 --scope-channel 1 --frequencies 1000,5000 --source-func SQU --source-vpp 3.3 --restore-source-state --no-csv
+python -m wavebench sweep discrete --config wavebench.toml --source-channel 1 --scope-channel 1 --frequencies 1000,5000 --source-func SQU --source-vpp 3.3 --restore-source-state --no-csv
 ```
 
 Read DP800 power status:
@@ -130,25 +130,25 @@ python -m wavebench power output --config wavebench.toml --channel 1 on
 Set DG4202 triangle/ramp output without changing output state:
 
 ```powershell
-python -m wavebench source set-func --config wavebench.toml --channel 2 triangle
+python -m wavebench source set-func --config wavebench.toml --channel 1 triangle
 ```
 
 Set DG4202 square-wave duty cycle in percent:
 
 ```powershell
-python -m wavebench source set-duty --config wavebench.toml --channel 2 25
+python -m wavebench source set-duty --config wavebench.toml --channel 1 25
 ```
 
 Probe DG4202 arbitrary-waveform SCPI candidates without upload or output-state changes:
 
 ```powershell
-python -m wavebench source arb-probe --config wavebench.toml --channel 2 --probe-timeout-ms 700
+python -m wavebench source arb-probe --config wavebench.toml --channel 1 --probe-timeout-ms 700
 ```
 
 Prepare an arbitrary waveform payload offline. This validates a CSV/NPY waveform and prints normalized + 14-bit DAC payload ranges, but does not connect to the instrument until DG4202 arbitrary-waveform SCPI is confirmed:
 
 ```powershell
-python -m wavebench source arb-load --channel 2 --file waveform.npy --name REI_ARB --amplitude 1.0 --offset 0.0 --export-payload data/arb/REI_ARB.json --dry-run
+python -m wavebench source arb-load --channel 1 --file waveform.npy --name REI_ARB --amplitude 1.0 --offset 0.0 --export-payload data/arb/REI_ARB.json --dry-run
 ```
 
 Run the verified duty-cycle analysis plan while also checking DP800 CH1 through scope CH2:
@@ -157,7 +157,7 @@ Run the verified duty-cycle analysis plan while also checking DP800 CH1 through 
 python -m wavebench run plan --config wavebench.toml --plan plans/dg4202_duty_10k_power_ch2_check.toml
 ```
 
-Run a screenshot-report demo. This plan drives DG4202 CH2, captures RTM2032 CH1 with a screenshot, restores the source state, checks frequency plus visible signal amplitude, then generates a static report from the saved run package:
+Run a screenshot-report demo. This plan drives DG4202 CH1, captures RTM2032 CH1 with a screenshot, restores the source state, checks frequency plus visible signal amplitude, then generates a static report from the saved run package:
 
 ```powershell
 python -m wavebench run check --config wavebench.toml --plan plans/demo_dg4202_10k_screenshot_report.toml
@@ -188,7 +188,7 @@ Run plans can opt into source restoration:
 ```toml
 [restore]
 source_state = true
-source_channel = 2
+source_channel = 1
 ```
 
 When enabled, WaveBench snapshots output/function/frequency/amplitude and square duty cycle before executing steps, then restores them on success or failure.

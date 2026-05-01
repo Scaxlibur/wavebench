@@ -1,6 +1,6 @@
 # Minimal source -> scope -> offline FFT closure plan.
-# Assumes DG4202 CH2 is connected to RTM2032 CH1.
-# The plan restores DG4202 CH2 state after capture. FFT validation is done with:
+# Assumes DG4202 CH1 is connected to RTM2032 CH1.
+# The plan restores DG4202 CH1 state after capture. FFT validation is done with:
 #   python -m wavebench capture inspect <capture_dir> --fft --fft-expect-frequency 1000 --harmonics 7
 
 [experiment]
@@ -9,30 +9,30 @@ label = "closure_sine_1k_fft"
 
 [restore]
 source_state = true
-source_channel = 2
+source_channel = 1
 
 [[steps]]
 kind = "source.status"
-channel = 2
+channel = 1
 
 [[steps]]
 kind = "source.set_func"
-channel = 2
+channel = 1
 function = "sin"
 
 [[steps]]
 kind = "source.set_vpp"
-channel = 2
+channel = 1
 value_vpp = 1.0
 
 [[steps]]
 kind = "source.set_freq"
-channel = 2
+channel = 1
 frequency_hz = 1000
 
 [[steps]]
 kind = "source.output"
-channel = 2
+channel = 1
 state = "on"
 
 [[steps]]

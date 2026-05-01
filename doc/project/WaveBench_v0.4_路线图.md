@@ -106,7 +106,7 @@ source arb upload -> source output -> scope capture -> run report / capture insp
 
 当前实现：
 
-- `wavebench source arb-probe --channel 2` 已提供 query-only 探针。
+- `wavebench source arb-probe --channel 1` 已提供 query-only 探针。
 - 探针只发送以 `?` 结尾的候选命令，并逐条读取 `SYST:ERR?`。
 - 2026-05-01 已上机运行第一批候选；未确认出可用任意波形上传/选择命令。
 - 下一步优先找官方 programming guide 或 RAF/Ultra Station 文件工作流，避免继续盲试。
@@ -159,7 +159,7 @@ DG4202Source.upload_arbitrary_waveform(
 候选命令：
 
 ```bash
-wavebench source arb-load --channel 2 --file waveform.npy --name REI_ARB --amplitude 1.0 --offset 0.0 --dry-run
+wavebench source arb-load --channel 1 --file waveform.npy --name REI_ARB --amplitude 1.0 --offset 0.0 --dry-run
 ```
 
 可选：
@@ -179,7 +179,7 @@ wavebench source arb-load --channel 2 --file waveform.npy --name REI_ARB --ampli
 新增 demo plan 或手工验证流程：
 
 ```text
-DG4202 CH2 arbitrary waveform -> RTM2032 CH1 capture -> run report
+DG4202 CH1 arbitrary waveform -> RTM2032 CH1 capture -> run report
 ```
 
 验收标准：

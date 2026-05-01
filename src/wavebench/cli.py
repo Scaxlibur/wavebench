@@ -131,7 +131,7 @@ def build_parser() -> argparse.ArgumentParser:
     source_arb_load.add_argument("--output-on", action="store_true", help="Allow output state change after upload; ignored by dry-run")
     source_arb_load.add_argument("--export-payload", default=None, help="Write a WaveBench JSON payload artifact for manual review or future upload")
     source_arb_load.add_argument("--export-dg4000-dac-block", default=None, help="Write a DG4000 DATA:DAC VOLATILE binary SCPI command; offline artifact only")
-    source_arb_load.add_argument("--dg4000-byte-order", choices=("big", "little"), default="big", help="Byte order for DG4000 uint16 DAC block; hardware validation still required")
+    source_arb_load.add_argument("--dg4000-byte-order", choices=("big", "little"), default="little", help="Byte order for DG4000 uint16 DAC block; DG4202 hardware validation confirmed little-endian")
     source_arb_load.add_argument("--dry-run", action="store_true", help="Only validate/build payload summary; do not connect to the instrument")
     add_runtime_options(source_arb_load)
 
@@ -535,7 +535,7 @@ def _print_arbitrary_waveform_summary(args: argparse.Namespace) -> None:
         )
         print(f"dg4000_dac_block={output}")
         print(f"dg4000_byte_order={args.dg4000_byte_order}")
-        print("dg4000_byte_order_status=pending_hardware_validation")
+        print("dg4000_byte_order_status=dg4202_hardware_validated_2026-05-01")
     print("dry_run=true")
     print("upload=blocked_until_dg4202_scpi_is_confirmed")
 

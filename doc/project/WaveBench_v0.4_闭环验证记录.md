@@ -7,7 +7,7 @@
 实验连接：
 
 ```text
-DG4202 CH2 -> RTM2032 CH1
+DG4202 CH1 -> RTM2032 CH1
 source resource = TCPIP::192.168.123.3::INSTR
 scope resource  = TCPIP::192.168.123.2::INSTR
 ```

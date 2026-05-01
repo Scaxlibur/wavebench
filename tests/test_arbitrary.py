@@ -66,7 +66,7 @@ class ArbitraryWaveformTests(unittest.TestCase):
             self.assertIn('"values": [', text)
 
 
-    def test_builds_dg4000_dac_binary_block_big_endian_by_default(self):
+    def test_builds_dg4000_dac_binary_block_little_endian_by_default(self):
         with TemporaryDirectory() as tmp:
             path = Path(tmp) / "waveform.npy"
             np.save(path, np.array([-1.0, 0.0, 1.0]))
@@ -77,7 +77,7 @@ class ArbitraryWaveformTests(unittest.TestCase):
             self.assertEqual(block.points, 3)
             self.assertEqual(block.data_bytes, 6)
             self.assertTrue(block.command.startswith(b":DATA:DAC VOLATILE,#16"))
-            self.assertEqual(block.command[-6:], bytes([0x00, 0x00, 0x20, 0x00, 0x3F, 0xFF]))
+            self.assertEqual(block.command[-6:], bytes([0x00, 0x00, 0x00, 0x20, 0xFF, 0x3F]))
 
     def test_writes_dg4000_dac_binary_block_little_endian_when_requested(self):
         with TemporaryDirectory() as tmp:

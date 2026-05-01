@@ -106,13 +106,13 @@ def validate_waveform_name(name: str) -> str:
 def build_dg4000_dac14_binary_block(
     waveform: ArbitraryWaveform,
     *,
-    byte_order: str | DG4000ByteOrder = DG4000ByteOrder.BIG,
+    byte_order: str | DG4000ByteOrder = DG4000ByteOrder.LITTLE,
 ) -> DG4000DacBlock:
     """Build a DG4000 DATA:DAC VOLATILE binary block without talking to the instrument.
 
     The DG4000 guide confirms the 14-bit DAC value range and the IEEE-style
-    # length block. It does not explicitly document byte order, so hardware
-    validation must confirm the selected order before live upload is enabled.
+    # length block. It does not explicitly document byte order. 2026-05-01 DG4202
+    hardware probing showed DATA:VAL? echoes little-endian DAC blocks correctly.
     """
 
     try:
@@ -138,7 +138,7 @@ def write_dg4000_dac14_binary_block(
     waveform: ArbitraryWaveform,
     output_path: str | Path,
     *,
-    byte_order: str | DG4000ByteOrder = DG4000ByteOrder.BIG,
+    byte_order: str | DG4000ByteOrder = DG4000ByteOrder.LITTLE,
 ) -> Path:
     block = build_dg4000_dac14_binary_block(waveform, byte_order=byte_order)
     path = Path(output_path)
