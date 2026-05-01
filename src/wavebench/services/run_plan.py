@@ -15,6 +15,7 @@ ALLOWED_STEP_KINDS = {
     "scope.capture",
     "source.status",
     "source.set_freq",
+    "source.arb_load",
     "source.set_func",
     "source.set_vpp",
     "source.set_duty",
@@ -29,6 +30,7 @@ _REQUIRED_FIELDS = {
     "power.set": ("voltage_v", "current_limit_a"),
     "power.output": ("state",),
     "source.set_freq": ("frequency_hz",),
+    "source.arb_load": ("file", "frequency_hz", "amplitude_vpp"),
     "source.set_func": ("function",),
     "source.set_vpp": ("value_vpp",),
     "source.set_duty": ("duty_percent",),
@@ -58,6 +60,7 @@ _OPTIONAL_FIELDS = {
     },
     "source.status": {"channel"},
     "source.set_freq": {"channel"},
+    "source.arb_load": {"channel", "offset_v", "sample_rate_hz", "max_points", "byte_order", "output_on"},
     "source.set_func": {"channel"},
     "source.set_vpp": {"channel"},
     "source.set_duty": {"channel"},
@@ -73,6 +76,7 @@ _STEP_NOTES = {
     "scope.auto": "Explicit RTM2032 AUToscale. It changes front-panel settings and is never inserted implicitly.",
     "scope.capture": "Trigger one acquisition, write a capture package, and optionally evaluate quality/expect checks. Use target_vpp or vertical_scale_v_per_div to fit the waveform vertically before capture.",
     "source.status": "Read signal-generator channel state without changing output.",
+    "source.arb_load": "Upload a DG4202 arbitrary waveform from CSV/NPY using DATA:DAC VOLATILE; output remains unchanged unless output_on = true.",
     "source.set_freq": "Set fixed source frequency in Hz; config may force FIX mode first.",
     "source.set_func": "Set source waveform function, for example SIN or SQU.",
     "source.set_vpp": "Set source amplitude in Vpp.",
@@ -329,6 +333,23 @@ def _normalize_step_fields(index: int, kind: str, fields: dict[str, Any]) -> Non
         fields["state"] = state
     elif kind == "source.set_freq":
         fields["frequency_hz"] = _positive_float(fields["frequency_hz"], f"{prefix}.frequency_hz")
+    elif kind == "source.arb_load":
+        fields["file"] = _non_empty_str(fields["file"], f"{prefix}.file")
+        fields["frequency_hz"] = _positive_float(fields["frequency_hz"], f"{prefix}.frequency_hz")
+        fields["amplitude_vpp"] = _positive_float(fields["amplitude_vpp"], f"{prefix}.amplitude_vpp")
+        if "offset_v" in fields:
+            fields["offset_v"] = _finite_float(fields["offset_v"], f"{prefix}.offset_v")
+        if "sample_rate_hz" in fields:
+            fields["sample_rate_hz"] = _positive_float(fields["sample_rate_hz"], f"{prefix}.sample_rate_hz")
+        if "max_points" in fields:
+            fields["max_points"] = _positive_int(fields["max_points"], f"{prefix}.max_points")
+        if "byte_order" in fields:
+            byte_order = _non_empty_str(fields["byte_order"], f"{prefix}.byte_order").lower()
+            if byte_order not in {"little", "big"}:
+                raise ConfigError(f"{prefix}.byte_order must be little or big")
+            fields["byte_order"] = byte_order
+        if "output_on" in fields and not isinstance(fields["output_on"], bool):
+            raise ConfigError(f"{prefix}.output_on must be true or false")
     elif kind == "source.set_func":
         fields["function"] = _non_empty_str(fields["function"], f"{prefix}.function")
     elif kind == "source.set_vpp":

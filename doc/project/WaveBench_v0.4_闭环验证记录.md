@@ -144,4 +144,4 @@ harmonic_7≈7000 Hz amplitude≈0.0086892 V
 
 判断：闭环成立。3/5/7 次谐波明显，符合三角波奇次谐波特征；Vpp 与设置一致，report 可展示采集包与截图。测试后 DG4202 CH1 已恢复到 `SIN / 1000 Hz / 5 Vpp / output=ON`。
 
-后续不要立刻扩成任意波编辑器。优先补：公开示例说明、run plan 对 arbitrary upload step 的最小支持，或者 report 中更清楚地展示 expected vs measured。
+后续不要立刻扩成任意波编辑器。`source.arb_load` run-plan step 已补上，可把上传、等待、采集、expect 检查放进同一个 plan；下一步再考虑 report 中更清楚地展示 expected vs measured。

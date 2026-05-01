@@ -27,6 +27,7 @@ _EXECUTABLE_STEP_KINDS = {
     "scope.capture",
     "source.status",
     "source.set_freq",
+    "source.arb_load",
     "source.set_func",
     "source.set_vpp",
     "source.set_duty",
@@ -184,6 +185,19 @@ class RunService:
             status = self._source_service().set_frequency(
                 channel=step.fields.get("channel"),
                 value_hz=step.fields["frequency_hz"],
+            )
+            artifact = {"source_status": _status_payload(status)}
+        elif step.kind == "source.arb_load":
+            status = self._source_service().upload_arbitrary_waveform(
+                channel=step.fields.get("channel"),
+                file_path=step.fields["file"],
+                playback_frequency_hz=step.fields["frequency_hz"],
+                amplitude_vpp=step.fields["amplitude_vpp"],
+                offset_v=step.fields.get("offset_v", 0.0),
+                sample_rate_hz=step.fields.get("sample_rate_hz"),
+                max_points=step.fields.get("max_points", 16384),
+                byte_order=step.fields.get("byte_order", "little"),
+                output_on=step.fields.get("output_on", False),
             )
             artifact = {"source_status": _status_payload(status)}
         elif step.kind == "source.set_func":

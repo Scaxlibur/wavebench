@@ -115,6 +115,55 @@ kind = "power.status"
         with self.assertRaises(ConfigError):
             load_run_plan(path)
 
+
+    def test_source_arb_load_validates_fields(self):
+        path = self._write_plan("""
+[[steps]]
+kind = "source.arb_load"
+channel = 1
+file = "waveform.npy"
+frequency_hz = 1000
+amplitude_vpp = 1.0
+offset_v = -0.1
+sample_rate_hz = 100000
+max_points = 1024
+byte_order = "LITTLE"
+output_on = true
+""")
+        plan = load_run_plan(path)
+        fields = plan.steps[0].fields
+        self.assertEqual(plan.steps[0].kind, "source.arb_load")
+        self.assertEqual(fields["frequency_hz"], 1000.0)
+        self.assertEqual(fields["amplitude_vpp"], 1.0)
+        self.assertEqual(fields["offset_v"], -0.1)
+        self.assertEqual(fields["sample_rate_hz"], 100000.0)
+        self.assertEqual(fields["max_points"], 1024)
+        self.assertEqual(fields["byte_order"], "little")
+        self.assertTrue(fields["output_on"])
+
+    def test_source_arb_load_rejects_bad_byte_order_and_non_bool_output(self):
+        path = self._write_plan("""
+[[steps]]
+kind = "source.arb_load"
+file = "waveform.npy"
+frequency_hz = 1000
+amplitude_vpp = 1.0
+byte_order = "middle"
+""")
+        with self.assertRaisesRegex(ConfigError, "byte_order must be"):
+            load_run_plan(path)
+
+        path = self._write_plan("""
+[[steps]]
+kind = "source.arb_load"
+file = "waveform.npy"
+frequency_hz = 1000
+amplitude_vpp = 1.0
+output_on = "yes"
+""")
+        with self.assertRaisesRegex(ConfigError, "output_on must be true or false"):
+            load_run_plan(path)
+
     def test_source_and_sleep_steps_validate_fields(self):
         path = self._write_plan("""
 [[steps]]
@@ -146,6 +195,7 @@ duration_s = 0.5
     def test_format_run_plan_schema_lists_expect_and_power_output(self):
         text = format_run_plan_schema()
         self.assertIn("power.output", text)
+        self.assertIn("source.arb_load", text)
         self.assertIn("[steps.expect]", text)
         self.assertIn("frequency_estimate_hz", text)
 

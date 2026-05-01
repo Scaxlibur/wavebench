@@ -164,6 +164,32 @@ Run the verified duty-cycle analysis plan while also checking DP800 CH1 through 
 python -m wavebench run plan --config wavebench.toml --plan plans/dg4202_duty_10k_power_ch2_check.toml
 ```
 
+Run a run-plan arbitrary-waveform closure. Use `source.arb_load` for the upload step, keep output explicit, then capture and check the visible waveform:
+
+```toml
+[[steps]]
+kind = "source.arb_load"
+channel = 1
+file = "data/arb/triangle_1024.npy"
+frequency_hz = 1000
+amplitude_vpp = 1.0
+offset_v = 0.0
+output_on = true
+
+[[steps]]
+kind = "scope.capture"
+channel = 1
+label = "arb_triangle_1k"
+window_frequency_hz = 1000
+target_cycles = 10
+target_vpp = 1.0
+screenshot = true
+
+[steps.expect]
+voltage_vpp_v = { min = 0.8, max = 1.2 }
+frequency_estimate_hz = { min = 950, max = 1050 }
+```
+
 Run a screenshot-report demo. This plan drives DG4202 CH1, captures RTM2032 CH1 with a screenshot, restores the source state, checks frequency plus visible signal amplitude, then generates a static report from the saved run package:
 
 ```powershell

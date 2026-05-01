@@ -493,6 +493,47 @@ channel = 1
                 scope_cls.return_value.channel_coupling.assert_called_once_with(2)
                 power_cls.assert_not_called()
 
+
+    def test_runs_source_arbitrary_load_step(self):
+        with TemporaryDirectory() as tmp:
+            plan = load_run_plan(
+                write_plan(
+                    tmp,
+                    """
+[[steps]]
+kind = "source.arb_load"
+channel = 1
+file = "waveform.npy"
+frequency_hz = 1000
+amplitude_vpp = 1.0
+offset_v = 0.1
+sample_rate_hz = 100000
+max_points = 1024
+byte_order = "little"
+output_on = true
+""",
+                )
+            )
+            fake_status = SimpleNamespace(as_dict=lambda: {"channel": 1, "function": "USER"})
+            with patch("wavebench.services.run_service.SourceService") as source_cls:
+                source = source_cls.return_value
+                source.upload_arbitrary_waveform.return_value = fake_status
+
+                result = RunService(config=make_config(tmp), logger=CommandLogger()).run(plan)
+
+                source.upload_arbitrary_waveform.assert_called_once_with(
+                    channel=1,
+                    file_path="waveform.npy",
+                    playback_frequency_hz=1000.0,
+                    amplitude_vpp=1.0,
+                    offset_v=0.1,
+                    sample_rate_hz=100000.0,
+                    max_points=1024,
+                    byte_order="little",
+                    output_on=True,
+                )
+                self.assertEqual(result.steps[0].artifact["source_status"]["function"], "USER")
+
     def test_runs_source_steps(self):
         with TemporaryDirectory() as tmp:
             plan = load_run_plan(
