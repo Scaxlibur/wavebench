@@ -71,3 +71,23 @@ class WaveformHeaderTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class VerticalScaleTests(unittest.TestCase):
+    def test_capture_sets_vertical_scale_before_single(self):
+        class Transport(FakeTransport):
+            def __init__(self):
+                super().__init__({"CHAN1:DATA:HEAD?": "0,1,2,1"})
+            def query_float_list(self, command):
+                self.queries.append(command)
+                return [0.0, 1.0]
+            def query_opc(self):
+                self.queries.append("*OPC?")
+                return "1"
+        transport = Transport()
+        scope = RTM2032Scope(transport=transport)
+
+        scope.capture_waveform(channel=1, points="DEF", check_errors=False, vertical_scale_v_per_div=0.2)
+
+        self.assertIn("CHAN1:SCAL 0.2", transport.writes)
+        self.assertIn("CHAN1:POS 0", transport.writes)
+        self.assertLess(transport.writes.index("CHAN1:SCAL 0.2"), transport.writes.index("SINGle"))

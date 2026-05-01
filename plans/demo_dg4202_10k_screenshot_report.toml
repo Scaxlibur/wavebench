@@ -52,6 +52,7 @@ window_frequency_hz = 10000
 target_cycles = 10
 expect_frequency_hz = 10000
 frequency_tolerance = 0.05
+target_vpp = 3.3
 save_csv = false
 screenshot = true
 quality_gate = true

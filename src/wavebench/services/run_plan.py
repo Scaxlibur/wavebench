@@ -47,6 +47,8 @@ _OPTIONAL_FIELDS = {
         "window_frequency_hz",
         "target_cycles",
         "frequency_tolerance",
+        "vertical_scale_v_per_div",
+        "target_vpp",
         "save_csv",
         "save_npy",
         "screenshot",
@@ -69,7 +71,7 @@ _OPTIONAL_FIELDS = {
 
 _STEP_NOTES = {
     "scope.auto": "Explicit RTM2032 AUToscale. It changes front-panel settings and is never inserted implicitly.",
-    "scope.capture": "Trigger one acquisition, write a capture package, and optionally evaluate quality/expect checks.",
+    "scope.capture": "Trigger one acquisition, write a capture package, and optionally evaluate quality/expect checks. Use target_vpp or vertical_scale_v_per_div to fit the waveform vertically before capture.",
     "source.status": "Read signal-generator channel state without changing output.",
     "source.set_freq": "Set fixed source frequency in Hz; config may force FIX mode first.",
     "source.set_func": "Set source waveform function, for example SIN or SQU.",
@@ -297,6 +299,11 @@ def _normalize_step_fields(index: int, kind: str, fields: dict[str, Any]) -> Non
         ):
             if field in fields:
                 fields[field] = _positive_float(fields[field], f"{prefix}.{field}")
+        if "target_vpp" in fields:
+            fields["target_vpp"] = _positive_float(fields["target_vpp"], f"{prefix}.target_vpp")
+            fields.setdefault("vertical_scale_v_per_div", fields["target_vpp"] / 5.0)
+        if "vertical_scale_v_per_div" in fields:
+            fields["vertical_scale_v_per_div"] = _positive_float(fields["vertical_scale_v_per_div"], f"{prefix}.vertical_scale_v_per_div")
         if "target_cycles" in fields:
             window_frequency = fields.get("window_frequency_hz") or fields.get("expect_frequency_hz")
             if window_frequency is None:

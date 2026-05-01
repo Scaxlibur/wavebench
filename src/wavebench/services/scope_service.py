@@ -168,6 +168,8 @@ class ScopeService:
             "target_cycles": self.config.waveform.target_cycles,
             "window_frequency_hz": self.config.waveform.window_frequency_hz,
             "frequency_tolerance_ratio": self.config.waveform.frequency_tolerance_ratio,
+            "vertical_scale_v_per_div": self.config.waveform.vertical_scale_v_per_div,
+            "target_vpp": self.config.waveform.target_vpp,
         }
         screenshot_path: Path | None = None
         screenshot_error: dict[str, str] | None = None
@@ -175,12 +177,15 @@ class ScopeService:
             scope = self._open_scope()
             try:
                 instrument_idn = scope.idn()
-                waveform = scope.capture_waveform(
-                    channel=channel,
-                    points=self.config.waveform.points,
-                    check_errors=self.config.scope.check_errors,
-                    time_range_s=self.config.waveform.time_range_s,
-                )
+                capture_kwargs = {
+                    "channel": channel,
+                    "points": self.config.waveform.points,
+                    "check_errors": self.config.scope.check_errors,
+                    "time_range_s": self.config.waveform.time_range_s,
+                }
+                if self.config.waveform.vertical_scale_v_per_div is not None:
+                    capture_kwargs["vertical_scale_v_per_div"] = self.config.waveform.vertical_scale_v_per_div
+                waveform = scope.capture_waveform(**capture_kwargs)
                 screenshot_path, screenshot_error = self._write_screenshot_file(package_dir, scope)
             finally:
                 scope.close()
@@ -238,6 +243,8 @@ class ScopeService:
             "target_cycles": self.config.waveform.target_cycles,
             "window_frequency_hz": self.config.waveform.window_frequency_hz,
             "frequency_tolerance_ratio": self.config.waveform.frequency_tolerance_ratio,
+            "vertical_scale_v_per_div": self.config.waveform.vertical_scale_v_per_div,
+            "target_vpp": self.config.waveform.target_vpp,
         }
         waveforms: dict[int, WaveformData] = {}
         screenshot_path: Path | None = None
@@ -247,12 +254,15 @@ class ScopeService:
             try:
                 instrument_idn = scope.idn()
                 for channel in channels:
-                    waveforms[channel] = scope.capture_waveform(
-                        channel=channel,
-                        points=self.config.waveform.points,
-                        check_errors=self.config.scope.check_errors,
-                        time_range_s=self.config.waveform.time_range_s,
-                    )
+                    capture_kwargs = {
+                        "channel": channel,
+                        "points": self.config.waveform.points,
+                        "check_errors": self.config.scope.check_errors,
+                        "time_range_s": self.config.waveform.time_range_s,
+                    }
+                    if self.config.waveform.vertical_scale_v_per_div is not None:
+                        capture_kwargs["vertical_scale_v_per_div"] = self.config.waveform.vertical_scale_v_per_div
+                    waveforms[channel] = scope.capture_waveform(**capture_kwargs)
                 screenshot_path, screenshot_error = self._write_screenshot_file(package_dir, scope)
             finally:
                 scope.close()

@@ -179,6 +179,8 @@ def build_parser() -> argparse.ArgumentParser:
     capture.add_argument("--window-frequency", type=float, default=None, help="Frequency in Hz used only to compute target-cycle time range")
     capture.add_argument("--target-cycles", type=float, default=None, help="Set time range to target_cycles / window_frequency")
     capture.add_argument("--frequency-tolerance", type=float, default=None, help="Relative frequency tolerance, e.g. 0.05 for 5 percent")
+    capture.add_argument("--vertical-scale", type=float, default=None, help="Set channel vertical scale in V/div before capture")
+    capture.add_argument("--target-vpp", type=float, default=None, help="Set vertical scale from expected Vpp; defaults to about 5 vertical divisions")
     capture.add_argument("--no-csv", action="store_true", help="Do not save CSV waveform output")
     capture.add_argument("--no-npy", action="store_true", help="Do not save NPY waveform output")
     capture.add_argument("--screenshot", action="store_true", help="Save a PNG screenshot artifact in the capture package")
@@ -198,11 +200,22 @@ def _load_service(args: argparse.Namespace) -> ScopeService:
         or getattr(args, "frequency_tolerance", None) is not None
         or getattr(args, "target_cycles", None) is not None
         or getattr(args, "window_frequency", None) is not None
+        or getattr(args, "vertical_scale", None) is not None
+        or getattr(args, "target_vpp", None) is not None
     ):
         expected_frequency = getattr(args, "expect_frequency", None)
         window_frequency = getattr(args, "window_frequency", None) or expected_frequency
         target_cycles = getattr(args, "target_cycles", None)
         time_range = getattr(args, "time_range", None)
+        vertical_scale = getattr(args, "vertical_scale", None)
+        target_vpp = getattr(args, "target_vpp", None)
+        if target_vpp is not None:
+            if target_vpp <= 0:
+                raise ConfigError("--target-vpp must be > 0")
+            if vertical_scale is None:
+                vertical_scale = vertical_scale_from_vpp(target_vpp)
+        if vertical_scale is not None and vertical_scale <= 0:
+            raise ConfigError("--vertical-scale must be > 0")
         if target_cycles is not None:
             if window_frequency is None or window_frequency <= 0:
                 raise ConfigError("--target-cycles requires --window-frequency or --expect-frequency > 0")
@@ -217,6 +230,8 @@ def _load_service(args: argparse.Namespace) -> ScopeService:
             frequency_tolerance_ratio=getattr(args, "frequency_tolerance", None),
             target_cycles=target_cycles,
             window_frequency_hz=window_frequency,
+            vertical_scale_v_per_div=vertical_scale,
+            target_vpp=target_vpp,
         )
     if getattr(args, "no_csv", False) or getattr(args, "no_npy", False) or getattr(args, "screenshot", False):
         config = config.with_output_overrides(

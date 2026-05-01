@@ -24,6 +24,13 @@ class CliTests(unittest.TestCase):
         self.assertEqual(args.frequency_tolerance, 0.1)
         self.assertTrue(args.no_csv)
 
+    def test_capture_accepts_target_vpp_and_vertical_scale(self):
+        args = build_parser().parse_args([
+            "scope", "capture", "--target-vpp", "1.0", "--vertical-scale", "0.25"
+        ])
+        self.assertEqual(args.target_vpp, 1.0)
+        self.assertEqual(args.vertical_scale, 0.25)
+
     def test_capture_accepts_screenshot_flag(self):
         args = build_parser().parse_args(["scope", "capture", "--screenshot"])
         self.assertEqual(args.command, "capture")

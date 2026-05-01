@@ -107,7 +107,7 @@ def render_run_report_html(run: RunPackage, output_dir: str | Path | None = None
     screenshots_by_step = {item.step_index: item for item in screenshots}
     rows = "\n".join(_step_row(step, screenshots_by_step.get(str(step.get("index", "")))) for step in run.steps)
     if not rows:
-        rows = '<tr><td colspan="9">No steps recorded.</td></tr>'
+        rows = '<tr><td colspan="9">没有记录步骤 / No steps recorded.</td></tr>'
     screenshots_block = _screenshots_block(screenshots)
     expectations_block = _expectations_block(expectations)
     signals_block = _signals_block(signals)
@@ -115,17 +115,17 @@ def render_run_report_html(run: RunPackage, output_dir: str | Path | None = None
     summary_note = "present" if run.summary_csv_path is not None else "missing"
     error_block = ""
     if error:
-        error_block = f"<h2>Run error</h2><pre>{escape(str(error))}</pre>"
+        error_block = f"<h2>运行错误 / Run error</h2><pre>{escape(str(error))}</pre>"
     restore_block = ""
     if restore:
-        restore_block = f"<p><b>Restore:</b> {escape(str(restore.get('status', 'unknown')))}</p>"
+        restore_block = f"<p><b>恢复 / Restore:</b> {escape(str(restore.get('status', 'unknown')))}</p>"
     return f"""<!doctype html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
 <meta charset="utf-8">
-<title>WaveBench run report - {escape(str(experiment.get('label', run.path.name)))}</title>
+<title>WaveBench 运行报告 / Run report - {escape(str(experiment.get('label', run.path.name)))}</title>
 <style>
-body {{ font-family: system-ui, sans-serif; line-height: 1.45; margin: 2rem; color: #1f2933; background: #f8fafc; }}
+body {{ font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif; line-height: 1.45; margin: 2rem; color: #1f2933; background: #f8fafc; }}
 h1, h2 {{ color: #102a43; }}
 h2 {{ margin-top: 1.75rem; }}
 table {{ border-collapse: collapse; width: 100%; margin: 0.5rem 0 1.25rem; background: #fff; }}
@@ -147,6 +147,7 @@ code {{ background: #f0f4f8; padding: 0.1rem 0.25rem; border-radius: 3px; }}
 .summary-card .value.ok {{ background: #e3f9e5; }}
 .summary-card .value.failed {{ background: #ffe3e3; }}
 .summary-card .value.warning {{ background: #fff3c4; }}
+.muted {{ color: #627d98; font-weight: 500; }}
 .ok {{ color: #0b6b3a; }}
 .failed {{ color: #a61b1b; }}
 .warning {{ color: #915930; }}
@@ -155,17 +156,17 @@ code {{ background: #f0f4f8; padding: 0.1rem 0.25rem; border-radius: 3px; }}
 </style>
 </head>
 <body>
-<h1>WaveBench run report</h1>
+<h1>WaveBench 运行报告 <span class="muted">Run report</span></h1>
 {_summary_block(summary)}
-<p><b>Run directory:</b> <code>{escape(str(run.path))}</code></p>
-<p><b>Status:</b> <span class="{escape(run.status)}">{escape(run.status)}</span></p>
-<p><b>Experiment:</b> {escape(str(experiment.get('name', '')))} / {escape(str(experiment.get('label', '')))}</p>
+<p><b>运行目录 / Run directory:</b> <code>{escape(str(run.path))}</code></p>
+<p><b>状态 / Status:</b> <span class="{escape(run.status)}">{escape(run.status)}</span></p>
+<p><b>实验 / Experiment:</b> {escape(str(experiment.get('name', '')))} / {escape(str(experiment.get('label', '')))}</p>
 <p><b>summary.csv:</b> {summary_note}</p>
 {restore_block}
 {error_block}
-<h2>Steps</h2>
+<h2>步骤 / Steps</h2>
 <table>
-<thead><tr><th>#</th><th>Kind</th><th>Status</th><th>Package</th><th>Screenshot</th><th>Quality</th><th>Expect</th><th>Warnings</th><th>Failures</th></tr></thead>
+<thead><tr><th>#</th><th>类型 / Kind</th><th>状态 / Status</th><th>采集包 / Package</th><th>截图 / Screenshot</th><th>质量 / Quality</th><th>预期 / Expect</th><th>警告 / Warnings</th><th>失败项 / Failures</th></tr></thead>
 <tbody>
 {rows}
 </tbody>
@@ -243,19 +244,19 @@ def _build_report_manifest(run: RunPackage, *, output_dir: Path, report_path: Pa
 
 
 def _summary_block(summary: ReportSummary) -> str:
-    return f"""<h2>Summary</h2>
+    return f"""<h2>摘要 / Summary</h2>
 <section class="summary-grid">
-{_summary_card("Status", summary.status, css_class=summary.status)}
-{_summary_card("Experiment", summary.experiment_label)}
-{_summary_card("Steps", str(summary.total_steps))}
-{_summary_card("Failed steps", str(summary.failed_steps), css_class="failed" if summary.failed_steps else "ok")}
-{_summary_card("Captures", str(summary.capture_count))}
-{_summary_card("Warnings", str(summary.warning_count), css_class="warning" if summary.warning_count else "ok")}
-{_summary_card("Expect failed", str(summary.failed_expect_count), css_class="failed" if summary.failed_expect_count else "ok")}
-{_summary_card("Screenshots", str(summary.screenshot_count))}
-{_summary_card("Restore", summary.restore_status)}
-{_summary_card("Primary frequency", summary.primary_frequency)}
-{_summary_card("Primary Vpp", summary.primary_vpp)}
+{_summary_card("状态 / Status", summary.status, css_class=summary.status)}
+{_summary_card("实验 / Experiment", summary.experiment_label)}
+{_summary_card("步骤 / Steps", str(summary.total_steps))}
+{_summary_card("失败步骤 / Failed steps", str(summary.failed_steps), css_class="failed" if summary.failed_steps else "ok")}
+{_summary_card("采集 / Captures", str(summary.capture_count))}
+{_summary_card("警告 / Warnings", str(summary.warning_count), css_class="warning" if summary.warning_count else "ok")}
+{_summary_card("预期失败 / Expect failed", str(summary.failed_expect_count), css_class="failed" if summary.failed_expect_count else "ok")}
+{_summary_card("截图 / Screenshots", str(summary.screenshot_count))}
+{_summary_card("恢复 / Restore", summary.restore_status)}
+{_summary_card("主频率 / Primary frequency", summary.primary_frequency)}
+{_summary_card("主峰峰值 / Primary Vpp", summary.primary_vpp)}
 </section>
 """
 
@@ -274,9 +275,9 @@ def _expectations_block(expectations: list[ReportExpectationRow]) -> str:
     if not expectations:
         return ""
     rows = "\n".join(_expectation_row(row) for row in expectations)
-    return f"""<h2>Expected vs measured</h2>
+    return f"""<h2>预期 vs 实测 / Expected vs measured</h2>
 <table class="expectations-table">
-<thead><tr><th>Step</th><th>Kind</th><th>Metric</th><th>Expected</th><th>Measured</th><th>Status</th><th>Details</th></tr></thead>
+<thead><tr><th>步骤 / Step</th><th>类型 / Kind</th><th>指标 / Metric</th><th>预期 / Expected</th><th>实测 / Measured</th><th>状态 / Status</th><th>细节 / Details</th></tr></thead>
 <tbody>
 {rows}
 </tbody>
@@ -446,7 +447,7 @@ def _screenshots_block(screenshots: list[ReportScreenshot]) -> str:
     if not screenshots:
         return ""
     cards = "\n".join(_screenshot_card(item) for item in screenshots)
-    return f"""<h2>Screenshots</h2>
+    return f"""<h2>截图 / Screenshots</h2>
 <div class="screenshot-grid">
 {cards}
 </div>
@@ -457,7 +458,7 @@ def _waveform_previews_block(previews: list[ReportWaveformPreview]) -> str:
     if not previews:
         return ""
     cards = "\n".join(_waveform_preview_card(item) for item in previews)
-    return f"""<h2>Waveform previews</h2>
+    return f"""<h2>波形预览 / Waveform previews</h2>
 <div class="waveform-grid">
 {cards}
 </div>
@@ -479,9 +480,9 @@ def _signals_block(signals: list[ReportSignalSummary]) -> str:
     if not signals:
         return ""
     rows = "\n".join(_signal_row(item) for item in signals)
-    return f"""<h2>Signal analysis</h2>
+    return f"""<h2>信号分析 / Signal analysis</h2>
 <table>
-<thead><tr><th>Step</th><th>Channel</th><th>Samples</th><th>Frequency</th><th>Vpp</th><th>RMS</th><th>Mean</th><th>Duty</th><th>Rise</th><th>Fall</th><th>Warnings</th></tr></thead>
+<thead><tr><th>步骤 / Step</th><th>通道 / Channel</th><th>采样点 / Samples</th><th>频率 / Frequency</th><th>Vpp</th><th>RMS</th><th>Mean</th><th>Duty</th><th>Rise</th><th>Fall</th><th>警告 / Warnings</th></tr></thead>
 <tbody>
 {rows}
 </tbody>

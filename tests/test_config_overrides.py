@@ -96,6 +96,19 @@ class ConfigOverrideTests(unittest.TestCase):
         self.assertEqual(updated.waveform.window_frequency_hz, 1000.0)
         self.assertEqual(updated.waveform.target_cycles, 10.0)
 
+    def test_waveform_overrides_vertical_scale_and_target_vpp(self):
+        config = WaveBenchConfig(
+            connection=ConnectionConfig("lan", "TCPIP::127.0.0.1::INSTR", 100, 100),
+            scope=ScopeConfig("rtm2032", None, 1, False, True),
+            autoscale=AutoscaleConfig(True, True),
+            waveform=WaveformConfig("real", "lsbf", "dmax"),
+            output=OutputConfig(Path("data/raw"), "timestamp_label", True, True, True, True, False),
+            source_path=Path("test.toml"),
+        )
+        updated = config.with_waveform_overrides(vertical_scale_v_per_div=0.2, target_vpp=1.0)
+        self.assertEqual(updated.waveform.vertical_scale_v_per_div, 0.2)
+        self.assertEqual(updated.waveform.target_vpp, 1.0)
+
 
 if __name__ == "__main__":
     unittest.main()

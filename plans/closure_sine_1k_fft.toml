@@ -48,5 +48,6 @@ window_frequency_hz = 1000
 target_cycles = 10
 expect_frequency_hz = 1000
 frequency_tolerance = 0.05
+target_vpp = 1.0
 save_csv = false
 save_npy = true

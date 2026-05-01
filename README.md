@@ -86,7 +86,7 @@ python -m wavebench scope idn --config wavebench.toml
 Capture from the oscilloscope:
 
 ```powershell
-python -m wavebench scope capture --config wavebench.toml --channel 1 --label smoke --points def --window-frequency 1000 --target-cycles 10 --expect-frequency 1000 --frequency-tolerance 0.05 --no-csv
+python -m wavebench scope capture --config wavebench.toml --channel 1 --label smoke --points def --window-frequency 1000 --target-cycles 10 --expect-frequency 1000 --frequency-tolerance 0.05 --target-vpp 1.0 --no-csv
 python -m wavebench scope capture --config wavebench.toml --channel 1 --label smoke_with_screen --points def --no-csv --screenshot
 ```
 
@@ -222,10 +222,13 @@ label = "after_auto_if_needed"
 expect_frequency_hz = 100000
 window_frequency_hz = 100000
 target_cycles = 10
+target_vpp = 3.3
 screenshot = true
 quality_gate = true
 auto_recover = true
 ```
+
+`target_vpp` sets RTM2032 vertical scale before capture using roughly five vertical divisions (`target_vpp / 5`). Use `vertical_scale_v_per_div` when the plan needs an exact V/div value. This is explicit like `target_cycles`; WaveBench does not run autoscale silently.
 
 If the first capture reports quality warnings such as low samples per cycle, low amplitude, or frequency mismatch, WaveBench runs `scope.auto` and captures again with numbered `_auto_retryN` labels. The maximum retry count and consistency tolerances live in `[quality]` in `wavebench.toml`. If repeated warning captures produce similar frequency/Vpp/mean/duty metrics, the final capture is marked `ok_by_consistency`; all attempt package paths and warnings are kept in `run.json`.
 

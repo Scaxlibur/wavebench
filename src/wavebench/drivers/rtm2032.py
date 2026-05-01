@@ -117,6 +117,15 @@ class RTM2032Scope:
             raise DataError("time range must be > 0")
         self.transport.write(f"TIMebase:RANGe {time_range_s:.12g}")
 
+    def set_vertical_scale(self, channel: int, scale_v_per_div: float) -> None:
+        if channel < 1:
+            raise DataError("channel must be >= 1")
+        if scale_v_per_div <= 0:
+            raise DataError("vertical scale must be > 0")
+        self.transport.write(f"CHAN{channel}:STAT ON")
+        self.transport.write(f"CHAN{channel}:SCAL {scale_v_per_div:.12g}")
+        self.transport.write(f"CHAN{channel}:POS 0")
+
     def _setup_real_waveform_transfer(self, channel: int, points: str) -> None:
         if channel < 1:
             raise DataError("channel must be >= 1")
@@ -140,11 +149,13 @@ class RTM2032Scope:
         return waveform
 
     def capture_waveform(
-        self, channel: int, points: str = "dmax", check_errors: bool = True, time_range_s: float | None = None
+        self, channel: int, points: str = "dmax", check_errors: bool = True, time_range_s: float | None = None, vertical_scale_v_per_div: float | None = None
     ) -> WaveformData:
         self.transport.write("*CLS")
         if time_range_s is not None:
             self.set_time_range(time_range_s)
+        if vertical_scale_v_per_div is not None:
+            self.set_vertical_scale(channel, vertical_scale_v_per_div)
         self._setup_real_waveform_transfer(channel=channel, points=points)
         self.transport.write("SINGle")
         try:

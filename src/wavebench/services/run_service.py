@@ -338,6 +338,8 @@ class RunService:
                 frequency_tolerance_ratio=step.fields.get("frequency_tolerance"),
                 target_cycles=step.fields.get("target_cycles"),
                 window_frequency_hz=step.fields.get("window_frequency_hz"),
+                vertical_scale_v_per_div=step.fields.get("vertical_scale_v_per_div"),
+                target_vpp=step.fields.get("target_vpp"),
             )
         if "save_csv" in step.fields or "save_npy" in step.fields or "screenshot" in step.fields:
             config = config.with_output_overrides(
@@ -534,6 +536,8 @@ def _has_waveform_overrides(step: RunStep) -> bool:
             "frequency_tolerance",
             "target_cycles",
             "window_frequency_hz",
+            "vertical_scale_v_per_div",
+            "target_vpp",
         )
     )
 

@@ -68,21 +68,21 @@ class RunReportTests(unittest.TestCase):
             output = write_run_report_html(load_run_package(run_dir))
 
             html = output.read_text(encoding="utf-8")
-            self.assertIn("<h2>Summary</h2>", html)
-            self.assertIn('<div class="label">Status</div><div class="value ok">ok</div>', html)
-            self.assertIn('<div class="label">Captures</div><div class="value">1</div>', html)
-            self.assertIn('<div class="label">Screenshots</div><div class="value">1</div>', html)
-            self.assertIn('<div class="label">Primary frequency</div><div class="value">10000 Hz</div>', html)
-            self.assertIn('<div class="label">Primary Vpp</div><div class="value">0.8 V</div>', html)
-            self.assertIn("<h2>Screenshots</h2>", html)
+            self.assertIn("<h2>摘要 / Summary</h2>", html)
+            self.assertIn('<div class="label">状态 / Status</div><div class="value ok">ok</div>', html)
+            self.assertIn('<div class="label">采集 / Captures</div><div class="value">1</div>', html)
+            self.assertIn('<div class="label">截图 / Screenshots</div><div class="value">1</div>', html)
+            self.assertIn('<div class="label">主频率 / Primary frequency</div><div class="value">10000 Hz</div>', html)
+            self.assertIn('<div class="label">主峰峰值 / Primary Vpp</div><div class="value">0.8 V</div>', html)
+            self.assertIn("<h2>截图 / Screenshots</h2>", html)
             self.assertIn('src="../../raw/cap1/screenshot.png"', html)
             self.assertIn('href="../../raw/cap1/screenshot.png"', html)
             self.assertIn('class="screenshot-thumb"', html)
-            self.assertIn("<h2>Signal analysis</h2>", html)
+            self.assertIn("<h2>信号分析 / Signal analysis</h2>", html)
             self.assertIn("10000 Hz", html)
             self.assertIn("0.8 V", html)
             self.assertIn("50%", html)
-            self.assertIn("<h2>Waveform previews</h2>", html)
+            self.assertIn("<h2>波形预览 / Waveform previews</h2>", html)
             self.assertIn("Step 3 ch1", html)
             self.assertIn("<polyline", html)
             manifest = json.loads((run_dir / "report-assets" / "manifest.json").read_text(encoding="utf-8"))
@@ -105,12 +105,12 @@ class RunReportTests(unittest.TestCase):
 
             html = render_run_report_html(load_run_package(run_dir), output_dir=run_dir)
 
-            self.assertIn("<h2>Summary</h2>", html)
-            self.assertIn('<div class="label">Steps</div><div class="value">1</div>', html)
-            self.assertIn('<div class="label">Captures</div><div class="value">0</div>', html)
-            self.assertNotIn("<h2>Screenshots</h2>", html)
-            self.assertNotIn("<h2>Signal analysis</h2>", html)
-            self.assertIn("<th>Screenshot</th>", html)
+            self.assertIn("<h2>摘要 / Summary</h2>", html)
+            self.assertIn('<div class="label">步骤 / Steps</div><div class="value">1</div>', html)
+            self.assertIn('<div class="label">采集 / Captures</div><div class="value">0</div>', html)
+            self.assertNotIn("<h2>截图 / Screenshots</h2>", html)
+            self.assertNotIn("<h2>信号分析 / Signal analysis</h2>", html)
+            self.assertIn("<th>截图 / Screenshot</th>", html)
 
     def test_run_report_summary_counts_failed_expectations_and_warnings(self):
         with TemporaryDirectory() as tmp:
@@ -171,11 +171,11 @@ class RunReportTests(unittest.TestCase):
 
             html = render_run_report_html(load_run_package(run_dir), output_dir=run_dir)
 
-            self.assertIn('<div class="label">Status</div><div class="value failed">failed</div>', html)
-            self.assertIn('<div class="label">Failed steps</div><div class="value failed">1</div>', html)
-            self.assertIn('<div class="label">Warnings</div><div class="value warning">1</div>', html)
-            self.assertIn('<div class="label">Expect failed</div><div class="value failed">1</div>', html)
-            self.assertIn('<div class="label">Restore</div><div class="value">ok</div>', html)
+            self.assertIn('<div class="label">状态 / Status</div><div class="value failed">failed</div>', html)
+            self.assertIn('<div class="label">失败步骤 / Failed steps</div><div class="value failed">1</div>', html)
+            self.assertIn('<div class="label">警告 / Warnings</div><div class="value warning">1</div>', html)
+            self.assertIn('<div class="label">预期失败 / Expect failed</div><div class="value failed">1</div>', html)
+            self.assertIn('<div class="label">恢复 / Restore</div><div class="value">ok</div>', html)
 
     def test_run_report_lists_multi_channel_signal_analysis(self):
         with TemporaryDirectory() as tmp:
@@ -241,7 +241,7 @@ class RunReportTests(unittest.TestCase):
 
             html = render_run_report_html(load_run_package(run_dir), output_dir=run_dir)
 
-            self.assertIn("<h2>Signal analysis</h2>", html)
+            self.assertIn("<h2>信号分析 / Signal analysis</h2>", html)
             self.assertIn("1000 Hz", html)
             self.assertIn("2000 Hz", html)
             self.assertIn("25%", html)
@@ -288,7 +288,7 @@ class RunReportTests(unittest.TestCase):
             output = write_run_report_html(load_run_package(run_dir))
             html = output.read_text(encoding="utf-8")
 
-            self.assertIn("<h2>Waveform previews</h2>", html)
+            self.assertIn("<h2>波形预览 / Waveform previews</h2>", html)
             self.assertIn("waveform preview unavailable", html)
             self.assertIn("FileNotFoundError", html)
             manifest = json.loads((run_dir / "report-assets" / "manifest.json").read_text(encoding="utf-8"))
@@ -351,7 +351,7 @@ class RunReportTests(unittest.TestCase):
 
             html = render_run_report_html(load_run_package(run_dir), output_dir=run_dir)
 
-            self.assertIn("<h2>Expected vs measured</h2>", html)
+            self.assertIn("<h2>预期 vs 实测 / Expected vs measured</h2>", html)
             self.assertIn("<td>frequency_estimate_hz</td>", html)
             self.assertIn("<td>9500..10500</td>", html)
             self.assertIn("<td>10000</td>", html)
@@ -372,7 +372,7 @@ class RunReportTests(unittest.TestCase):
 
             html = render_run_report_html(load_run_package(run_dir), output_dir=run_dir)
 
-            self.assertNotIn("<h2>Expected vs measured</h2>", html)
+            self.assertNotIn("<h2>预期 vs 实测 / Expected vs measured</h2>", html)
 
 
 if __name__ == "__main__":

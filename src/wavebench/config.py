@@ -23,6 +23,14 @@ def normalize_waveform_points(points: str) -> str:
     except KeyError as exc:
         raise ConfigError("waveform points must be one of: def, max, dmax") from exc
 
+
+def vertical_scale_from_vpp(target_vpp: float, *, target_divisions: float = 5.0) -> float:
+    if target_vpp <= 0:
+        raise ConfigError("target Vpp must be > 0")
+    if target_divisions <= 0:
+        raise ConfigError("target vertical divisions must be > 0")
+    return target_vpp / target_divisions
+
 @dataclass(frozen=True)
 class ConnectionConfig:
     backend: str
@@ -53,6 +61,8 @@ class WaveformConfig:
     frequency_tolerance_ratio: float = 0.05
     target_cycles: float | None = None
     window_frequency_hz: float | None = None
+    vertical_scale_v_per_div: float | None = None
+    target_vpp: float | None = None
 
 @dataclass(frozen=True)
 class SourceConfig:
@@ -173,6 +183,8 @@ class WaveBenchConfig:
         frequency_tolerance_ratio: float | None = None,
         target_cycles: float | None = None,
         window_frequency_hz: float | None = None,
+        vertical_scale_v_per_div: float | None = None,
+        target_vpp: float | None = None,
     ) -> "WaveBenchConfig":
         return WaveBenchConfig(
             connection=self.connection,
@@ -193,6 +205,12 @@ class WaveBenchConfig:
                 ),
                 target_cycles=self.waveform.target_cycles if target_cycles is None else target_cycles,
                 window_frequency_hz=self.waveform.window_frequency_hz if window_frequency_hz is None else window_frequency_hz,
+                vertical_scale_v_per_div=(
+                    self.waveform.vertical_scale_v_per_div
+                    if vertical_scale_v_per_div is None
+                    else vertical_scale_v_per_div
+                ),
+                target_vpp=self.waveform.target_vpp if target_vpp is None else target_vpp,
             ),
             output=self.output,
             source_path=self.source_path,
@@ -324,6 +342,12 @@ def load_config(path: str | Path = "wavebench.toml") -> WaveBenchConfig:
                 frequency_tolerance_ratio=float(w.get("frequency_tolerance_ratio", 0.05)),
                 target_cycles=float(w["target_cycles"]) if "target_cycles" in w else None,
                 window_frequency_hz=float(w["window_frequency_hz"]) if "window_frequency_hz" in w else None,
+                vertical_scale_v_per_div=(
+                    float(w["vertical_scale_v_per_div"])
+                    if "vertical_scale_v_per_div" in w
+                    else None
+                ),
+                target_vpp=float(w["target_vpp"]) if "target_vpp" in w else None,
             ),
             output=OutputConfig(
                 directory=Path(str(o.get("directory", "data/raw"))),
@@ -367,6 +391,10 @@ def load_config(path: str | Path = "wavebench.toml") -> WaveBenchConfig:
         raise ConfigError("waveform.target_cycles must be > 0")
     if config.waveform.window_frequency_hz is not None and config.waveform.window_frequency_hz <= 0:
         raise ConfigError("waveform.window_frequency_hz must be > 0")
+    if config.waveform.vertical_scale_v_per_div is not None and config.waveform.vertical_scale_v_per_div <= 0:
+        raise ConfigError("waveform.vertical_scale_v_per_div must be > 0")
+    if config.waveform.target_vpp is not None and config.waveform.target_vpp <= 0:
+        raise ConfigError("waveform.target_vpp must be > 0")
     if config.quality.auto_recover_attempts < 0:
         raise ConfigError("quality.auto_recover_attempts must be >= 0")
     if config.quality.consistency_required_captures < 2:
