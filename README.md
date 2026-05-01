@@ -26,6 +26,7 @@ It provides small, explicit CLI commands for LAN-connected lab instruments. The 
 - `source set-duty`
 - `source arb-probe` for query-only arbitrary-waveform SCPI discovery
 - `source arb-load --dry-run` for offline arbitrary waveform payload validation
+- `source arb-load --frequency ... --output-on` for confirmed DG4202 `DATA:DAC VOLATILE` arbitrary upload
 - `source output`
 - `sweep discrete` source-to-scope frequency sweeps
 - optional `--restore-source-state` for discrete sweep
@@ -145,10 +146,16 @@ Probe DG4202 arbitrary-waveform SCPI candidates without upload or output-state c
 python -m wavebench source arb-probe --config wavebench.toml --channel 1 --probe-timeout-ms 700
 ```
 
-Prepare an arbitrary waveform payload offline. This validates a CSV/NPY waveform and prints normalized + 14-bit DAC payload ranges, but does not connect to the instrument until DG4202 arbitrary-waveform SCPI is confirmed:
+Prepare an arbitrary waveform payload offline. This validates a CSV/NPY waveform and prints normalized + 14-bit DAC payload ranges:
 
 ```powershell
 python -m wavebench source arb-load --channel 1 --file waveform.npy --name REI_ARB --amplitude 1.0 --offset 0.0 --export-payload data/arb/REI_ARB.json --dry-run
+```
+
+Upload a confirmed DG4202 arbitrary waveform and explicitly enable output:
+
+```powershell
+python -m wavebench source arb-load --config wavebench.toml --channel 1 --file waveform.npy --name REI_TRI --amplitude 1.0 --frequency 1000 --offset 0.0 --output-on
 ```
 
 Run the verified duty-cycle analysis plan while also checking DP800 CH1 through scope CH2:

@@ -127,6 +127,7 @@ class CliTests(unittest.TestCase):
             "--file", "waveform.npy",
             "--name", "REI_ARB",
             "--amplitude", "1.0",
+            "--frequency", "1000",
             "--offset", "0.0",
             "--sample-rate", "1000",
             "--max-points", "16384",
@@ -141,6 +142,7 @@ class CliTests(unittest.TestCase):
         self.assertEqual(args.name, "REI_ARB")
         self.assertEqual(args.amplitude, 1.0)
         self.assertEqual(args.offset, 0.0)
+        self.assertEqual(args.frequency, 1000.0)
         self.assertEqual(args.sample_rate, 1000.0)
         self.assertEqual(args.max_points, 16384)
         self.assertTrue(args.output_on)
@@ -162,6 +164,7 @@ class CliTests(unittest.TestCase):
                     "--file", str(path),
                     "--name", "REI_ARB",
                     "--amplitude", "1.0",
+                    "--frequency", "1000",
                     "--offset", "0.0",
                     "--export-payload", str(payload),
                     "--dry-run",
@@ -175,7 +178,7 @@ class CliTests(unittest.TestCase):
             self.assertIn("dac14=0..16383", output)
             self.assertIn(f"payload={payload}", output)
             self.assertIn("dry_run=true", output)
-            self.assertIn("upload=blocked_until_dg4202_scpi_is_confirmed", output)
+            self.assertIn("upload=not_requested", output)
             self.assertIn('"format": "wavebench.arbitrary.v1"', payload.read_text(encoding="utf-8"))
 
     def test_sweep_discrete_accepts_frequencies_and_channels(self):

@@ -108,8 +108,8 @@ source arb upload -> source output -> scope capture -> run report / capture insp
 
 - `wavebench source arb-probe --channel 1` 已提供 query-only 探针。
 - 探针只发送以 `?` 结尾的候选命令，并逐条读取 `SYST:ERR?`。
-- 2026-05-01 已上机运行第一批候选；未确认出可用任意波形上传/选择命令。
-- 下一步优先找官方 programming guide 或 RAF/Ultra Station 文件工作流，避免继续盲试。
+- 2026-05-01 已通过 DG4000 Programming Guide 和 DG4202 实机确认 `DATA:DAC VOLATILE` 上传路径。
+- little-endian 14-bit DAC binary block 已通过 `DATA:VAL?` 回读验证，任意波闭环已跑通。
 
 ### B. Offline waveform builder
 
@@ -132,18 +132,20 @@ CSV / NPY -> normalized waveform payload
 - `src/wavebench/arbitrary.py` 已提供离线 builder。
 - `wavebench source arb-load ... --dry-run` 已提供 payload 摘要。
 - `--export-payload` 可写出 `wavebench.arbitrary.v1` JSON artifact，便于人工复核和后续 upload driver 复用。
-- 非 dry-run 上传仍被阻止，等待 DG4202 SCPI 确认。
+- 非 dry-run 上传已放开：需要显式 `--frequency`，且只有传入 `--output-on` 才会打开输出。
 
 ### C. DG4202 driver upload 方法
 
 候选接口：
 
 ```python
-DG4202Source.upload_arbitrary_waveform(
-    channel=2,
-    name="REI_ARB",
-    points=payload,
-    sample_rate_hz=...,  # 或 playback_frequency_hz，取决于手册
+DG4202Source.upload_dg4000_dac14_block(
+    channel=1,
+    block=dg4000_dac14_block,
+    playback_frequency_hz=1000,
+    amplitude_vpp=1.0,
+    offset_v=0.0,
+    output_on=False,
 )
 ```
 
@@ -159,7 +161,7 @@ DG4202Source.upload_arbitrary_waveform(
 候选命令：
 
 ```bash
-wavebench source arb-load --channel 1 --file waveform.npy --name REI_ARB --amplitude 1.0 --offset 0.0 --dry-run
+wavebench source arb-load --channel 1 --file waveform.npy --name REI_ARB --amplitude 1.0 --frequency 1000 --offset 0.0 --dry-run
 ```
 
 可选：

@@ -7,7 +7,7 @@ from typing import Any
 
 import numpy as np
 
-from .config import load_config
+from .config import load_config, vertical_scale_from_vpp
 from .data.packages import load_capture_package, load_run_package
 from .report.html import write_run_report_html
 from .drivers.dg4202 import SourceStatus
@@ -120,11 +120,12 @@ def build_parser() -> argparse.ArgumentParser:
     source_arb_probe.add_argument("--probe-timeout-ms", type=int, default=1000, help="Per-query timeout for unsupported SCPI candidates")
     add_runtime_options(source_arb_probe)
 
-    source_arb_load = source_sub.add_parser("arb-load", help="Prepare an arbitrary waveform payload; upload is gated until DG4202 SCPI is confirmed")
+    source_arb_load = source_sub.add_parser("arb-load", help="Load a DG4202 arbitrary waveform from .csv/.npy; dry-run can export offline payloads")
     source_arb_load.add_argument("--channel", type=int, required=True)
     source_arb_load.add_argument("--file", required=True, help="Input waveform file: .csv or .npy")
     source_arb_load.add_argument("--name", required=True, help="Instrument waveform name, e.g. REI_ARB")
     source_arb_load.add_argument("--amplitude", type=float, required=True, help="Target output amplitude in Vpp")
+    source_arb_load.add_argument("--frequency", type=float, default=None, help="Arbitrary waveform playback frequency in Hz; required when uploading")
     source_arb_load.add_argument("--offset", type=float, default=0.0, help="Target output offset in V")
     source_arb_load.add_argument("--sample-rate", type=float, default=None, help="Sample rate in Hz when the file has no time axis")
     source_arb_load.add_argument("--max-points", type=int, default=16384, help="Point-count guard; DG4000 specs list 16K arbitrary length")
@@ -512,7 +513,7 @@ def _print_arbitrary_probe_results(results: list[Any]) -> None:
         )
 
 
-def _print_arbitrary_waveform_summary(args: argparse.Namespace) -> None:
+def _print_arbitrary_waveform_summary(args: argparse.Namespace, *, dry_run: bool = True) -> None:
     name = validate_waveform_name(args.name)
     waveform = load_arbitrary_waveform(
         args.file,
@@ -530,6 +531,8 @@ def _print_arbitrary_waveform_summary(args: argparse.Namespace) -> None:
     if summary["sample_rate_hz"] is not None:
         print(f"sample_rate={summary['sample_rate_hz']:.6g} Hz")
     print(f"amplitude={args.amplitude:.6g} Vpp")
+    if args.frequency is not None:
+        print(f"frequency={args.frequency:.6g} Hz")
     print(f"offset={args.offset:.6g} V")
     print(f"output_on={bool(args.output_on)}")
     if args.export_payload:
@@ -551,8 +554,9 @@ def _print_arbitrary_waveform_summary(args: argparse.Namespace) -> None:
         print(f"dg4000_dac_block={output}")
         print(f"dg4000_byte_order={args.dg4000_byte_order}")
         print("dg4000_byte_order_status=dg4202_hardware_validated_2026-05-01")
-    print("dry_run=true")
-    print("upload=blocked_until_dg4202_scpi_is_confirmed")
+    print(f"dry_run={str(dry_run).lower()}")
+    if dry_run:
+        print("upload=not_requested")
 
 
 def _print_waveform_summary(waveform: WaveformData) -> None:
@@ -638,9 +642,26 @@ def main(argv: list[str] | None = None) -> int:
             if args.command == "arb-load":
                 if args.amplitude <= 0:
                     raise ConfigError("--amplitude must be > 0")
-                if not args.dry_run:
-                    raise ConfigError("DG4202 arbitrary upload SCPI is not confirmed yet; use --dry-run")
-                _print_arbitrary_waveform_summary(args)
+                if args.dry_run:
+                    _print_arbitrary_waveform_summary(args, dry_run=True)
+                    return 0
+                if args.frequency is None or args.frequency <= 0:
+                    raise ConfigError("--frequency must be > 0 when uploading")
+                service = _load_source_service(args)
+                _print_arbitrary_waveform_summary(args, dry_run=False)
+                status = service.upload_arbitrary_waveform(
+                    channel=args.channel,
+                    file_path=args.file,
+                    playback_frequency_hz=args.frequency,
+                    amplitude_vpp=args.amplitude,
+                    offset_v=args.offset,
+                    sample_rate_hz=args.sample_rate,
+                    max_points=args.max_points,
+                    byte_order=args.dg4000_byte_order,
+                    output_on=args.output_on,
+                )
+                print("upload=ok")
+                _print_source_status(status)
                 return 0
             service = _load_source_service(args)
             if args.command == "idn":

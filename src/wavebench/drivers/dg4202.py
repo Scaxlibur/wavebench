@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from wavebench.arbitrary import DG4000DacBlock
 from wavebench.errors import DataError, InstrumentError
 
 
@@ -184,6 +185,42 @@ class DG4202Source:
         if duty_percent <= 0 or duty_percent >= 100:
             raise DataError("duty cycle percent must be > 0 and < 100")
         self.transport.write(f":SOUR{channel}:FUNC:SQU:DCYC {duty_percent:.12g}")
+        status = self.get_status(channel)
+        if check_errors:
+            self.assert_no_errors()
+        return status
+
+
+    def upload_dg4000_dac14_block(
+        self,
+        *,
+        channel: int,
+        block: DG4000DacBlock,
+        playback_frequency_hz: float,
+        amplitude_vpp: float,
+        offset_v: float = 0.0,
+        output_on: bool = False,
+        check_errors: bool = True,
+    ) -> SourceStatus:
+        if channel < 1:
+            raise DataError("channel must be >= 1")
+        if playback_frequency_hz <= 0:
+            raise DataError("playback frequency must be > 0")
+        if amplitude_vpp <= 0:
+            raise DataError("amplitude must be > 0")
+        if not hasattr(self.transport, "write_bytes"):
+            raise InstrumentError("transport does not support binary arbitrary waveform upload")
+        self.transport.write("*CLS")
+        self.transport.write_bytes(block.command)
+        if check_errors:
+            self.assert_no_errors()
+        self.transport.write(f":SOUR{channel}:FREQ {playback_frequency_hz:.12g}")
+        self.transport.write(f":SOUR{channel}:VOLT:UNIT VPP")
+        self.transport.write(f":SOUR{channel}:VOLT {amplitude_vpp:.12g}")
+        self.transport.write(f":SOUR{channel}:VOLT:OFFS {offset_v:.12g}")
+        self.transport.write(f":SOUR{channel}:FUNC:SHAP USER")
+        if output_on:
+            self.transport.write(f":OUTP{channel} ON")
         status = self.get_status(channel)
         if check_errors:
             self.assert_no_errors()

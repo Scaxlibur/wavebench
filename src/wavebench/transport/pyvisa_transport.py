@@ -45,6 +45,13 @@ class PyVisaTransport:
         self.logger.record("write", command)
         self.session.write(command)
 
+    def write_bytes(self, command: bytes) -> None:
+        self.logger.record("write_binary", f"<bytes len={len(command)}>")
+        if hasattr(self.session, "write_raw"):
+            self.session.write_raw(command)
+        else:
+            raise ConnectionError("pyvisa session does not support raw byte writes")
+
     def query(self, command: str) -> str:
         self.logger.record("query", command)
         response = str(self.session.query(command)).strip()

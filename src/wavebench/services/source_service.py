@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import time
 
+from wavebench.arbitrary import build_dg4000_dac14_binary_block, load_arbitrary_waveform
 from wavebench.config import ConnectionConfig, SourceConfig, WaveBenchConfig
 from wavebench.drivers.dg4202 import ArbitraryQueryProbeResult, DG4202Source, SourceStatus
 from wavebench.errors import ConfigError
@@ -122,6 +123,42 @@ class SourceService:
         source = self._open_source()
         try:
             return source.set_amplitude_vpp(channel, value_vpp, check_errors=source_cfg.check_errors)
+        finally:
+            source.close()
+
+
+    def upload_arbitrary_waveform(
+        self,
+        *,
+        channel: int | None,
+        file_path: str,
+        playback_frequency_hz: float,
+        amplitude_vpp: float,
+        offset_v: float = 0.0,
+        sample_rate_hz: float | None = None,
+        max_points: int = 16384,
+        byte_order: str = "little",
+        output_on: bool = False,
+    ) -> SourceStatus:
+        source_cfg = self._source_config()
+        channel = source_cfg.default_channel if channel is None else channel
+        waveform = load_arbitrary_waveform(
+            file_path,
+            sample_rate_hz=sample_rate_hz,
+            max_points=max_points,
+        )
+        block = build_dg4000_dac14_binary_block(waveform, byte_order=byte_order)
+        source = self._open_source()
+        try:
+            return source.upload_dg4000_dac14_block(
+                channel=channel,
+                block=block,
+                playback_frequency_hz=playback_frequency_hz,
+                amplitude_vpp=amplitude_vpp,
+                offset_v=offset_v,
+                output_on=output_on,
+                check_errors=source_cfg.check_errors,
+            )
         finally:
             source.close()
 

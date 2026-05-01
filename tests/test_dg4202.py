@@ -6,6 +6,7 @@ from wavebench.drivers.dg4202 import DG4202Source
 class FakeTransport:
     def __init__(self):
         self.writes = []
+        self.byte_writes = []
         self.error_queue = ['0,"No error"']
         self.state = {
             "out": "ON",
@@ -32,12 +33,19 @@ class FakeTransport:
             self.state["out"] = command.split()[-1]
         elif command.startswith(":SOUR2:FUNC "):
             self.state["func"] = command.split()[-1]
+        elif command.startswith(":SOUR2:FUNC:SHAP "):
+            self.state["func"] = command.split()[-1]
+        elif command.startswith(":SOUR2:VOLT:OFFS "):
+            self.state["offs"] = float(command.split()[-1])
         elif command.startswith(":SOUR2:VOLT:UNIT "):
             self.state["unit"] = command.split()[-1]
         elif command.startswith(":SOUR2:VOLT "):
             self.state["volt"] = float(command.split()[-1])
         elif command.startswith(":SOUR2:FUNC:SQU:DCYC "):
             self.state["duty"] = float(command.split()[-1])
+
+    def write_bytes(self, command: bytes) -> None:
+        self.byte_writes.append(command)
 
     def query(self, command: str) -> str:
         if command == "SYST:ERR?":
@@ -127,6 +135,41 @@ class DG4202Tests(unittest.TestCase):
         self.assertEqual(transport.writes[0], ":SOUR2:FUNC:SQU:DCYC 25")
         self.assertEqual(status.square_duty_cycle_percent, 25.0)
 
+
+    def test_upload_dg4000_dac14_block_writes_binary_then_user_function(self):
+        from wavebench.arbitrary import build_dg4000_dac14_binary_block, load_arbitrary_waveform
+        import numpy as np
+        from tempfile import TemporaryDirectory
+        from pathlib import Path
+
+        with TemporaryDirectory() as tmp:
+            path = Path(tmp) / "tri.npy"
+            np.save(path, np.array([-1.0, 0.0, 1.0, 0.0]))
+            waveform = load_arbitrary_waveform(path)
+            block = build_dg4000_dac14_binary_block(waveform)
+            transport = FakeTransport()
+            driver = DG4202Source(transport=transport, check_errors_after_ops=True)
+
+            status = driver.upload_dg4000_dac14_block(
+                channel=2,
+                block=block,
+                playback_frequency_hz=1000.0,
+                amplitude_vpp=1.2,
+                offset_v=0.1,
+                output_on=True,
+            )
+
+        self.assertEqual(transport.writes[0], "*CLS")
+        self.assertEqual(len(transport.byte_writes), 1)
+        self.assertTrue(transport.byte_writes[0].startswith(b":DATA:DAC VOLATILE,#"))
+        self.assertIn(":SOUR2:FREQ 1000", transport.writes)
+        self.assertIn(":SOUR2:VOLT:UNIT VPP", transport.writes)
+        self.assertIn(":SOUR2:VOLT 1.2", transport.writes)
+        self.assertIn(":SOUR2:VOLT:OFFS 0.1", transport.writes)
+        self.assertIn(":SOUR2:FUNC:SHAP USER", transport.writes)
+        self.assertIn(":OUTP2 ON", transport.writes)
+        self.assertEqual(status.function, "USER")
+        self.assertEqual(status.frequency_hz, 1000.0)
 
     def test_probe_arbitrary_queries_uses_query_only_candidates_and_reads_errors(self):
         transport = FakeTransport()
