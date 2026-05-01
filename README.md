@@ -53,6 +53,12 @@ It provides small, explicit CLI commands for LAN-connected lab instruments. The 
 - repeated warning captures can be accepted as `ok_by_consistency` when their measured metrics are stable within `[quality]` tolerances
 - `scope.capture` steps can include `[steps.expect]` metric limits; failed expectations mark the run as `failed` while preserving captured artifacts
 
+## Current release
+
+Current package version: `0.4.0`.
+
+Release notes: [`release-notes-v0.4.0.md`](release-notes-v0.4.0.md).
+
 ## Safety defaults
 
 WaveBench deliberately avoids hidden high-impact actions:
