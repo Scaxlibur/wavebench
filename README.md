@@ -1,79 +1,81 @@
 # WaveBench
 
-WaveBench is a lightweight Python measurement bench for electronics contest debugging.
+> English version: [doc/README_EN.md](doc/README_EN.md)
 
-It provides small, explicit CLI commands for LAN-connected lab instruments. The current focus is reliable waveform capture, source-to-scope checks, basic programmable power-supply control, and explicit multi-instrument run plans without hidden resets or automatic output changes.
+WaveBench 是一个面向电子设计竞赛调试场景的轻量 Python 自动测量台。
 
-## Current capabilities
+它提供小而明确的 CLI 命令，用于控制局域网内的实验室仪器。当前重点是可靠采集示波器波形、做信号源到示波器的闭环检查、控制可编程电源，以及用显式 run plan 编排多仪器实验。WaveBench 不做隐藏复位，也不偷偷打开或关闭输出。
 
-### Oscilloscope: R&S RTM2032
+## 当前能力
 
-- LAN VISA connection
-- `scope idn`, `scope errors`
-- explicit `scope auto` / `scope autoscale`
-- `scope fetch` and `scope capture`
-- repeated `--channel` capture for sequential multi-channel acquisition
-- acquisition packages with NPY/CSV/JSON metadata and `commands.log`
-- waveform metrics: Vpp/RMS/mean, frequency estimate, duty cycle, rise/fall time when applicable
-- waveform quality warnings for low cycle count, low samples/cycle, low amplitude, and frequency mismatch
+### 示波器：R&S RTM2032
 
-### Signal generator: RIGOL DG4202
+- LAN VISA 连接
+- `scope idn`、`scope errors`
+- 显式 `scope auto` / `scope autoscale`
+- `scope fetch` 与 `scope capture`
+- 通过重复 `--channel` 顺序采集多通道
+- 采集包包含 NPY / CSV / JSON metadata / `commands.log`
+- 波形指标：Vpp、RMS、均值、频率估计、占空比、适用时的上升/下降时间
+- 波形质量告警：周期数过少、每周期采样点过少、幅度过低、频率不匹配
 
-- `source idn`, `source status`
+### 信号源：RIGOL DG4202
+
+- `source idn`、`source status`
 - `source set-freq`
-- `source set-func` (`sin`, `squ`, `ramp`/`triangle`, `puls`, `nois`, `dc`)
+- `source set-func`：`sin`、`squ`、`ramp`/`triangle`、`puls`、`nois`、`dc`
 - `source set-vpp`
 - `source set-duty`
-- `source arb-probe` for query-only arbitrary-waveform SCPI discovery
-- `source arb-load --dry-run` for offline arbitrary waveform payload validation
-- `source arb-load --frequency ... --output-on` for confirmed DG4202 `DATA:DAC VOLATILE` arbitrary upload
+- `source arb-probe`：只查询任意波 SCPI 支持情况
+- `source arb-load --dry-run`：离线校验任意波 payload
+- `source arb-load --frequency ... --output-on`：已确认可用的 DG4202 `DATA:DAC VOLATILE` 任意波上传
 - `source output`
-- `sweep discrete` source-to-scope frequency sweeps
-- optional `--restore-source-state` for discrete sweep
+- `sweep discrete`：信号源到示波器的离散扫频
+- 离散扫频可选 `--restore-source-state` 恢复信号源状态
 
-### Power supply: RIGOL DP800 series
+### 电源：RIGOL DP800 系列
 
-- `power idn`, `power status`
+- `power idn`、`power status`
 - `power set --voltage --current-limit`
 - `power output on|off`
-- configurable readback settle delays:
+- 可配置读回等待：
   - `power.settle_ms_after_set`
   - `power.settle_ms_after_output`
 
-### Multi-instrument run plans
+### 多仪器 run plan
 
-- `run check --plan <plan.toml>` parses and summarizes a plan without connecting to instruments
-- `run plan --plan <plan.toml>` executes explicit source, power, scope, and sleep steps
-- `run report <run_dir>` generates a static offline HTML report from `run.json` / `summary.csv`, includes per-capture signal analysis metrics, and embeds capture screenshots when present
-- `capture inspect <capture_dir>` prints a human-readable offline capture summary
-- optional scope coupling guard can query the configured oscilloscope channel and refuse unsafe power-supply probe plans
-- optional `[restore] source_state = true` snapshots and restores the selected source channel in a `finally` path
-- flow-level output is written under `data/runs/<timestamp>_<label>/` with `run.json`, `summary.csv`, step records, quality status, and references to normal capture packages
-- `scope.capture` steps can opt into `quality_gate = true`; with `auto_recover = true`, warning captures trigger up to `[quality].auto_recover_attempts` autoscale + recapture attempts
-- repeated warning captures can be accepted as `ok_by_consistency` when their measured metrics are stable within `[quality]` tolerances
-- `scope.capture` steps can include `[steps.expect]` metric limits; failed expectations mark the run as `failed` while preserving captured artifacts
+- `run check --plan <plan.toml>`：只解析并汇总 plan，不连接仪器
+- `run plan --plan <plan.toml>`：执行显式 source、power、scope、sleep 步骤
+- `run report <run_dir>`：根据 `run.json` / `summary.csv` 生成静态离线 HTML 报告，包含信号分析指标和截图
+- `capture inspect <capture_dir>`：打印离线采集包摘要
+- 可选示波器耦合保护：查询配置通道并拒绝不安全的电源探测计划
+- 可选 `[restore] source_state = true`：在 `finally` 路径快照并恢复信号源通道状态
+- run 输出位于 `data/runs/<timestamp>_<label>/`，包含 `run.json`、`summary.csv`、步骤记录、质量状态和普通采集包引用
+- `scope.capture` 可启用 `quality_gate = true`；配合 `auto_recover = true` 时，质量告警会触发最多 `[quality].auto_recover_attempts` 次 autoscale + 重采
+- 多次告警采集若测量结果在 `[quality]` 容差内保持稳定，可标记为 `ok_by_consistency`
+- `scope.capture` 可包含 `[steps.expect]` 指标约束；expect 失败会把 run 标记为 `failed`，但保留采集产物
 
-## Current release
+## 当前版本
 
-Current package version: `0.4.0`.
+当前包版本：`0.4.0`。
 
-Release notes: [`release-notes-v0.4.0.md`](release-notes-v0.4.0.md).
+正式 GitHub Release 由项目作者发布。根目录不再保存 release note；后续 release note 草稿放在 `tool-of-rei/`。
 
-## Safety defaults
+## 安全默认值
 
-WaveBench deliberately avoids hidden high-impact actions:
+WaveBench 避免隐藏的高影响动作：
 
-- no default `*RST`
-- `scope capture` does not call autoscale unless requested separately
-- `power set` does not turn output on or off
-- `power output` does not change voltage or current limit
-- `sweep discrete` does not restore source function/amplitude unless explicitly requested with `--restore-source-state`
-- no command should silently change oscilloscope input impedance
-- run-plan safety guards may query instrument state and refuse execution, but must not auto-correct hardware settings
+- 默认不发送 `*RST`
+- `scope capture` 不会自动 autoscale，除非用户显式请求
+- `power set` 不会打开或关闭输出
+- `power output` 不会修改电压或电流限制
+- `sweep discrete` 不会恢复信号源函数/幅度，除非显式传入 `--restore-source-state`
+- 命令不应静默修改示波器输入阻抗
+- run-plan 安全保护可以查询仪器状态并拒绝执行，但不能自动修正硬件设置
 
-When measuring a power supply with an oscilloscope, keep the oscilloscope input in a safe high-impedance mode. Do not switch the input to 50 Ω termination unless the voltage and instrument limits are known to be safe.
+用示波器测量电源时，请保持示波器输入在安全的高阻模式。除非已经确认电压和仪器限制，否则不要切换到 50 Ω 端接。
 
-## Quick start
+## 快速开始
 
 ```powershell
 python -m pip install -e .
@@ -81,211 +83,68 @@ copy wavebench.example.toml wavebench.toml
 python -m wavebench scope idn --config wavebench.toml
 ```
 
-Without editable install, from the project root:
+如果没有 editable install，也可以在项目根目录运行：
 
 ```powershell
 $env:PYTHONPATH = "src"
 python -m wavebench scope idn --config wavebench.toml
 ```
 
-## Example commands
+## 示例命令
 
-Capture from the oscilloscope:
+采集示波器波形：
 
 ```powershell
 python -m wavebench scope capture --config wavebench.toml --channel 1 --label smoke --points def --window-frequency 1000 --target-cycles 10 --expect-frequency 1000 --frequency-tolerance 0.05 --target-vpp 1.0 --no-csv
 python -m wavebench scope capture --config wavebench.toml --channel 1 --label smoke_with_screen --points def --no-csv --screenshot
 ```
 
-Set DG4202 source frequency:
+设置 DG4202 信号源频率：
 
 ```powershell
 python -m wavebench source set-freq --config wavebench.toml --channel 1 1000
 ```
 
-Run a discrete source-to-scope frequency sweep:
+执行离散扫频：
 
 ```powershell
 python -m wavebench sweep discrete --config wavebench.toml --source-channel 1 --scope-channel 1 --frequencies 1000,2000,5000,10000 --target-cycles 10 --frequency-tolerance 0.05 --label dg4202_discrete_sweep --no-csv
 ```
 
-Run a sweep with explicit source state restoration:
+执行带信号源状态恢复的扫频：
 
 ```powershell
 python -m wavebench sweep discrete --config wavebench.toml --source-channel 1 --scope-channel 1 --frequencies 1000,5000 --source-func SQU --source-vpp 3.3 --restore-source-state --no-csv
 ```
 
-Read DP800 power status:
+读取 DP800 电源状态：
 
 ```powershell
-python -m wavebench power status --config wavebench.toml --channel 1
+python -m wavebench power status --config wavebench.toml
 ```
 
-Set DP800 voltage and current limit without changing output state:
+检查 run plan：
 
 ```powershell
-python -m wavebench power set --config wavebench.toml --channel 1 --voltage 5.0 --current-limit 0.1
+python -m wavebench run check --plan plans/example_scope_expect_quality.toml
 ```
 
-Turn DP800 output on or off explicitly:
+执行 run plan 并生成报告：
 
 ```powershell
-python -m wavebench power output --config wavebench.toml --channel 1 off
-python -m wavebench power output --config wavebench.toml --channel 1 on
-```
-
-Set DG4202 triangle/ramp output without changing output state:
-
-```powershell
-python -m wavebench source set-func --config wavebench.toml --channel 1 triangle
-```
-
-Set DG4202 square-wave duty cycle in percent:
-
-```powershell
-python -m wavebench source set-duty --config wavebench.toml --channel 1 25
-```
-
-Probe DG4202 arbitrary-waveform SCPI candidates without upload or output-state changes:
-
-```powershell
-python -m wavebench source arb-probe --config wavebench.toml --channel 1 --probe-timeout-ms 700
-```
-
-Prepare an arbitrary waveform payload offline. This validates a CSV/NPY waveform and prints normalized + 14-bit DAC payload ranges:
-
-```powershell
-python -m wavebench source arb-load --channel 1 --file waveform.npy --name REI_ARB --amplitude 1.0 --offset 0.0 --export-payload data/arb/REI_ARB.json --dry-run
-```
-
-Upload a confirmed DG4202 arbitrary waveform and explicitly enable output:
-
-```powershell
-python -m wavebench source arb-load --config wavebench.toml --channel 1 --file waveform.npy --name REI_TRI --amplitude 1.0 --frequency 1000 --offset 0.0 --output-on
-```
-
-Run the verified duty-cycle analysis plan while also checking DP800 CH1 through scope CH2:
-
-```powershell
-python -m wavebench run plan --config wavebench.toml --plan plans/dg4202_duty_10k_power_ch2_check.toml
-```
-
-Run a run-plan arbitrary-waveform closure. Use `source.arb_load` for the upload step, keep output explicit, then capture and check the visible waveform:
-
-```toml
-[[steps]]
-kind = "source.arb_load"
-channel = 1
-file = "data/arb/triangle_1024.npy"
-frequency_hz = 1000
-amplitude_vpp = 1.0
-offset_v = 0.0
-output_on = true
-
-[[steps]]
-kind = "scope.capture"
-channel = 1
-label = "arb_triangle_1k"
-window_frequency_hz = 1000
-target_cycles = 10
-target_vpp = 1.0
-screenshot = true
-
-[steps.expect]
-voltage_vpp_v = { min = 0.8, max = 1.2 }
-frequency_estimate_hz = { min = 950, max = 1050 }
-```
-
-Run a screenshot-report demo. This plan drives DG4202 CH1, captures RTM2032 CH1 with a screenshot, restores the source state, checks frequency plus visible signal amplitude, then generates a static report from the saved run package:
-
-```powershell
-python -m wavebench run check --config wavebench.toml --plan plans/demo_dg4202_10k_screenshot_report.toml
-python -m wavebench run plan --config wavebench.toml --plan plans/demo_dg4202_10k_screenshot_report.toml
+python -m wavebench run plan --config wavebench.toml --plan plans/example_scope_expect_quality.toml
 python -m wavebench run report data/runs/<run_dir>
 ```
 
-Check the run-plan schema and validate plans without connecting to instruments:
+## 开发与测试
 
 ```powershell
-python -m wavebench run schema
-python -m wavebench run check --config wavebench.toml --plan plans/dp800_scope_probe_voltage_steps.toml
-python -m wavebench run check --config wavebench.toml --plan plans/example_scope_expect_quality.toml
+python -m pip install -e ".[dev]"
+python -m pytest -q
 ```
 
-A public example plan with `quality_gate`, `auto_recover`, source restoration, and `[steps.expect]` lives at `plans/example_scope_expect_quality.toml`.
+GitHub Actions 会在 push 和 pull request 时自动运行 Python 3.11 / 3.12 单元测试。
 
-Execute the verified DP800-to-scope probe voltage-step plan:
+## 文档
 
-```powershell
-python -m wavebench run plan --config wavebench.toml --plan plans/dp800_scope_probe_voltage_steps.toml
-```
-
-That plan performs a read-only scope coupling guard first, then records the 5 V -> 3.3 V -> 5 V DP800 step sequence into `data/runs/...`.
-
-Run plans can opt into source restoration:
-
-```toml
-[restore]
-source_state = true
-source_channel = 1
-```
-
-When enabled, WaveBench snapshots output/function/frequency/amplitude and square duty cycle before executing steps, then restores them on success or failure.
-
-## Documentation
-
-See [`doc/README.md`](doc/README.md) for design notes, command references, verified instrument states, and implementation constraints. For writing TOML run plans, start with [`doc/project/WaveBench_run_plan_使用指南.md`](doc/project/WaveBench_run_plan_使用指南.md). For release readiness, see [`doc/project/WaveBench_v0.3_收口清单.md`](doc/project/WaveBench_v0.3_收口清单.md).
-
-
-### Run plan `scope.auto`
-
-`scope.auto` is available as an explicit run-plan step. It maps to RTM2032 `AUToscale` and waits for `*OPC?` through the existing scope service. It is never inserted implicitly before `scope.capture`, because autoscale changes horizontal, vertical, and trigger settings.
-
-```toml
-[[steps]]
-kind = "scope.auto"
-
-[[steps]]
-kind = "scope.capture"
-channel = 1
-label = "after_auto"
-```
-
-A capture step can also request a screenshot, a quality check, and one auto-recovery retry:
-
-```toml
-[[steps]]
-kind = "scope.capture"
-channel = 1
-label = "after_auto_if_needed"
-expect_frequency_hz = 100000
-window_frequency_hz = 100000
-target_cycles = 10
-target_vpp = 3.3
-screenshot = true
-quality_gate = true
-auto_recover = true
-```
-
-`target_vpp` sets RTM2032 vertical scale before capture using roughly five vertical divisions (`target_vpp / 5`). Use `vertical_scale_v_per_div` when the plan needs an exact V/div value. This is explicit like `target_cycles`; WaveBench does not run autoscale silently.
-
-If the first capture reports quality warnings such as low samples per cycle, low amplitude, or frequency mismatch, WaveBench runs `scope.auto` and captures again with numbered `_auto_retryN` labels. The maximum retry count and consistency tolerances live in `[quality]` in `wavebench.toml`. If repeated warning captures produce similar frequency/Vpp/mean/duty metrics, the final capture is marked `ok_by_consistency`; all attempt package paths and warnings are kept in `run.json`.
-
-A capture step can also assert summary metrics with `[steps.expect]`:
-
-```toml
-[[steps]]
-kind = "scope.capture"
-channel = 1
-label = "duty_50"
-expect_frequency_hz = 10000
-frequency_tolerance = 0.05
-quality_gate = true
-
-[steps.expect]
-duty_cycle = { min = 0.45, max = 0.55 }
-frequency_estimate_hz = { min = 9500, max = 10500 }
-voltage_vpp_v = { min = 2.8, max = 3.8 }
-```
-
-Failed expectations mark the step and run as `failed`, while keeping the capture package, step record, `run.json`, and `summary.csv` for debugging.
+中文文档总览：[`doc/README.md`](doc/README.md)
