@@ -57,7 +57,7 @@ It provides small, explicit CLI commands for LAN-connected lab instruments. The 
 
 Current package version: `0.4.0`.
 
-Release notes: [`release-notes-v0.4.0.md`](release-notes-v0.4.0.md).
+Release notes are published on the GitHub Releases page.
 
 ## Safety defaults
 
