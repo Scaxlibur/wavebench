@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from wavebench.config import ConnectionConfig
-from wavebench.errors import ConnectionError
+from wavebench.errors import ConnectionError, InstrumentError
 from wavebench.logging import CommandLogger
 
 
@@ -43,35 +43,46 @@ class PyVisaTransport:
 
     def write(self, command: str) -> None:
         self.logger.record("write", command)
-        self.session.write(command)
+        try:
+            self.session.write(command)
+        except Exception as exc:
+            raise self._instrument_io_error("write", command, exc) from exc
 
     def write_bytes(self, command: bytes) -> None:
         self.logger.record("write_binary", f"<bytes len={len(command)}>")
-        if hasattr(self.session, "write_raw"):
-            self.session.write_raw(command)
-        else:
+        if not hasattr(self.session, "write_raw"):
             raise ConnectionError("pyvisa session does not support raw byte writes")
+        try:
+            self.session.write_raw(command)
+        except Exception as exc:
+            raise self._instrument_io_error("write_binary", "<bytes>", exc) from exc
 
     def query(self, command: str) -> str:
         self.logger.record("query", command)
-        response = str(self.session.query(command)).strip()
-        if response == "" and hasattr(self.session, "read"):
-            for _ in range(2):
-                response = str(self.session.read()).strip()
-                if response:
-                    break
+        try:
+            response = str(self.session.query(command)).strip()
+            if response == "" and hasattr(self.session, "read"):
+                for _ in range(2):
+                    response = str(self.session.read()).strip()
+                    if response:
+                        break
+        except Exception as exc:
+            raise self._instrument_io_error("query", command, exc) from exc
         self.logger.record("response", response)
         return response
 
     def query_float_list(self, command: str) -> list[float]:
         self.logger.record("query", command)
-        if hasattr(self.session, "query_binary_values"):
-            try:
-                values = list(self.session.query_binary_values(command, datatype="f"))
-            except Exception:
+        try:
+            if hasattr(self.session, "query_binary_values"):
+                try:
+                    values = list(self.session.query_binary_values(command, datatype="f"))
+                except Exception:
+                    values = self._parse_ascii_float_list(self.session.query(command))
+            else:
                 values = self._parse_ascii_float_list(self.session.query(command))
-        else:
-            values = self._parse_ascii_float_list(self.session.query(command))
+        except Exception as exc:
+            raise self._instrument_io_error("query", command, exc) from exc
         self.logger.record("response", f"<float_list len={len(values)}>")
         return values
 
@@ -87,15 +98,27 @@ class PyVisaTransport:
         self.logger.record("query_binary", command)
         if not hasattr(self.session, "query_binary_values"):
             raise ConnectionError("pyvisa session does not support binary block queries")
-        data = bytes(self.session.query_binary_values(command, datatype="B", container=bytes))
+        try:
+            data = bytes(self.session.query_binary_values(command, datatype="B", container=bytes))
+        except Exception as exc:
+            raise self._instrument_io_error("query_binary", command, exc) from exc
         self.logger.record("response", f"<bin_block len={len(data)}>")
         return data
 
     def query_opc(self) -> str:
         self.logger.record("query", "*OPC?")
-        response = str(self.session.query("*OPC?")).strip()
+        try:
+            response = str(self.session.query("*OPC?")).strip()
+        except Exception as exc:
+            raise self._instrument_io_error("query", "*OPC?", exc) from exc
         self.logger.record("response", response)
         return response
+
+    def _instrument_io_error(self, operation: str, command: str, exc: Exception) -> InstrumentError:
+        return InstrumentError(
+            f"pyvisa {operation} failed on {self.resource} command {command!r}: "
+            f"{type(exc).__name__}: {exc}"
+        )
 
     def close(self) -> None:
         try:

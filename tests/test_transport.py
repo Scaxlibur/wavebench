@@ -1,6 +1,7 @@
 
 import unittest
 
+from wavebench.errors import InstrumentError
 from wavebench.logging import CommandLogger
 from wavebench.transport.pyvisa_transport import PyVisaTransport
 
@@ -38,6 +39,16 @@ class FakePyVisaSession:
         pass
 
 
+class FailingQuerySession(FakePyVisaSession):
+    def query(self, command: str) -> str:
+        raise TimeoutError("simulated timeout")
+
+
+class FailingWriteSession(FakePyVisaSession):
+    def write(self, command: str) -> None:
+        raise OSError("simulated write failure")
+
+
 class FakeResourceManager:
     def close(self) -> None:
         pass
@@ -61,6 +72,18 @@ class PyVisaTransportTests(unittest.TestCase):
 
         self.assertEqual(transport.query_bin_block("DATA?"), b"\x01\x02\x03")
         self.assertEqual(transport.query_opc(), "1")
+
+    def test_query_timeout_is_wrapped_as_instrument_error(self):
+        transport = PyVisaTransport("TCPIP::x::INSTR", FakeResourceManager(), FailingQuerySession(), CommandLogger())
+
+        with self.assertRaisesRegex(InstrumentError, "pyvisa query failed"):
+            transport.query("OUTP?")
+
+    def test_write_failure_is_wrapped_as_instrument_error(self):
+        transport = PyVisaTransport("TCPIP::x::INSTR", FakeResourceManager(), FailingWriteSession(), CommandLogger())
+
+        with self.assertRaisesRegex(InstrumentError, "pyvisa write failed"):
+            transport.write("VOLT 1")
 
 
 if __name__ == "__main__":
