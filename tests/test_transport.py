@@ -9,6 +9,7 @@ class FakePyVisaSession:
     def __init__(self):
         self.queries = []
         self.raw_writes = []
+        self.reads = []
 
     def query(self, command: str) -> str:
         self.queries.append(command)
@@ -16,7 +17,13 @@ class FakePyVisaSession:
             return "1, 2.5, 3"
         if command == "*OPC?":
             return "1"
+        if command == "EMPTY_THEN_READ?":
+            return ""
         return ""
+
+    def read(self) -> str:
+        self.reads.append("read")
+        return "DELAYED"
 
     def write_raw(self, command: bytes) -> None:
         self.raw_writes.append(command)
@@ -41,6 +48,13 @@ class PyVisaTransportTests(unittest.TestCase):
         transport = PyVisaTransport("TCPIP::x::INSTR", FakeResourceManager(), FakePyVisaSession(), CommandLogger())
 
         self.assertEqual(transport.query_float_list("VALUES?"), [1.0, 2.5, 3.0])
+
+    def test_query_reads_again_after_empty_socket_response(self):
+        session = FakePyVisaSession()
+        transport = PyVisaTransport("TCPIP::x::INSTR", FakeResourceManager(), session, CommandLogger())
+
+        self.assertEqual(transport.query("EMPTY_THEN_READ?"), "DELAYED")
+        self.assertEqual(session.reads, ["read"])
 
     def test_query_bin_block_and_opc(self):
         transport = PyVisaTransport("TCPIP::x::INSTR", FakeResourceManager(), FakePyVisaSession(), CommandLogger())

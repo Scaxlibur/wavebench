@@ -55,6 +55,11 @@ class PyVisaTransport:
     def query(self, command: str) -> str:
         self.logger.record("query", command)
         response = str(self.session.query(command)).strip()
+        if response == "" and hasattr(self.session, "read"):
+            for _ in range(2):
+                response = str(self.session.read()).strip()
+                if response:
+                    break
         self.logger.record("response", response)
         return response
 
