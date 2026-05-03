@@ -79,6 +79,7 @@ class RunService:
     logger: CommandLogger
 
     def verify(self, plan: RunPlan) -> list[RunPreflightRecord]:
+        self.check(plan)
         instruments = self._plan_instruments(plan)
         records: list[RunPreflightRecord] = []
         if "scope" in instruments:
