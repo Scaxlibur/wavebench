@@ -97,7 +97,7 @@ class SourceService:
         try:
             if enabled:
                 status = source.get_status(channel)
-                self._check_source_vpp(status.amplitude_vpp, field="source output amplitude / 信号源输出幅度")
+                self._check_source_vpp(status.amplitude, field="source output amplitude / 信号源输出幅度")
             return source.set_output(channel, enabled, check_errors=source_cfg.check_errors)
         finally:
             source.close()
