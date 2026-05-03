@@ -62,6 +62,13 @@ class RunResult:
     steps: list[RunStepRecord]
 
 
+@dataclass(frozen=True)
+class RunPreflightRecord:
+    instrument: str
+    resource: str
+    idn: str
+
+
 def run_output_base(config: WaveBenchConfig) -> Path:
     return config.output.directory.parent / "runs"
 
@@ -70,6 +77,44 @@ def run_output_base(config: WaveBenchConfig) -> Path:
 class RunService:
     config: WaveBenchConfig
     logger: CommandLogger
+
+    def verify(self, plan: RunPlan) -> list[RunPreflightRecord]:
+        instruments = self._plan_instruments(plan)
+        records: list[RunPreflightRecord] = []
+        if "scope" in instruments:
+            records.append(RunPreflightRecord(
+                instrument="scope",
+                resource=self.config.connection.resource,
+                idn=self._scope_service().idn(),
+            ))
+        if "source" in instruments:
+            source = self.config.source
+            if source is None or not source.resource:
+                raise ConfigError("source resource is required by this run plan")
+            records.append(RunPreflightRecord(
+                instrument="source",
+                resource=source.resource,
+                idn=self._source_service().idn(),
+            ))
+        if "power" in instruments:
+            power = self.config.power
+            if power is None or not power.resource:
+                raise ConfigError("power resource is required by this run plan")
+            records.append(RunPreflightRecord(
+                instrument="power",
+                resource=power.resource,
+                idn=self._power_service().idn(),
+            ))
+        return records
+
+    def _plan_instruments(self, plan: RunPlan) -> set[str]:
+        instruments = {step.kind.split(".", 1)[0] for step in plan.steps if "." in step.kind}
+        instruments.discard("sleep")
+        if plan.restore.source_state:
+            instruments.add("source")
+        if plan.safety.require_scope_coupling_not:
+            instruments.add("scope")
+        return instruments
 
     def run(self, plan: RunPlan) -> RunResult:
         self._run_safety_guards(plan)

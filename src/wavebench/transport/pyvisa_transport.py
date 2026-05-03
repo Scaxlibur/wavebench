@@ -58,6 +58,40 @@ class PyVisaTransport:
         self.logger.record("response", response)
         return response
 
+    def query_float_list(self, command: str) -> list[float]:
+        self.logger.record("query", command)
+        if hasattr(self.session, "query_binary_values"):
+            try:
+                values = list(self.session.query_binary_values(command, datatype="f"))
+            except Exception:
+                values = self._parse_ascii_float_list(self.session.query(command))
+        else:
+            values = self._parse_ascii_float_list(self.session.query(command))
+        self.logger.record("response", f"<float_list len={len(values)}>")
+        return values
+
+    @staticmethod
+    def _parse_ascii_float_list(response: object) -> list[float]:
+        return [
+            float(item)
+            for item in str(response).replace(";", ",").split(",")
+            if item.strip()
+        ]
+
+    def query_bin_block(self, command: str) -> bytes:
+        self.logger.record("query_binary", command)
+        if not hasattr(self.session, "query_binary_values"):
+            raise ConnectionError("pyvisa session does not support binary block queries")
+        data = bytes(self.session.query_binary_values(command, datatype="B", container=bytes))
+        self.logger.record("response", f"<bin_block len={len(data)}>")
+        return data
+
+    def query_opc(self) -> str:
+        self.logger.record("query", "*OPC?")
+        response = str(self.session.query("*OPC?")).strip()
+        self.logger.record("response", response)
+        return response
+
     def close(self) -> None:
         try:
             self.session.close()

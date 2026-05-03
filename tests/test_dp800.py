@@ -34,11 +34,19 @@ class DP800Tests(unittest.TestCase):
         self.assertEqual(voltage, 5.0)
         self.assertEqual(current, 0.1)
 
+    def test_parse_apply_response_rejects_unexpected_format(self):
+        with self.assertRaisesRegex(Exception, "unexpected DP800 APPL"):
+            parse_apply_response("CH1:30V/3A,5.000")
+
     def test_parse_measure_all_response(self):
         voltage, current, power = parse_measure_all_response("5.0114,0.0000,0.000")
         self.assertEqual(voltage, 5.0114)
         self.assertEqual(current, 0.0)
         self.assertEqual(power, 0.0)
+
+    def test_parse_measure_all_response_rejects_unexpected_format(self):
+        with self.assertRaisesRegex(Exception, "unexpected DP800 MEAS:ALL"):
+            parse_measure_all_response("5.0,0.1")
 
     def test_get_status_reads_read_only_fields(self):
         transport = FakeTransport()

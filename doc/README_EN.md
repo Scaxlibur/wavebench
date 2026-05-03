@@ -43,6 +43,7 @@ It provides small, explicit CLI commands for LAN-connected lab instruments. The 
 ### Multi-instrument run plans
 
 - `run check --plan <plan.toml>` parses and summarizes a plan without connecting to instruments
+- `run verify --plan <plan.toml>` runs read-only `*IDN?` preflight checks for instruments referenced by the plan
 - `run plan --plan <plan.toml>` executes explicit source, power, scope, and sleep steps
 - `run report <run_dir>` generates a static offline HTML report from `run.json` / `summary.csv`, includes per-capture signal analysis metrics, and embeds capture screenshots when present
 - `capture inspect <capture_dir>` prints a human-readable offline capture summary
@@ -55,7 +56,7 @@ It provides small, explicit CLI commands for LAN-connected lab instruments. The 
 
 ## Current release
 
-Current package version: `0.4.0`.
+Current package version: `0.4.1`.
 
 Release notes are published on the GitHub Releases page.
 
@@ -209,6 +210,7 @@ Check the run-plan schema and validate plans without connecting to instruments:
 ```powershell
 python -m wavebench run schema
 python -m wavebench run check --config wavebench.toml --plan plans/dp800_scope_probe_voltage_steps.toml
+python -m wavebench run verify --config wavebench.toml --plan plans/dp800_scope_probe_voltage_steps.toml
 python -m wavebench run check --config wavebench.toml --plan plans/example_scope_expect_quality.toml
 ```
 

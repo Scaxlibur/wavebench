@@ -121,6 +121,38 @@ def ok_power_status() -> PowerStatus:
 
 
 class RunServiceTests(unittest.TestCase):
+    def test_verify_queries_only_instruments_referenced_by_plan(self):
+        with TemporaryDirectory() as tmp:
+            plan = load_run_plan(
+                write_plan(
+                    tmp,
+                    """
+[restore]
+source_state = true
+
+[[steps]]
+kind = "power.status"
+
+[[steps]]
+kind = "scope.capture"
+""",
+                )
+            )
+            with patch("wavebench.services.run_service.PowerService") as power_cls, patch(
+                "wavebench.services.run_service.ScopeService"
+            ) as scope_cls, patch("wavebench.services.run_service.SourceService") as source_cls:
+                power_cls.return_value.idn.return_value = "POWER"
+                scope_cls.return_value.idn.return_value = "SCOPE"
+                source_cls.return_value.idn.return_value = "SOURCE"
+
+                records = RunService(config=make_config(tmp), logger=CommandLogger()).verify(plan)
+
+                self.assertEqual([record.instrument for record in records], ["scope", "source", "power"])
+                self.assertEqual([record.idn for record in records], ["SCOPE", "SOURCE", "POWER"])
+                scope_cls.return_value.idn.assert_called_once_with()
+                source_cls.return_value.idn.assert_called_once_with()
+                power_cls.return_value.idn.assert_called_once_with()
+
     def test_runs_minimal_power_scope_plan_and_writes_run_files(self):
         with TemporaryDirectory() as tmp:
             plan = load_run_plan(

@@ -46,6 +46,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     run_check.add_argument("--plan", required=True, help="Path to a WaveBench run plan TOML file")
     add_runtime_options(run_check)
+    run_verify = run_sub.add_parser(
+        "verify",
+        help="Verify / 预检 instruments referenced by a run plan with read-only *IDN? queries",
+    )
+    run_verify.add_argument("--plan", required=True, help="Path to a WaveBench run plan TOML file")
+    add_runtime_options(run_verify)
     run_sub.add_parser("schema", help="Print supported run plan step kinds and fields")
     run_plan = run_sub.add_parser("plan", help="Execute a WaveBench run plan")
     run_plan.add_argument("--plan", required=True, help="Path to a WaveBench run plan TOML file")
@@ -299,6 +305,13 @@ def _print_run_plan_summary(plan: RunPlan) -> None:
     print(f"steps={len(plan.steps)}")
     for step in plan.steps:
         print(_format_step_summary(step))
+
+
+
+def _print_run_preflight(records: list[Any]) -> None:
+    print("verify=ok / 预检=通过")
+    for record in records:
+        print(f"instrument/仪器={record.instrument} resource/资源={record.resource} idn={record.idn}")
 
 def _print_power_status(status: PowerStatus) -> None:
     set_value = f"{status.set_voltage_v}V/{status.set_current_a}A"
@@ -606,6 +619,11 @@ def main(argv: list[str] | None = None) -> int:
             if args.command == "check":
                 plan = load_run_plan(args.plan)
                 _print_run_plan_summary(plan)
+                return 0
+            if args.command == "verify":
+                plan = load_run_plan(args.plan)
+                records = _load_run_service(args).verify(plan)
+                _print_run_preflight(records)
                 return 0
             if args.command == "schema":
                 print(format_run_plan_schema())

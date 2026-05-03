@@ -123,6 +123,9 @@ class ArbitraryWaveformTests(unittest.TestCase):
     def test_normalize_peak_leaves_unit_range_unchanged(self):
         np.testing.assert_allclose(normalize_peak(np.array([-0.5, 0.25])), [-0.5, 0.25])
 
+    def test_normalize_peak_leaves_all_zero_input_unchanged(self):
+        np.testing.assert_allclose(normalize_peak(np.zeros(4)), np.zeros(4))
+
     def test_dac14_rejects_out_of_range_normalized_values(self):
         with self.assertRaises(DataError):
             normalized_to_dac14(np.array([-1.1, 0.0, 1.0]))
