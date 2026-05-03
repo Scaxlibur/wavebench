@@ -236,6 +236,70 @@ max_source_vpp = 2.0
         self.assertEqual(args.config, "wavebench.toml")
         self.assertEqual(args.plan, "plans/example.toml")
 
+
+    def test_run_check_applies_config_safety_limits_without_io(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config = root / "wavebench.toml"
+            plan = root / "plan.toml"
+            config.write_text("""
+[connection]
+resource = "TCPIP::203.0.113.10::INSTR"
+
+[scope]
+
+[source]
+resource = "TCPIP::203.0.113.11::INSTR"
+
+[safety_limits]
+max_source_vpp = 2.0
+""", encoding="utf-8")
+            plan.write_text("""
+[[steps]]
+kind = "source.set_vpp"
+channel = 2
+value_vpp = 5.0
+""", encoding="utf-8")
+            stderr = io.StringIO()
+
+            with redirect_stderr(stderr):
+                code = main(["run", "check", "--config", str(config), "--plan", str(plan)])
+
+            self.assertEqual(code, 2)
+            self.assertIn("安全上限已超出", stderr.getvalue())
+            self.assertNotIn("TCPIP::203.0.113.11", stderr.getvalue())
+
+    def test_run_check_prints_safety_limits_ok_when_plan_is_under_limit(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config = root / "wavebench.toml"
+            plan = root / "plan.toml"
+            config.write_text("""
+[connection]
+resource = "TCPIP::203.0.113.10::INSTR"
+
+[scope]
+
+[source]
+resource = "TCPIP::203.0.113.11::INSTR"
+
+[safety_limits]
+max_source_vpp = 10.0
+""", encoding="utf-8")
+            plan.write_text("""
+[[steps]]
+kind = "source.set_vpp"
+channel = 2
+value_vpp = 5.0
+""", encoding="utf-8")
+            stdout = io.StringIO()
+
+            with redirect_stdout(stdout):
+                code = main(["run", "check", "--config", str(config), "--plan", str(plan)])
+
+            self.assertEqual(code, 0)
+            self.assertIn("safety_limits=ok / 安全上限=通过", stdout.getvalue())
+
     def test_run_verify_accepts_plan_and_config(self):
         args = build_parser().parse_args([
             "run", "verify", "--config", "wavebench.toml", "--plan", "plans/example.toml"

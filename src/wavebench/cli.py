@@ -618,7 +618,9 @@ def main(argv: list[str] | None = None) -> int:
                 return 0
             if args.command == "check":
                 plan = load_run_plan(args.plan)
+                _load_run_service(args).check(plan)
                 _print_run_plan_summary(plan)
+                print("safety_limits=ok / 安全上限=通过")
                 return 0
             if args.command == "verify":
                 plan = load_run_plan(args.plan)

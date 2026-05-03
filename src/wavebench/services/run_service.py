@@ -107,6 +107,10 @@ class RunService:
             ))
         return records
 
+    def check(self, plan: RunPlan) -> None:
+        self._check_run_plan_safety_limits(plan)
+        self._reject_unsupported_steps(plan)
+
     def _plan_instruments(self, plan: RunPlan) -> set[str]:
         instruments = {step.kind.split(".", 1)[0] for step in plan.steps if "." in step.kind}
         instruments.discard("sleep")
