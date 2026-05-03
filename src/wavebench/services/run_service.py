@@ -117,6 +117,7 @@ class RunService:
         return instruments
 
     def run(self, plan: RunPlan) -> RunResult:
+        self._check_run_plan_safety_limits(plan)
         self._run_safety_guards(plan)
         self._reject_unsupported_steps(plan)
         run_dir = new_package_dir(run_output_base(self.config), plan.label)
@@ -183,6 +184,41 @@ class RunService:
             summary_csv_path=summary_csv_path,
             steps=records,
         )
+
+    def _check_run_plan_safety_limits(self, plan: RunPlan) -> None:
+        limits = self.config.safety_limits
+        for step in plan.steps:
+            if step.kind == "source.set_vpp":
+                _check_limit(
+                    step.fields["value_vpp"],
+                    limits.max_source_vpp,
+                    field=f"run step {step.index} source amplitude / 运行步骤 {step.index} 信号源幅度",
+                    config_key="max_source_vpp",
+                    unit="Vpp",
+                )
+            elif step.kind == "source.arb_load":
+                _check_limit(
+                    step.fields["amplitude_vpp"],
+                    limits.max_source_vpp,
+                    field=f"run step {step.index} arbitrary waveform amplitude / 运行步骤 {step.index} 任意波幅度",
+                    config_key="max_source_vpp",
+                    unit="Vpp",
+                )
+            elif step.kind == "power.set":
+                _check_limit(
+                    step.fields["voltage_v"],
+                    limits.max_power_voltage_v,
+                    field=f"run step {step.index} power voltage / 运行步骤 {step.index} 电源电压",
+                    config_key="max_power_voltage_v",
+                    unit="V",
+                )
+                _check_limit(
+                    step.fields["current_limit_a"],
+                    limits.max_power_current_limit_a,
+                    field=f"run step {step.index} power current limit / 运行步骤 {step.index} 电源限流",
+                    config_key="max_power_current_limit_a",
+                    unit="A",
+                )
 
     def _run_safety_guards(self, plan: RunPlan) -> None:
         if not plan.safety.require_scope_coupling_not:
@@ -486,6 +522,16 @@ class RunService:
                         "expect_failures": " | ".join(record.artifact.get("expect", {}).get("failures", [])),
                     }
                 )
+
+
+def _check_limit(value: float | None, limit: float | None, *, field: str, config_key: str, unit: str) -> None:
+    if value is None or limit is None:
+        return
+    if value > limit:
+        raise ConfigError(
+            f"safety limit exceeded / 安全上限已超出: {field} {value:.12g} {unit} "
+            f"> {config_key} {limit:.12g} {unit}"
+        )
 
 
 def _step_status(artifact: dict[str, Any]) -> str:

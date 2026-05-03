@@ -11,6 +11,7 @@ from wavebench.config import (
     OutputConfig,
     PowerConfig,
     QualityConfig,
+    SafetyLimitsConfig,
     SourceConfig,
     ScopeConfig,
     WaveBenchConfig,
@@ -23,7 +24,11 @@ from wavebench.services.run_plan import load_run_plan
 from wavebench.services.run_service import RunService
 
 
-def make_config(tmp: str, quality: QualityConfig | None = None) -> WaveBenchConfig:
+def make_config(
+    tmp: str,
+    quality: QualityConfig | None = None,
+    safety_limits: SafetyLimitsConfig | None = None,
+) -> WaveBenchConfig:
     return WaveBenchConfig(
         connection=ConnectionConfig(
             backend="lan",
@@ -67,6 +72,7 @@ def make_config(tmp: str, quality: QualityConfig | None = None) -> WaveBenchConf
             settle_ms_after_output=1000,
         ),
         quality=quality or QualityConfig(),
+        safety_limits=safety_limits or SafetyLimitsConfig(),
     )
 
 
@@ -74,8 +80,6 @@ def write_plan(tmp: str, content: str) -> Path:
     path = Path(tmp) / "plan.toml"
     path.write_text(content, encoding="utf-8")
     return path
-
-
 
 
 def fake_capture(
@@ -242,7 +246,6 @@ state = "off"
 
                 power.set_output.assert_called_once_with(channel=1, enabled=False)
                 self.assertEqual(result.steps[0].artifact["power_status"]["output"], "ON")
-
 
 
     def test_scope_capture_quality_gate_records_warnings_without_recovery(self):
@@ -683,7 +686,6 @@ function = "SQU"
                     RunService(config=make_config(tmp), logger=CommandLogger()).run(plan)
 
                 source.restore_restorable_state.assert_called_once_with(fake_state)
-
 
 
 if __name__ == "__main__":

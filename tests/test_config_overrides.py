@@ -2,7 +2,7 @@ import unittest
 import tempfile
 from pathlib import Path
 
-from wavebench.config import AutoscaleConfig, ConnectionConfig, OutputConfig, PowerConfig, ScopeConfig, WaveBenchConfig, WaveformConfig, load_config
+from wavebench.config import AutoscaleConfig, ConnectionConfig, OutputConfig, PowerConfig, SafetyLimitsConfig, ScopeConfig, WaveBenchConfig, WaveformConfig, load_config
 
 
 class ConfigOverrideTests(unittest.TestCase):
@@ -70,6 +70,20 @@ class ConfigOverrideTests(unittest.TestCase):
         self.assertEqual(updated.waveform.expected_frequency_hz, 500.0)
         self.assertEqual(updated.waveform.frequency_tolerance_ratio, 0.1)
 
+    def test_safety_limits_defaults_and_are_preserved_by_overrides(self):
+        config = WaveBenchConfig(
+            connection=ConnectionConfig("lan", "TCPIP::127.0.0.1::INSTR", 100, 100),
+            scope=ScopeConfig("rtm2032", None, 1, False, True),
+            autoscale=AutoscaleConfig(True, True),
+            waveform=WaveformConfig("real", "lsbf", "dmax"),
+            output=OutputConfig(Path("data/raw"), "timestamp_label", True, True, True, True, False),
+            source_path=Path("test.toml"),
+            safety_limits=SafetyLimitsConfig(max_source_vpp=2.5),
+        )
+        self.assertEqual(config.safety_limits.max_source_vpp, 2.5)
+        updated = config.with_waveform_overrides(points="def")
+        self.assertEqual(updated.safety_limits.max_source_vpp, 2.5)
+
     def test_quality_config_defaults_and_is_preserved_by_overrides(self):
         config = WaveBenchConfig(
             connection=ConnectionConfig("lan", "TCPIP::127.0.0.1::INSTR", 100, 100),
@@ -112,6 +126,42 @@ class ConfigOverrideTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SafetyLimitsConfigTests(unittest.TestCase):
+    def test_loads_safety_limits_config(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "wavebench.toml"
+            path.write_text("""
+[connection]
+resource = "TCPIP::127.0.0.1::INSTR"
+
+[scope]
+
+[safety_limits]
+max_source_vpp = 2.5
+max_power_voltage_v = 5.0
+max_power_current_limit_a = 0.2
+""", encoding="utf-8")
+            config = load_config(path)
+            self.assertEqual(config.safety_limits.max_source_vpp, 2.5)
+            self.assertEqual(config.safety_limits.max_power_voltage_v, 5.0)
+            self.assertEqual(config.safety_limits.max_power_current_limit_a, 0.2)
+
+    def test_rejects_non_positive_safety_limit(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "wavebench.toml"
+            path.write_text("""
+[connection]
+resource = "TCPIP::127.0.0.1::INSTR"
+
+[scope]
+
+[safety_limits]
+max_source_vpp = 0
+""", encoding="utf-8")
+            with self.assertRaisesRegex(Exception, "safety_limits.max_source_vpp"):
+                load_config(path)
 
 
 class QualityConfigTests(unittest.TestCase):

@@ -50,6 +50,7 @@ class PowerService:
         self, channel: int | None, voltage_v: float, current_limit_a: float
     ) -> PowerStatus:
         power_cfg = self._power_config()
+        self._check_power_limits(voltage_v=voltage_v, current_limit_a=current_limit_a)
         channel = power_cfg.default_channel if channel is None else channel
         power = self._open_power()
         try:
@@ -63,11 +64,31 @@ class PowerService:
         finally:
             power.close()
 
+    def _check_power_limits(self, *, voltage_v: float | None, current_limit_a: float | None) -> None:
+        max_voltage = self.config.safety_limits.max_power_voltage_v
+        if max_voltage is not None and voltage_v is not None and voltage_v > max_voltage:
+            raise ConfigError(
+                f"safety limit exceeded / 安全上限已超出: power voltage {voltage_v:.12g} V "
+                f"> max_power_voltage_v {max_voltage:.12g} V"
+            )
+        max_current = self.config.safety_limits.max_power_current_limit_a
+        if max_current is not None and current_limit_a is not None and current_limit_a > max_current:
+            raise ConfigError(
+                f"safety limit exceeded / 安全上限已超出: power current limit {current_limit_a:.12g} A "
+                f"> max_power_current_limit_a {max_current:.12g} A"
+            )
+
     def set_output(self, channel: int | None, enabled: bool) -> PowerStatus:
         power_cfg = self._power_config()
         channel = power_cfg.default_channel if channel is None else channel
         power = self._open_power()
         try:
+            if enabled:
+                status = power.get_status(channel)
+                self._check_power_limits(
+                    voltage_v=status.set_voltage_v,
+                    current_limit_a=status.set_current_a,
+                )
             return power.set_output(
                 channel,
                 enabled,

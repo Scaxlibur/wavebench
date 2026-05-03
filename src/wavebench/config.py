@@ -102,6 +102,21 @@ class QualityConfig:
     duty_consistency: float = 0.03
 
 @dataclass(frozen=True)
+class SafetyLimitsConfig:
+    max_source_vpp: float | None = None
+    max_power_voltage_v: float | None = None
+    max_power_current_limit_a: float | None = None
+
+
+def _optional_positive_float(raw: dict, key: str) -> float | None:
+    if key not in raw:
+        return None
+    value = float(raw[key])
+    if value <= 0:
+        raise ConfigError(f"safety_limits.{key} must be > 0")
+    return value
+
+@dataclass(frozen=True)
 class WaveBenchConfig:
     connection: ConnectionConfig
     scope: ScopeConfig
@@ -112,6 +127,7 @@ class WaveBenchConfig:
     source: SourceConfig | None = None
     power: PowerConfig | None = None
     quality: QualityConfig = QualityConfig()
+    safety_limits: SafetyLimitsConfig = SafetyLimitsConfig()
 
     def with_connection_timeout_ms(self, timeout_ms: int) -> "WaveBenchConfig":
         if timeout_ms <= 0:
@@ -131,6 +147,7 @@ class WaveBenchConfig:
             source=self.source,
             power=self.power,
             quality=self.quality,
+            safety_limits=self.safety_limits,
         )
 
     def with_resource(self, resource: str) -> "WaveBenchConfig":
@@ -149,6 +166,7 @@ class WaveBenchConfig:
             source=self.source,
             power=self.power,
             quality=self.quality,
+            safety_limits=self.safety_limits,
         )
 
     def with_output_overrides(
@@ -172,6 +190,7 @@ class WaveBenchConfig:
             source=self.source,
             power=self.power,
             quality=self.quality,
+            safety_limits=self.safety_limits,
         )
 
     def with_waveform_overrides(
@@ -217,6 +236,7 @@ class WaveBenchConfig:
             source=self.source,
             power=self.power,
             quality=self.quality,
+            safety_limits=self.safety_limits,
         )
 
     def with_source_resource(self, resource: str) -> "WaveBenchConfig":
@@ -245,6 +265,7 @@ class WaveBenchConfig:
             ),
             power=self.power,
             quality=self.quality,
+            safety_limits=self.safety_limits,
         )
 
     def with_power_resource(self, resource: str) -> "WaveBenchConfig":
@@ -273,6 +294,7 @@ class WaveBenchConfig:
                 settle_ms_after_output=power.settle_ms_after_output,
             ),
             quality=self.quality,
+            safety_limits=self.safety_limits,
         )
 
 def load_config(path: str | Path = "wavebench.toml") -> WaveBenchConfig:
@@ -293,6 +315,7 @@ def load_config(path: str | Path = "wavebench.toml") -> WaveBenchConfig:
         w = raw.get("waveform", {})
         o = raw.get("output", {})
         q = raw.get("quality", {})
+        sl = raw.get("safety_limits", {})
         src = raw.get("source")
         source = None
         if src is not None:
@@ -368,6 +391,11 @@ def load_config(path: str | Path = "wavebench.toml") -> WaveBenchConfig:
                 voltage_vpp_consistency_ratio=float(q.get("voltage_vpp_consistency_ratio", 0.05)),
                 voltage_mean_consistency_v=float(q.get("voltage_mean_consistency_v", 0.05)),
                 duty_consistency=float(q.get("duty_consistency", 0.03)),
+            ),
+            safety_limits=SafetyLimitsConfig(
+                max_source_vpp=_optional_positive_float(sl, "max_source_vpp"),
+                max_power_voltage_v=_optional_positive_float(sl, "max_power_voltage_v"),
+                max_power_current_limit_a=_optional_positive_float(sl, "max_power_current_limit_a"),
             ),
         )
     except KeyError as exc:

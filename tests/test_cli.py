@@ -1,7 +1,7 @@
 import io
 import json
 import unittest
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -103,14 +103,33 @@ class CliTests(unittest.TestCase):
         self.assertEqual(args.value_vpp, 3.3)
 
 
+    def test_source_set_vpp_rejects_safety_limit_from_config(self):
+        with TemporaryDirectory() as tmp:
+            config = Path(tmp) / "wavebench.toml"
+            config.write_text("""
+[connection]
+resource = "TCPIP::scope::INSTR"
+
+[scope]
+
+[source]
+resource = "TCPIP::source::INSTR"
+
+[safety_limits]
+max_source_vpp = 2.0
+""", encoding="utf-8")
+            stderr = io.StringIO()
+            with redirect_stderr(stderr):
+                code = main(["source", "set-vpp", "--config", str(config), "5.0"])
+            self.assertEqual(code, 2)
+            self.assertIn("安全上限已超出", stderr.getvalue())
+
     def test_source_set_duty_accepts_percent(self):
-        args = build_parser().parse_args(["source", "set-duty", "--channel", "2", "25"] )
+        args = build_parser().parse_args(["source", "set-duty", "--channel", "2", "25"])
         self.assertEqual(args.domain, "source")
         self.assertEqual(args.command, "set-duty")
         self.assertEqual(args.channel, 2)
         self.assertEqual(args.duty_percent, 25.0)
-
-
 
 
     def test_source_arb_probe_accepts_channel(self):

@@ -95,6 +95,9 @@ class SourceService:
         channel = source_cfg.default_channel if channel is None else channel
         source = self._open_source()
         try:
+            if enabled:
+                status = source.get_status(channel)
+                self._check_source_vpp(status.amplitude_vpp, field="source output amplitude / 信号源输出幅度")
             return source.set_output(channel, enabled, check_errors=source_cfg.check_errors)
         finally:
             source.close()
@@ -119,6 +122,7 @@ class SourceService:
 
     def set_amplitude_vpp(self, channel: int | None, value_vpp: float) -> SourceStatus:
         source_cfg = self._source_config()
+        self._check_source_vpp(value_vpp, field="source amplitude / 信号源幅度")
         channel = source_cfg.default_channel if channel is None else channel
         source = self._open_source()
         try:
@@ -141,6 +145,7 @@ class SourceService:
         output_on: bool = False,
     ) -> SourceStatus:
         source_cfg = self._source_config()
+        self._check_source_vpp(amplitude_vpp, field="arbitrary waveform amplitude / 任意波幅度")
         channel = source_cfg.default_channel if channel is None else channel
         waveform = load_arbitrary_waveform(
             file_path,
@@ -161,6 +166,14 @@ class SourceService:
             )
         finally:
             source.close()
+
+    def _check_source_vpp(self, value_vpp: float, *, field: str) -> None:
+        limit = self.config.safety_limits.max_source_vpp
+        if limit is not None and value_vpp > limit:
+            raise ConfigError(
+                f"safety limit exceeded / 安全上限已超出: {field} {value_vpp:.12g} Vpp "
+                f"> max_source_vpp {limit:.12g} Vpp"
+            )
 
     def probe_arbitrary_queries(self, channel: int | None = None) -> list[ArbitraryQueryProbeResult]:
         source_cfg = self._source_config()

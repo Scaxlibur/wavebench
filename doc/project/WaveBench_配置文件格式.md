@@ -129,6 +129,11 @@ voltage_vpp_consistency_ratio = 0.05
 voltage_mean_consistency_v = 0.05
 duty_consistency = 0.03
 
+[safety_limits]
+max_source_vpp = 5.0
+max_power_voltage_v = 5.0
+max_power_current_limit_a = 0.2
+
 [source]
 driver = "dg4202"
 resource = "TCPIP::192.0.2.11::INSTR"
@@ -272,6 +277,25 @@ duty_consistency = 0.03
 
 `[steps.expect]` 不在本机配置里定义。它属于单个 run plan step，因为指标范围通常和具体实验目标绑定。
 
+## `[safety_limits]`
+
+```toml
+[safety_limits]
+max_source_vpp = 5.0
+max_power_voltage_v = 5.0
+max_power_current_limit_a = 0.2
+```
+
+这些参数是第一层执行安全上限。全部都是可选项；省略某一项表示这一轴不设软件上限。
+
+- `max_source_vpp`：限制 `source set-vpp`、`source arb-load`、`run plan` 中 `source.set_vpp` / `source.arb_load` 的 Vpp。
+- `max_power_voltage_v`：限制 `power set` 与 `run plan` 中 `power.set` 的设定电压。
+- `max_power_current_limit_a`：限制 `power set` 与 `run plan` 中 `power.set` 的限流值。
+
+`run plan` 会在创建 run 目录和连接仪器前先检查这些上限。直接 CLI 设置也会在写仪器前检查。`source output on` / `power output on` 会先读取当前设定值，若当前设定值超限，则拒绝打开输出。
+
+这层不会自动判断示波器 50Ω 输入阻抗，也不会替用户推断被测电路是否安全；它只是先挡住明确超过配置上限的写操作。
+
 ## `[source]`
 
 ```toml
@@ -353,6 +377,25 @@ import tomllib
 
 第一阶段只需要读取配置，不需要程序写回配置，因此无需额外 TOML 写入库。
 
+
+## `[safety_limits]`
+
+```toml
+[safety_limits]
+max_source_vpp = 5.0
+max_power_voltage_v = 5.0
+max_power_current_limit_a = 0.2
+```
+
+这些参数是第一层执行安全上限。全部都是可选项；省略某一项表示这一轴不设软件上限。
+
+- `max_source_vpp`：限制 `source set-vpp`、`source arb-load`、`run plan` 中 `source.set_vpp` / `source.arb_load` 的 Vpp。
+- `max_power_voltage_v`：限制 `power set` 与 `run plan` 中 `power.set` 的设定电压。
+- `max_power_current_limit_a`：限制 `power set` 与 `run plan` 中 `power.set` 的限流值。
+
+`run plan` 会在创建 run 目录和连接仪器前先检查这些上限。直接 CLI 设置也会在写仪器前检查。`source output on` / `power output on` 会先读取当前设定值，若当前设定值超限，则拒绝打开输出。
+
+这层不会自动判断示波器 50Ω 输入阻抗，也不会替用户推断被测电路是否安全；它只是先挡住明确超过配置上限的写操作。
 
 ## `[source]`
 

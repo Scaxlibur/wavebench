@@ -90,6 +90,17 @@ voltage_mean_consistency_v = 0.05
 duty_consistency = 0.03
 
 
+[safety_limits]
+# Optional execution guards. Omit a value to leave that axis unlimited.
+# Source amplitude writes above this Vpp are rejected before instrument I/O.
+max_source_vpp = 5.0
+
+# Power voltage/current-limit writes above these values are rejected before instrument I/O.
+# Turning power output on also checks the currently configured setpoints first.
+max_power_voltage_v = 5.0
+max_power_current_limit_a = 0.2
+
+
 [source]
 # Signal generator driver. Current MVP source support targets Rigol DG4202.
 driver = "dg4202"
