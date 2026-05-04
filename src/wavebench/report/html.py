@@ -125,56 +125,71 @@ def render_run_report_html(run: RunPackage, output_dir: str | Path | None = None
 <meta charset="utf-8">
 <title>WaveBench 运行报告 / Run report - {escape(str(experiment.get('label', run.path.name)))}</title>
 <style>
-body {{ font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif; line-height: 1.45; margin: 2rem; color: #1f2933; background: #f8fafc; }}
-h1, h2 {{ color: #102a43; }}
+body {{ --bg: #f6f7f9; --surface: #ffffff; --text: #1f2933; --muted: #667085; --line: #d9e2ec; --brand: #2563eb; --ok-bg: #e3f9e5; --ok: #0b6b3a; --failed-bg: #ffe3e3; --failed: #a61b1b; --warning-bg: #fff3c4; --warning: #915930; font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif; line-height: 1.5; margin: 0; color: var(--text); background: var(--bg); }}
+main {{ max-width: 1180px; margin: 0 auto; padding: 2rem 1rem 3rem; }}
+h1, h2 {{ color: #102a43; letter-spacing: -0.02em; }}
+h1 {{ margin-bottom: 0.25rem; font-size: clamp(1.75rem, 4vw, 2.7rem); }}
 h2 {{ margin-top: 1.75rem; }}
-table {{ border-collapse: collapse; width: 100%; margin: 0.5rem 0 1.25rem; background: #fff; }}
-th, td {{ border: 1px solid #d9e2ec; padding: 0.35rem 0.5rem; text-align: left; vertical-align: top; }}
-th {{ background: #f0f4f8; color: #334e68; }}
-code {{ background: #f0f4f8; padding: 0.1rem 0.25rem; border-radius: 3px; }}
+section, article.card, figure.card {{ border: 1px solid var(--line); border-radius: 14px; background: var(--surface); box-shadow: 0 1px 2px rgba(16, 42, 67, 0.04); }}
+table {{ border-collapse: collapse; width: 100%; background: var(--surface); }}
+th, td {{ border-bottom: 1px solid var(--line); padding: 0.5rem 0.65rem; text-align: left; vertical-align: top; }}
+th {{ background: #f0f4f8; color: #334e68; font-weight: 650; }}
+tr:last-child td {{ border-bottom: 0; }}
+code {{ background: #f0f4f8; padding: 0.1rem 0.3rem; border-radius: 5px; }}
+.table {{ overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); margin: 0.5rem 0 1.25rem; }}
+.meta-card {{ padding: 0.85rem 1rem; margin: 1rem 0 1.25rem; }}
+.meta-card p {{ margin: 0.35rem 0; }}
 .screenshot-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr)); gap: 1rem; }}
-.screenshot-card {{ border: 1px solid #d9e2ec; border-radius: 8px; padding: 0.75rem; background: #fff; }}
-.screenshot-card img {{ display: block; max-width: 100%; height: auto; border: 1px solid #d9e2ec; }}
-.screenshot-thumb {{ max-width: 12rem; height: auto; border: 1px solid #d9e2ec; border-radius: 4px; }}
+.screenshot-card {{ padding: 0.85rem; }}
+.screenshot-card img {{ display: block; max-width: 100%; height: auto; border: 1px solid var(--line); border-radius: 8px; }}
+.screenshot-thumb {{ max-width: 12rem; height: auto; border: 1px solid var(--line); border-radius: 6px; }}
 .waveform-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(22rem, 1fr)); gap: 1rem; }}
-.waveform-card {{ border: 1px solid #d9e2ec; border-radius: 8px; padding: 0.75rem; background: #fff; }}
-.waveform-card svg {{ display: block; max-width: 100%; height: auto; margin-top: 0.5rem; }}
-.summary-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); gap: 0.75rem; margin: 1rem 0 1.25rem; }}
-.summary-card {{ border: 1px solid #d9e2ec; border-radius: 8px; padding: 0.75rem; background: #fff; box-shadow: 0 1px 2px rgba(16, 42, 67, 0.05); }}
-.summary-card .label {{ color: #627d98; font-size: 0.85rem; }}
-.summary-card .value {{ display: inline-block; font-size: 1.25rem; font-weight: 700; margin-top: 0.15rem; }}
-.summary-card .value.ok, .summary-card .value.failed, .summary-card .value.warning {{ border-radius: 999px; padding: 0.05rem 0.45rem; font-size: 1rem; }}
-.summary-card .value.ok {{ background: #e3f9e5; }}
-.summary-card .value.failed {{ background: #ffe3e3; }}
-.summary-card .value.warning {{ background: #fff3c4; }}
-.muted {{ color: #627d98; font-weight: 500; }}
-.ok {{ color: #0b6b3a; }}
-.failed {{ color: #a61b1b; }}
-.warning {{ color: #915930; }}
-.expectations-table tr.failed td {{ background: #fff5f5; }}
+.waveform-card {{ padding: 0.85rem; }}
+.waveform-card svg {{ display: block; max-width: 100%; height: auto; margin-top: 0.5rem; border-radius: 8px; }}
+.summary-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); gap: 0.75rem; margin: 1rem 0 1.25rem; padding: 0.85rem; }}
+.summary-card {{ padding: 0.85rem; min-width: 0; }}
+.summary-card .label {{ color: var(--muted); font-size: 0.85rem; }}
+.summary-card .value {{ display: inline-block; font-size: 1.25rem; font-weight: 750; margin-top: 0.15rem; overflow-wrap: anywhere; }}
+.badge, .summary-card .value.ok, .summary-card .value.failed, .summary-card .value.warning {{ border-radius: 999px; padding: 0.08rem 0.5rem; font-size: 0.95rem; }}
+.summary-card .value.ok, .badge.ok {{ background: var(--ok-bg); color: var(--ok); }}
+.summary-card .value.failed, .badge.failed {{ background: var(--failed-bg); color: var(--failed); }}
+.summary-card .value.warning, .badge.warning {{ background: var(--warning-bg); color: var(--warning); }}
+.muted {{ color: var(--muted); font-weight: 500; }}
+.ok {{ color: var(--ok); }}
+.failed {{ color: var(--failed); }}
+.warning {{ color: var(--warning); }}
+.expectations-table tr.failed td {{ background: #fff8f8; }}
 .expectations-table tr.ok td {{ background: #f7fff9; }}
+@media print {{ body {{ background: #fff; }} main {{ max-width: none; padding: 0; }} section, article.card, figure.card, .table {{ box-shadow: none; }} }}
 </style>
 </head>
 <body>
+<main>
 <h1>WaveBench 运行报告 <span class="muted">Run report</span></h1>
+<p class="muted">A static, self-contained hardware validation report.</p>
 {_summary_block(summary)}
+<article class="card meta-card">
 <p><b>运行目录 / Run directory:</b> <code>{escape(str(run.path))}</code></p>
-<p><b>状态 / Status:</b> <span class="{escape(run.status)}">{escape(run.status)}</span></p>
+<p><b>状态 / Status:</b> <span class="badge {escape(run.status)}">{escape(run.status)}</span></p>
 <p><b>实验 / Experiment:</b> {escape(str(experiment.get('name', '')))} / {escape(str(experiment.get('label', '')))}</p>
 <p><b>summary.csv:</b> {summary_note}</p>
 {restore_block}
+</article>
 {error_block}
 <h2>步骤 / Steps</h2>
+<div class="table">
 <table>
 <thead><tr><th>#</th><th>类型 / Kind</th><th>状态 / Status</th><th>采集包 / Package</th><th>截图 / Screenshot</th><th>质量 / Quality</th><th>预期 / Expect</th><th>警告 / Warnings</th><th>失败项 / Failures</th></tr></thead>
 <tbody>
 {rows}
 </tbody>
 </table>
+</div>
 {expectations_block}
 {signals_block}
 {waveform_previews_block}
 {screenshots_block}
+</main>
 </body>
 </html>
 """
@@ -264,10 +279,10 @@ def _summary_block(summary: ReportSummary) -> str:
 def _summary_card(label: str, value: str, *, css_class: str = "") -> str:
     safe_class = f" {escape(css_class)}" if css_class else ""
     return (
-        '<div class="summary-card">'
+        '<article class="card summary-card">'
         f'<div class="label">{escape(label)}</div>'
         f'<div class="value{safe_class}">{escape(value) if value else "-"}</div>'
-        '</div>'
+        '</article>'
     )
 
 
@@ -276,12 +291,13 @@ def _expectations_block(expectations: list[ReportExpectationRow]) -> str:
         return ""
     rows = "\n".join(_expectation_row(row) for row in expectations)
     return f"""<h2>预期 vs 实测 / Expected vs measured</h2>
-<table class="expectations-table">
+<div class="table"><table class="expectations-table">
 <thead><tr><th>步骤 / Step</th><th>类型 / Kind</th><th>指标 / Metric</th><th>预期 / Expected</th><th>实测 / Measured</th><th>状态 / Status</th><th>细节 / Details</th></tr></thead>
 <tbody>
 {rows}
 </tbody>
 </table>
+</div>
 """
 
 
@@ -468,7 +484,7 @@ def _waveform_previews_block(previews: list[ReportWaveformPreview]) -> str:
 def _waveform_preview_card(preview: ReportWaveformPreview) -> str:
     warning = f'<p class="warning">{escape(preview.warning)}</p>' if preview.warning else ""
     return (
-        '<figure class="waveform-card">'
+        '<figure class="card waveform-card">'
         f"<figcaption>{escape(preview.title)}<br><code>{escape(preview.package)}</code></figcaption>"
         f"{preview.svg}"
         f"{warning}"
@@ -481,12 +497,13 @@ def _signals_block(signals: list[ReportSignalSummary]) -> str:
         return ""
     rows = "\n".join(_signal_row(item) for item in signals)
     return f"""<h2>信号分析 / Signal analysis</h2>
-<table>
+<div class="table"><table>
 <thead><tr><th>步骤 / Step</th><th>通道 / Channel</th><th>采样点 / Samples</th><th>频率 / Frequency</th><th>Vpp</th><th>RMS</th><th>Mean</th><th>Duty</th><th>Rise</th><th>Fall</th><th>警告 / Warnings</th></tr></thead>
 <tbody>
 {rows}
 </tbody>
 </table>
+</div>
 """
 
 
@@ -513,7 +530,7 @@ def _screenshot_card(screenshot: ReportScreenshot) -> str:
     src = escape(screenshot.src, quote=True)
     package = escape(screenshot.package)
     return (
-        '<figure class="screenshot-card">'
+        '<figure class="card screenshot-card">'
         f'<a href="{src}"><img src="{src}" alt="Step {step} screenshot"></a>'
         f'<figcaption>Step {step}: <code>{package}</code></figcaption>'
         '</figure>'
