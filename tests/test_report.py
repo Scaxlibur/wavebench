@@ -340,7 +340,23 @@ class RunReportTests(unittest.TestCase):
                                             "duty_cycle: unavailable",
                                             "frequency_error_ratio: not numeric",
                                         ],
-                                    }
+                                    },
+                                    "expect_fft": {
+                                        "status": "ok",
+                                        "checks": {
+                                            "peak_frequency_hz": {
+                                                "status": "ok",
+                                                "value": 1000.0,
+                                                "limits": {"min": 990.0, "max": 1010.0},
+                                            },
+                                            "harmonic_2_amplitude_v": {
+                                                "status": "ok",
+                                                "value": 0.1,
+                                                "limits": {"max": 0.2},
+                                            },
+                                        },
+                                        "failures": [],
+                                    },
                                 },
                             }
                         ],
@@ -365,6 +381,10 @@ class RunReportTests(unittest.TestCase):
             self.assertIn("<td>unavailable</td>", html)
             self.assertIn("<td>not_numeric</td>", html)
             self.assertIn('<tr class="failed"><td>7</td><td>scope.capture</td><td>voltage_vpp_v</td>', html)
+            self.assertIn("FFT 主频 / FFT peak", html)
+            self.assertIn("FFT H2 幅度 / FFT H2 amplitude", html)
+            self.assertIn("<td>fft.peak_frequency_hz</td>", html)
+            self.assertIn("<td>fft.harmonic_2_amplitude_v</td>", html)
 
     def test_run_report_omits_expected_vs_measured_without_expect_checks(self):
         with TemporaryDirectory() as tmp:

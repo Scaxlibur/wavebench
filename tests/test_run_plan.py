@@ -115,6 +115,7 @@ duraton_s = 0.5
     def test_step_schemas_drive_schema_output(self):
         self.assertIn("scope.capture", STEP_SCHEMAS)
         self.assertIn("expect", STEP_SCHEMAS["scope.capture"].optional)
+        self.assertIn("expect_fft", STEP_SCHEMAS["scope.capture"].optional)
 
     def test_restore_source_channel_requires_source_state(self):
         path = self._write_plan("""
@@ -220,6 +221,7 @@ duration_s = 0.5
         self.assertIn("power.output", text)
         self.assertIn("source.arb_load", text)
         self.assertIn("[steps.expect]", text)
+        self.assertIn("[steps.expect_fft]", text)
         self.assertIn("frequency_estimate_hz", text)
 
     def test_scope_auto_step_is_explicit_and_has_no_fields(self):
@@ -307,6 +309,21 @@ voltage_vpp_v = { min = 3.0, max = 3.6 }
         expect = plan.steps[0].fields["expect"]
         self.assertEqual(expect["duty_cycle"], {"min": 0.49, "max": 0.51})
         self.assertEqual(expect["frequency_error_ratio"], {"max": 0.02})
+
+    def test_scope_capture_accepts_fft_expect_limits(self):
+        path = self._write_plan("""
+[[steps]]
+kind = "scope.capture"
+label = "fft"
+
+[steps.expect_fft]
+peak_frequency_hz = { min = 990.0, max = 1010.0 }
+harmonic_2_amplitude_v = { max = 0.2 }
+""")
+        plan = load_run_plan(path)
+        expect_fft = plan.steps[0].fields["expect_fft"]
+        self.assertEqual(expect_fft["peak_frequency_hz"], {"min": 990.0, "max": 1010.0})
+        self.assertEqual(expect_fft["harmonic_2_amplitude_v"], {"max": 0.2})
 
     def test_scope_capture_expect_requires_limits(self):
         path = self._write_plan("""

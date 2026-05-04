@@ -336,7 +336,13 @@ def _metric_label(metric: str) -> str:
         "voltage_vpp_v": "峰峰值 / Vpp",
         "duty_cycle": "占空比 / Duty",
         "thd_ratio": "总谐波失真 / THD",
+        "fft.peak_frequency_hz": "FFT 主频 / FFT peak",
+        "fft.peak_amplitude_v": "FFT 主幅度 / FFT peak amp",
+        "fft.thd_ratio": "FFT 总谐波失真 / FFT THD",
     }
+    if metric.startswith("fft.harmonic_") and metric.endswith("_amplitude_v"):
+        order = metric.split("_")[1]
+        return f"FFT H{order} 幅度 / FFT H{order} amplitude"
     return labels.get(metric, metric.replace("_", " "))
 
 
@@ -415,24 +421,25 @@ def _collect_expectation_rows(run: RunPackage) -> list[ReportExpectationRow]:
     rows: list[ReportExpectationRow] = []
     for step in run.steps:
         artifact = step.get("artifact", {}) if isinstance(step.get("artifact"), dict) else {}
-        expect = artifact.get("expect", {}) if isinstance(artifact.get("expect"), dict) else {}
-        checks = expect.get("checks", {})
-        if not isinstance(checks, dict):
-            continue
-        for metric, raw_check in checks.items():
-            check = raw_check if isinstance(raw_check, dict) else {}
-            status = str(check.get("status", "")) or str(expect.get("status", ""))
-            rows.append(
-                ReportExpectationRow(
-                    step_index=str(step.get("index", "")),
-                    step_kind=str(step.get("kind", "")),
-                    metric=str(metric),
-                    expected=_format_limits(check.get("limits", {})),
-                    measured=_format_expect_measured(check),
-                    status=status,
-                    details=_format_expect_details(check),
+        for expect_key, prefix in (("expect", ""), ("expect_fft", "fft.")):
+            expect = artifact.get(expect_key, {}) if isinstance(artifact.get(expect_key), dict) else {}
+            checks = expect.get("checks", {})
+            if not isinstance(checks, dict):
+                continue
+            for metric, raw_check in checks.items():
+                check = raw_check if isinstance(raw_check, dict) else {}
+                status = str(check.get("status", "")) or str(expect.get("status", ""))
+                rows.append(
+                    ReportExpectationRow(
+                        step_index=str(step.get("index", "")),
+                        step_kind=str(step.get("kind", "")),
+                        metric=f"{prefix}{metric}",
+                        expected=_format_limits(check.get("limits", {})),
+                        measured=_format_expect_measured(check),
+                        status=status,
+                        details=_format_expect_details(check),
+                    )
                 )
-            )
     return rows
 
 
@@ -492,7 +499,10 @@ def _build_report_summary(
         elif warnings:
             warning_messages.add(str(warnings))
         expect = artifact.get("expect", {}) if isinstance(artifact.get("expect"), dict) else {}
+        expect_fft = artifact.get("expect_fft", {}) if isinstance(artifact.get("expect_fft"), dict) else {}
         if expect.get("status") == "failed":
+            failed_expect_count += 1
+        if expect_fft.get("status") == "failed":
             failed_expect_count += 1
     for signal in signals:
         if signal.warnings:

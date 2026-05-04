@@ -5,6 +5,8 @@ from unittest.mock import patch
 import json
 import unittest
 
+import numpy as np
+
 from wavebench.config import (
     AutoscaleConfig,
     ConnectionConfig,
@@ -107,8 +109,13 @@ def fake_capture(
         "duty_cycle": duty_cycle,
         "frequency_error_ratio": frequency_error_ratio,
     }
+    waveform_path = package / "ch1.npy"
+    sample_rate = 100_000.0
+    times = np.arange(4096) / sample_rate
+    volts = np.sin(2 * np.pi * 1000.0 * times) + 0.1 * np.sin(2 * np.pi * 2000.0 * times)
+    np.save(waveform_path, np.column_stack((times, volts)))
     waveform = SimpleNamespace(summary=lambda **kwargs: summary)
-    return SimpleNamespace(package_dir=package, metadata_path=metadata, waveform=waveform)
+    return SimpleNamespace(package_dir=package, metadata_path=metadata, waveform=waveform, npy_path=waveform_path)
 
 def ok_power_status() -> PowerStatus:
     return PowerStatus(
@@ -429,6 +436,65 @@ duty_cycle = { min = 0.49, max = 0.51 }
 
                 self.assertEqual(result.steps[0].status, "failed")
                 self.assertEqual(result.steps[0].artifact["expect"]["checks"]["duty_cycle"]["reason"], "unavailable")
+
+
+    def test_scope_capture_fft_expect_passes_and_is_written_to_summary(self):
+        with TemporaryDirectory() as tmp:
+            plan = load_run_plan(
+                write_plan(
+                    tmp,
+                    """
+[[steps]]
+kind = "scope.capture"
+label = "fft"
+
+[steps.expect_fft]
+peak_frequency_hz = { min = 990.0, max = 1010.0 }
+peak_amplitude_v = { min = 0.8, max = 1.2 }
+harmonic_2_amplitude_v = { min = 0.05, max = 0.2 }
+thd_ratio = { max = 0.2 }
+""",
+                )
+            )
+            capture = fake_capture(tmp, "fft", [])
+            with patch("wavebench.services.run_service.ScopeService") as scope_cls:
+                scope_cls.return_value.capture_waveform.return_value = capture
+
+                result = RunService(config=make_config(tmp), logger=CommandLogger()).run(plan)
+
+                self.assertEqual(result.steps[0].status, "ok")
+                artifact = result.steps[0].artifact
+                self.assertEqual(artifact["fft"]["status"], "ok")
+                self.assertEqual(artifact["expect_fft"]["status"], "ok")
+                self.assertIn("harmonic_2_amplitude_v", artifact["expect_fft"]["checks"])
+                summary = result.summary_csv_path.read_text(encoding="utf-8")
+                self.assertIn("expect_fft_status", summary)
+                self.assertIn("expect_fft_failures", summary)
+
+    def test_scope_capture_fft_expect_failure_marks_run_failed(self):
+        with TemporaryDirectory() as tmp:
+            plan = load_run_plan(
+                write_plan(
+                    tmp,
+                    """
+[[steps]]
+kind = "scope.capture"
+label = "fft"
+
+[steps.expect_fft]
+peak_frequency_hz = { min = 2000.0, max = 3000.0 }
+""",
+                )
+            )
+            capture = fake_capture(tmp, "fft", [])
+            with patch("wavebench.services.run_service.ScopeService") as scope_cls:
+                scope_cls.return_value.capture_waveform.return_value = capture
+
+                result = RunService(config=make_config(tmp), logger=CommandLogger()).run(plan)
+
+                self.assertEqual(result.steps[0].status, "failed")
+                self.assertEqual(result.steps[0].artifact["expect_fft"]["status"], "failed")
+                self.assertIn("peak_frequency_hz", result.steps[0].artifact["expect_fft"]["failures"][0])
 
     def test_runs_scope_auto_step(self):
         with TemporaryDirectory() as tmp:

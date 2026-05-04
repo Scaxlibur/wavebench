@@ -8,7 +8,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import numpy as np
+
 from wavebench.config import WaveBenchConfig
+from wavebench.data.fft import analyze_fft
 from wavebench.data.package import new_package_dir
 from wavebench.errors import ConfigError, WaveBenchError
 from wavebench.logging import CommandLogger
@@ -386,7 +389,11 @@ class RunService:
                 "warnings": warnings,
             }
         if "expect" in step.fields:
-            artifact["expect"] = _evaluate_expect(artifact, step.fields["expect"])
+            artifact["expect"] = _evaluate_expect(artifact.get("quality", {}), step.fields["expect"])
+        if "expect_fft" in step.fields:
+            fft_summary = _capture_fft_summary(capture)
+            artifact["fft"] = fft_summary
+            artifact["expect_fft"] = _evaluate_expect(fft_summary, step.fields["expect_fft"])
         return artifact
 
     def _recovery_attempt_record(self, index: int, kind: str, artifact: dict[str, Any]) -> dict[str, Any]:
@@ -523,6 +530,8 @@ class RunService:
                 "recovered",
                 "expect_status",
                 "expect_failures",
+                "expect_fft_status",
+                "expect_fft_failures",
             ]
             writer = csv.DictWriter(file, fieldnames=fieldnames)
             writer.writeheader()
@@ -539,8 +548,21 @@ class RunService:
                         "recovered": "yes" if "quality_recovery" in record.artifact else "",
                         "expect_status": record.artifact.get("expect", {}).get("status", ""),
                         "expect_failures": " | ".join(record.artifact.get("expect", {}).get("failures", [])),
+                        "expect_fft_status": record.artifact.get("expect_fft", {}).get("status", ""),
+                        "expect_fft_failures": " | ".join(record.artifact.get("expect_fft", {}).get("failures", [])),
                     }
                 )
+
+
+def _capture_fft_summary(capture: Any) -> dict[str, Any]:
+    npy_path = getattr(capture, "npy_path", None)
+    if npy_path is None:
+        return {"status": "unavailable", "error": "missing npy artifact"}
+    try:
+        analysis = analyze_fft(np.load(npy_path), max_harmonic_order=5)
+    except Exception as exc:  # noqa: BLE001 - run artifacts should explain expected analysis failures
+        return {"status": "unavailable", "error": f"{type(exc).__name__}: {exc}"}
+    return {"status": "ok", **analysis}
 
 
 def _check_limit(value: float | None, limit: float | None, *, field: str, config_key: str, unit: str) -> None:
@@ -556,15 +578,16 @@ def _check_limit(value: float | None, limit: float | None, *, field: str, config
 def _step_status(artifact: dict[str, Any]) -> str:
     if artifact.get("expect", {}).get("status") == "failed":
         return "failed"
+    if artifact.get("expect_fft", {}).get("status") == "failed":
+        return "failed"
     return "ok"
 
 
-def _evaluate_expect(artifact: dict[str, Any], expect: dict[str, dict[str, float]]) -> dict[str, Any]:
-    quality = artifact.get("quality", {})
+def _evaluate_expect(values: dict[str, Any], expect: dict[str, dict[str, float]]) -> dict[str, Any]:
     checks: dict[str, Any] = {}
     failures: list[str] = []
     for metric, limits in expect.items():
-        raw_value = quality.get(metric)
+        raw_value = values.get(metric)
         if raw_value is None:
             checks[metric] = {"status": "failed", "reason": "unavailable", "limits": limits}
             failures.append(f"{metric}: unavailable")

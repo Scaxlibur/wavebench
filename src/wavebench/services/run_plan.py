@@ -57,6 +57,7 @@ _OPTIONAL_FIELDS = {
         "quality_gate",
         "auto_recover",
         "expect",
+        "expect_fft",
     },
     "source.status": {"channel"},
     "source.set_freq": {"channel"},
@@ -145,6 +146,10 @@ def format_run_plan_schema() -> str:
         "scope.capture [steps.expect] metrics:",
         "  Any numeric key from the capture quality summary may be checked with { min = ..., max = ... }.",
         "  Common metrics: frequency_estimate_hz, frequency_error_ratio, voltage_vpp_v, voltage_mean_v, duty_cycle.",
+        "",
+        "scope.capture [steps.expect_fft] metrics:",
+        "  FFT checks analyze the saved NPY waveform.",
+        "  Common metrics: peak_frequency_hz, peak_amplitude_v, thd_ratio, harmonic_2_amplitude_v.",
     ])
     return "\n".join(lines)
 
@@ -325,6 +330,8 @@ def _normalize_step_fields(index: int, kind: str, fields: dict[str, Any]) -> Non
                 raise ConfigError(f"{prefix}.{field} must be true or false")
         if "expect" in fields:
             fields["expect"] = _parse_expect(fields["expect"], f"{prefix}.expect")
+        if "expect_fft" in fields:
+            fields["expect_fft"] = _parse_expect(fields["expect_fft"], f"{prefix}.expect_fft")
     elif kind == "power.set":
         fields["voltage_v"] = _positive_float(fields["voltage_v"], f"{prefix}.voltage_v")
         fields["current_limit_a"] = _positive_float(
