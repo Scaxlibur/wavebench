@@ -80,6 +80,7 @@ class RunService:
 
     def verify(self, plan: RunPlan) -> list[RunPreflightRecord]:
         self.check(plan)
+        self._run_safety_guards(plan)
         instruments = self._plan_instruments(plan)
         records: list[RunPreflightRecord] = []
         if "scope" in instruments:
@@ -118,6 +119,8 @@ class RunService:
         if plan.restore.source_state:
             instruments.add("source")
         if plan.safety.require_scope_coupling_not:
+            instruments.add("scope")
+        if self._scope_guard_channels(plan):
             instruments.add("scope")
         return instruments
 
@@ -225,20 +228,31 @@ class RunService:
                     unit="A",
                 )
 
+    def _scope_guard_channels(self, plan: RunPlan) -> list[int]:
+        channels: list[int] = []
+        for step in plan.steps:
+            if step.kind == "scope.capture":
+                channel = step.fields.get("channel") or self.config.scope.default_channel
+                if channel not in channels:
+                    channels.append(channel)
+        return channels
+
     def _run_safety_guards(self, plan: RunPlan) -> None:
-        if not plan.safety.require_scope_coupling_not:
-            return
-        if plan.safety.scope_guard_channel is None:  # pragma: no cover - parser enforces this
-            raise ConfigError("safety.scope_guard_channel is required")
-        channel = plan.safety.scope_guard_channel
-        coupling = ScopeService(config=self.config, logger=CommandLogger()).channel_coupling(channel)
-        blocked = set(plan.safety.require_scope_coupling_not)
-        if coupling.strip().upper() in blocked:
-            blocked_text = ", ".join(sorted(blocked))
-            raise ConfigError(
-                f"safety guard failed: scope CH{channel} coupling is {coupling}; "
-                f"blocked coupling value(s): {blocked_text}"
-            )
+        service = ScopeService(config=self.config, logger=CommandLogger())
+        if plan.safety.require_scope_coupling_not:
+            if plan.safety.scope_guard_channel is None:  # pragma: no cover - parser enforces this
+                raise ConfigError("safety.scope_guard_channel is required")
+            channel = plan.safety.scope_guard_channel
+            coupling = service.channel_coupling(channel)
+            blocked = set(plan.safety.require_scope_coupling_not)
+            if coupling.strip().upper() in blocked:
+                blocked_text = ", ".join(sorted(blocked))
+                raise ConfigError(
+                    f"safety guard failed: scope CH{channel} coupling is {coupling}; "
+                    f"blocked coupling value(s): {blocked_text}"
+                )
+        for channel in self._scope_guard_channels(plan):
+            service.require_high_impedance(channel, allow_50ohm=plan.safety.allow_50ohm)
 
     def _reject_unsupported_steps(self, plan: RunPlan) -> None:
         unsupported = [step.kind for step in plan.steps if step.kind not in _EXECUTABLE_STEP_KINDS]

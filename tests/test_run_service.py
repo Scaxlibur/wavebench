@@ -501,6 +501,53 @@ channel = 1
                 power_cls.return_value.status.assert_called_once_with(channel=1)
                 self.assertEqual(len(result.steps), 1)
 
+    def test_scope_capture_requires_high_impedance_by_default(self):
+        with TemporaryDirectory() as tmp:
+            plan = load_run_plan(
+                write_plan(
+                    tmp,
+                    """
+[[steps]]
+kind = "scope.capture"
+channel = 2
+""",
+                )
+            )
+            with patch("wavebench.services.run_service.ScopeService") as scope_cls:
+                scope = scope_cls.return_value
+                scope.require_high_impedance.side_effect = ConfigError("scope CH2 coupling is DC")
+
+                with self.assertRaisesRegex(ConfigError, "CH2"):
+                    RunService(config=make_config(tmp), logger=CommandLogger()).run(plan)
+
+                scope.require_high_impedance.assert_called_once_with(2, allow_50ohm=False)
+                scope.capture_waveform.assert_not_called()
+
+    def test_scope_capture_passes_explicit_50ohm_opt_in_from_plan(self):
+        with TemporaryDirectory() as tmp:
+            plan = load_run_plan(
+                write_plan(
+                    tmp,
+                    """
+[safety]
+allow_50ohm = true
+
+[[steps]]
+kind = "scope.capture"
+channel = 2
+""",
+                )
+            )
+            capture = fake_capture(tmp, "capture")
+            with patch("wavebench.services.run_service.ScopeService") as scope_cls:
+                scope = scope_cls.return_value
+                scope.capture_waveform.return_value = capture
+
+                RunService(config=make_config(tmp), logger=CommandLogger()).run(plan)
+
+                scope.require_high_impedance.assert_called_once_with(2, allow_50ohm=True)
+                scope.capture_waveform.assert_called_once()
+
     def test_rejects_safety_guard_on_configured_ch2_when_coupling_is_blocked(self):
         with TemporaryDirectory() as tmp:
             plan = load_run_plan(

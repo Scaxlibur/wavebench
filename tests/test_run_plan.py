@@ -53,6 +53,7 @@ class RunPlanTests(unittest.TestCase):
         self.assertEqual(plan.label, "dp800_voltage_capture")
         self.assertEqual(plan.safety.scope_guard_channel, 2)
         self.assertEqual(plan.safety.require_scope_coupling_not, ("DC",))
+        self.assertFalse(plan.safety.allow_50ohm)
         self.assertTrue(plan.restore.source_state)
         self.assertEqual(plan.restore.source_channel, 2)
         self.assertEqual(
@@ -61,6 +62,28 @@ class RunPlanTests(unittest.TestCase):
         self.assertEqual(plan.steps[1].fields["points"], "DEF")
         self.assertFalse(plan.steps[1].fields["save_csv"])
         self.assertEqual(plan.steps[2].fields["voltage_v"], 3.3)
+
+    def test_safety_allow_50ohm_requires_boolean(self):
+        path = self._write_plan("""
+[safety]
+allow_50ohm = "yes"
+
+[[steps]]
+kind = "scope.capture"
+""")
+        with self.assertRaisesRegex(ConfigError, "allow_50ohm"):
+            load_run_plan(path)
+
+    def test_safety_allow_50ohm_loads_as_explicit_opt_in(self):
+        path = self._write_plan("""
+[safety]
+allow_50ohm = true
+
+[[steps]]
+kind = "scope.capture"
+""")
+        plan = load_run_plan(path)
+        self.assertTrue(plan.safety.allow_50ohm)
 
     def test_unknown_step_kind_is_rejected_with_suggestion(self):
         path = self._write_plan("""

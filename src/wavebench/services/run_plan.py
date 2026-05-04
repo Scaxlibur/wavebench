@@ -128,7 +128,7 @@ def format_run_plan_schema() -> str:
         "",
         "Top-level tables:",
         "  [experiment] optional: name, label",
-        "  [safety] optional: scope_guard_channel, require_scope_coupling_not",
+        "  [safety] optional: scope_guard_channel, require_scope_coupling_not, allow_50ohm",
         "  [restore] optional: source_state, source_channel",
         "  [[steps]] required: kind",
         "",
@@ -153,6 +153,7 @@ def format_run_plan_schema() -> str:
 class SafetyGuard:
     scope_guard_channel: int | None
     require_scope_coupling_not: tuple[str, ...]
+    allow_50ohm: bool = False
 
 
 @dataclass(frozen=True)
@@ -225,7 +226,7 @@ def _parse_restore(raw: Any) -> SourceRestorePolicy:
 
 def _parse_safety(raw: Any) -> SafetyGuard:
     table = _table(raw, "safety")
-    allowed = {"scope_guard_channel", "require_scope_coupling_not"}
+    allowed = {"scope_guard_channel", "require_scope_coupling_not", "allow_50ohm"}
     _reject_unknown_keys(table, allowed, "safety")
 
     channel = table.get("scope_guard_channel")
@@ -245,7 +246,10 @@ def _parse_safety(raw: Any) -> SafetyGuard:
         raise ConfigError(
             "safety.scope_guard_channel is required when require_scope_coupling_not is set"
         )
-    return SafetyGuard(scope_guard_channel=channel, require_scope_coupling_not=blocked)
+    allow_50ohm = table.get("allow_50ohm", False)
+    if not isinstance(allow_50ohm, bool):
+        raise ConfigError("safety.allow_50ohm must be true or false")
+    return SafetyGuard(scope_guard_channel=channel, require_scope_coupling_not=blocked, allow_50ohm=allow_50ohm)
 
 
 def _parse_step(index: int, raw: Any) -> RunStep:

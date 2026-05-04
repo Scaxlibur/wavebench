@@ -13,6 +13,38 @@ from wavebench.config import WaveBenchConfig
 from wavebench.data.package import new_package_dir
 from wavebench.drivers.rtm2032 import RTM2032Scope, WaveformData
 from wavebench.errors import ConfigError, WaveBenchError
+
+HIGH_IMPEDANCE_COUPLINGS = {"DCL", "DCLIMIT", "ACL", "ACLIMIT"}
+LOW_IMPEDANCE_COUPLINGS = {"DC", "AC"}
+
+
+def normalize_coupling(value: str) -> str:
+    return value.strip().upper()
+
+
+def is_high_impedance_coupling(value: str) -> bool:
+    return normalize_coupling(value) in HIGH_IMPEDANCE_COUPLINGS
+
+
+def assert_scope_high_impedance(coupling: str, *, channel: int, allow_50ohm: bool = False) -> str:
+    normalized = normalize_coupling(coupling)
+    if normalized in HIGH_IMPEDANCE_COUPLINGS:
+        return normalized
+    if allow_50ohm and normalized in LOW_IMPEDANCE_COUPLINGS:
+        return normalized
+    if normalized in LOW_IMPEDANCE_COUPLINGS:
+        raise ConfigError(
+            f"scope CH{channel} coupling is {normalized}, which may use 50 ohm termination; "
+            "default capture requires high impedance. Pass --allow-50ohm or set "
+            "safety.allow_50ohm = true only when the test setup explicitly accepts this. "
+            f"/ 示波器 CH{channel} 当前耦合为 {normalized}，可能是 50Ω 输入；默认要求高阻测量。"
+            "只有明确允许 50Ω 时才使用 --allow-50ohm 或 safety.allow_50ohm = true。"
+        )
+    raise ConfigError(
+        f"scope CH{channel} coupling {normalized!r} is not recognized; refusing capture by default. "
+        "Known high-impedance values: ACL, ACLimit, DCL, DCLimit. "
+        f"/ 示波器 CH{channel} 耦合值 {normalized!r} 无法确认是否高阻，默认拒绝采集。"
+    )
 from wavebench.logging import CommandLogger
 from wavebench.transport.rsinstrument_transport import RsInstrumentTransport
 
@@ -64,6 +96,10 @@ class ScopeService:
             return scope.channel_coupling(channel)
         finally:
             scope.close()
+
+    def require_high_impedance(self, channel: int, *, allow_50ohm: bool = False) -> str:
+        coupling = self.channel_coupling(channel)
+        return assert_scope_high_impedance(coupling, channel=channel, allow_50ohm=allow_50ohm)
 
     def autoscale(self) -> None:
         scope = self._open_scope()

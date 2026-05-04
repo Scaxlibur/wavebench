@@ -11,7 +11,7 @@ It provides small, explicit CLI commands for LAN-connected lab instruments. The 
 - LAN VISA connection
 - `scope idn`, `scope errors`
 - explicit `scope auto` / `scope autoscale`
-- `scope fetch` and `scope capture`
+- `scope fetch` and `scope capture`; by default they first query the input coupling and require high impedance unless `--allow-50ohm` is explicit
 - repeated `--channel` capture for sequential multi-channel acquisition
 - acquisition packages with NPY/CSV/JSON metadata and `commands.log`
 - waveform metrics: Vpp/RMS/mean, frequency estimate, duty cycle, rise/fall time when applicable
@@ -28,7 +28,7 @@ It provides small, explicit CLI commands for LAN-connected lab instruments. The 
 - `source arb-load --dry-run` for offline arbitrary waveform payload validation
 - `source arb-load --frequency ... --output-on` for confirmed DG4202 `DATA:DAC VOLATILE` arbitrary upload
 - `source output`
-- `sweep discrete` source-to-scope frequency sweeps
+- `sweep discrete` source-to-scope frequency sweeps, with the same default high-impedance input guard
 - optional `--restore-source-state` for discrete sweep
 
 ### Power supply: RIGOL DP800 series
@@ -43,11 +43,11 @@ It provides small, explicit CLI commands for LAN-connected lab instruments. The 
 ### Multi-instrument run plans
 
 - `run check --plan <plan.toml>` parses and summarizes a plan without connecting to instruments
-- `run verify --plan <plan.toml>` runs read-only `*IDN?` preflight checks for instruments referenced by the plan
+- `run verify --plan <plan.toml>` runs read-only high-impedance guard checks and `*IDN?` preflight checks for instruments referenced by the plan
 - `run plan --plan <plan.toml>` executes explicit source, power, scope, and sleep steps
 - `run report <run_dir>` generates a static offline HTML report from `run.json` / `summary.csv`, includes per-capture signal analysis metrics, and embeds capture screenshots when present
 - `capture inspect <capture_dir>` prints a human-readable offline capture summary
-- optional scope coupling guard can query the configured oscilloscope channel and refuse unsafe power-supply probe plans
+- default scope high-impedance guard: `scope.capture` / `scope.fetch` / `sweep discrete` / run-plan `scope.capture` query `CHAN<n>:COUP?` before acquisition; `DCL`/`ACL` are treated as high impedance, `DC`/`AC` are refused by default unless `--allow-50ohm` or `[safety] allow_50ohm = true` is explicit
 - optional `[restore] source_state = true` snapshots and restores the selected source channel in a `finally` path
 - flow-level output is written under `data/runs/<timestamp>_<label>/` with `run.json`, `summary.csv`, step records, quality status, and references to normal capture packages
 - `scope.capture` steps can opt into `quality_gate = true`; with `auto_recover = true`, warning captures trigger up to `[quality].auto_recover_attempts` autoscale + recapture attempts
@@ -56,7 +56,7 @@ It provides small, explicit CLI commands for LAN-connected lab instruments. The 
 
 ## Current release
 
-Current package version: `0.4.1`.
+Current package version: `0.4.2`.
 
 Release notes are published on the GitHub Releases page.
 
@@ -66,9 +66,11 @@ WaveBench deliberately avoids hidden high-impact actions:
 
 - no default `*RST`
 - `scope capture` does not call autoscale unless requested separately
+- `scope fetch` / `scope capture` refuse possible 50 Ω input by default; they only query state and never auto-change coupling
 - `power set` does not turn output on or off
 - `power output` does not change voltage or current limit
 - `sweep discrete` does not restore source function/amplitude unless explicitly requested with `--restore-source-state`
+- `sweep discrete` refuses 50 Ω scope input by default; pass `--allow-50ohm` only after confirming the setup is safe
 - no command should silently change oscilloscope input impedance
 - run-plan safety guards may query instrument state and refuse execution, but must not auto-correct hardware settings
 

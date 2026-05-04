@@ -100,6 +100,13 @@ max_source_vpp = 5.0
 max_power_voltage_v = 5.0
 max_power_current_limit_a = 0.2
 
+# Run plans can also include a [safety] table.
+# The default for scope capture/fetch/sweep is high-impedance only: RTM2032 DCL/ACL pass,
+# while possible 50 ohm coupling values such as DC/AC are refused unless explicitly allowed.
+# Use this only when the fixture is designed for 50 ohm termination:
+# [safety]
+# allow_50ohm = true
+
 
 [source]
 # Signal generator driver. Current MVP source support targets Rigol DG4202.

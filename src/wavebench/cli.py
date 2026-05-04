@@ -153,6 +153,7 @@ def build_parser() -> argparse.ArgumentParser:
     sweep_discrete.add_argument("--source-func", default=None, help="Optional source function to set once before sweep")
     sweep_discrete.add_argument("--source-vpp", type=float, default=None, help="Optional source amplitude in Vpp to set once before sweep")
     sweep_discrete.add_argument("--restore-source-state", action="store_true", help="Restore source output/function/frequency/amplitude after sweep")
+    sweep_discrete.add_argument("--allow-50ohm", action="store_true", help="Explicitly allow scope input coupling that may be 50 ohm; default requires high impedance")
     sweep_discrete.add_argument("--label", default="discrete_sweep")
     sweep_discrete.add_argument("--no-csv", action="store_true", help="Do not save per-point CSV waveform output")
     sweep_discrete.add_argument("--no-npy", action="store_true", help="Do not save per-point NPY waveform output")
@@ -175,6 +176,7 @@ def build_parser() -> argparse.ArgumentParser:
     fetch = scope_sub.add_parser("fetch", help="Fetch waveform data without creating full package")
     fetch.add_argument("--channel", type=int, default=None)
     fetch.add_argument("--points", default=None, help="Override waveform points: def, max, or dmax")
+    fetch.add_argument("--allow-50ohm", action="store_true", help="Explicitly allow scope input coupling that may be 50 ohm; default requires high impedance")
     add_runtime_options(fetch)
 
     capture = scope_sub.add_parser("capture", help="Capture waveform data into an acquisition package")
@@ -191,6 +193,7 @@ def build_parser() -> argparse.ArgumentParser:
     capture.add_argument("--no-csv", action="store_true", help="Do not save CSV waveform output")
     capture.add_argument("--no-npy", action="store_true", help="Do not save NPY waveform output")
     capture.add_argument("--screenshot", action="store_true", help="Save a PNG screenshot artifact in the capture package")
+    capture.add_argument("--allow-50ohm", action="store_true", help="Explicitly allow scope input coupling that may be 50 ohm; default requires high impedance")
     add_runtime_options(capture)
 
     return parser
@@ -719,6 +722,8 @@ def main(argv: list[str] | None = None) -> int:
                     frequencies = parse_frequency_list(args.frequencies)
                 except ValueError as exc:
                     raise ConfigError(str(exc)) from exc
+                scope_channel = args.scope_channel or service.config.scope.default_channel
+                ScopeService(config=service.config, logger=CommandLogger()).require_high_impedance(scope_channel, allow_50ohm=args.allow_50ohm)
                 result = service.run_discrete(
                     frequencies_hz=frequencies,
                     source_channel=args.source_channel,
@@ -753,11 +758,14 @@ def main(argv: list[str] | None = None) -> int:
                 return 0
             if args.command == "fetch":
                 channel = args.channel or service.config.scope.default_channel
+                service.require_high_impedance(channel, allow_50ohm=args.allow_50ohm)
                 waveform = service.fetch_waveform(channel=channel)
                 _print_waveform_summary(waveform)
                 return 0
             if args.command == "capture":
                 channels = args.channel or [service.config.scope.default_channel]
+                for channel in channels:
+                    service.require_high_impedance(channel, allow_50ohm=args.allow_50ohm)
                 if len(channels) == 1:
                     result = service.capture_waveform(channel=channels[0], label=args.label)
                     _print_waveform_summary(result.waveform)
