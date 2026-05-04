@@ -351,6 +351,11 @@ class RunReportTests(unittest.TestCase):
 
             html = render_run_report_html(load_run_package(run_dir), output_dir=run_dir)
 
+            self.assertIn("<h2>验收摘要 / Acceptance summary</h2>", html)
+            self.assertIn("频率 / Frequency", html)
+            self.assertIn("峰峰值 / Vpp", html)
+            self.assertIn("占空比 / Duty", html)
+            self.assertIn("频率误差 / Frequency error", html)
             self.assertIn("<h2>预期 vs 实测 / Expected vs measured</h2>", html)
             self.assertIn("<td>frequency_estimate_hz</td>", html)
             self.assertIn("<td>9500..10500</td>", html)
@@ -372,6 +377,7 @@ class RunReportTests(unittest.TestCase):
 
             html = render_run_report_html(load_run_package(run_dir), output_dir=run_dir)
 
+            self.assertNotIn("<h2>验收摘要 / Acceptance summary</h2>", html)
             self.assertNotIn("<h2>预期 vs 实测 / Expected vs measured</h2>", html)
 
 

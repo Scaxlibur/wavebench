@@ -109,6 +109,7 @@ def render_run_report_html(run: RunPackage, output_dir: str | Path | None = None
     if not rows:
         rows = '<tr><td colspan="9">没有记录步骤 / No steps recorded.</td></tr>'
     screenshots_block = _screenshots_block(screenshots)
+    acceptance_block = _acceptance_block(expectations)
     expectations_block = _expectations_block(expectations)
     signals_block = _signals_block(signals)
     waveform_previews_block = _waveform_previews_block(waveform_previews)
@@ -160,6 +161,14 @@ code {{ background: #f0f4f8; padding: 0.1rem 0.3rem; border-radius: 5px; }}
 .warning {{ color: var(--warning); }}
 .expectations-table tr.failed td {{ background: #fff8f8; }}
 .expectations-table tr.ok td {{ background: #f7fff9; }}
+.acceptance-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: 0.75rem; margin: 0.5rem 0 1.25rem; }}
+.acceptance-card {{ padding: 0.85rem; }}
+.acceptance-card header {{ display: flex; justify-content: space-between; gap: 0.5rem; align-items: start; margin-bottom: 0.45rem; }}
+.acceptance-card h3 {{ margin: 0; font-size: 1rem; }}
+.acceptance-card dl {{ margin: 0; display: grid; gap: 0.25rem; }}
+.acceptance-card div {{ display: grid; grid-template-columns: 5.5rem 1fr; gap: 0.5rem; }}
+.acceptance-card dt {{ color: var(--muted); }}
+.acceptance-card dd {{ margin: 0; font-weight: 650; overflow-wrap: anywhere; }}
 @media print {{ body {{ background: #fff; }} main {{ max-width: none; padding: 0; }} section, article.card, figure.card, .table {{ box-shadow: none; }} }}
 </style>
 </head>
@@ -185,6 +194,7 @@ code {{ background: #f0f4f8; padding: 0.1rem 0.3rem; border-radius: 5px; }}
 </tbody>
 </table>
 </div>
+{acceptance_block}
 {expectations_block}
 {signals_block}
 {waveform_previews_block}
@@ -284,6 +294,50 @@ def _summary_card(label: str, value: str, *, css_class: str = "") -> str:
         f'<div class="value{safe_class}">{escape(value) if value else "-"}</div>'
         '</article>'
     )
+
+
+def _acceptance_block(expectations: list[ReportExpectationRow]) -> str:
+    selected = _acceptance_rows(expectations)
+    if not selected:
+        return ""
+    cards = "\n".join(_acceptance_card(row) for row in selected)
+    return f"""<h2>验收摘要 / Acceptance summary</h2>
+<section class="acceptance-grid">
+{cards}
+</section>
+"""
+
+
+def _acceptance_rows(expectations: list[ReportExpectationRow]) -> list[ReportExpectationRow]:
+    preferred = ("frequency", "voltage_vpp", "vpp", "duty", "harmonic", "thd")
+    rows = [row for row in expectations if any(token in row.metric.lower() for token in preferred)]
+    if rows:
+        return rows
+    return expectations[:6]
+
+
+def _acceptance_card(row: ReportExpectationRow) -> str:
+    status = escape(row.status or "unknown")
+    return f"""<article class="card acceptance-card">
+<header><h3>{escape(_metric_label(row.metric))}</h3><span class="badge {status}">{status}</span></header>
+<dl>
+<div><dt>实测 / Measured</dt><dd>{escape(row.measured or "-")}</dd></div>
+<div><dt>预期 / Expected</dt><dd>{escape(row.expected or "-")}</dd></div>
+<div><dt>步骤 / Step</dt><dd>{escape(row.step_index)} · {escape(row.step_kind)}</dd></div>
+</dl>
+</article>
+"""
+
+
+def _metric_label(metric: str) -> str:
+    labels = {
+        "frequency_estimate_hz": "频率 / Frequency",
+        "frequency_error_ratio": "频率误差 / Frequency error",
+        "voltage_vpp_v": "峰峰值 / Vpp",
+        "duty_cycle": "占空比 / Duty",
+        "thd_ratio": "总谐波失真 / THD",
+    }
+    return labels.get(metric, metric.replace("_", " "))
 
 
 def _expectations_block(expectations: list[ReportExpectationRow]) -> str:
