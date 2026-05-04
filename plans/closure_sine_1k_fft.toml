@@ -1,7 +1,5 @@
-# Minimal source -> scope -> offline FFT closure plan.
-# Assumes DG4202 CH1 is connected to RTM2032 CH1.
-# The plan restores DG4202 CH1 state after capture. FFT validation is done with:
-#   python -m wavebench capture inspect <capture_dir> --fft --fft-expect-frequency 1000 --harmonics 7
+# Historical v0.4 closure plan kept for reference.
+# Prefer `plans/closure_sine_1k.toml` for current public examples with built-in `[steps.expect_fft]`.
 
 [experiment]
 name = "closure_sine_1k_fft"

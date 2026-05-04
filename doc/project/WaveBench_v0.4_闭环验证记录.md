@@ -23,7 +23,6 @@ plans/closure_sine_1k_fft.toml
 ```bash
 python -m wavebench run check --config /tmp/wavebench-lab.toml --plan plans/closure_sine_1k_fft.toml
 python -m wavebench run plan  --config /tmp/wavebench-lab.toml --plan plans/closure_sine_1k_fft.toml
-python -m wavebench capture inspect data/raw/20260501_021456_closure_sine_1k --fft --harmonics 7 --fft-expect-frequency 1000 --fft-frequency-tolerance 0.02
 python -m wavebench run report data/runs/20260501_021455_closure_sine_1k_fft
 ```
 
@@ -63,8 +62,8 @@ frequency_mismatch
 但 FFT peak 明确落在 1 kHz。结论是：
 
 - 当前时域频率估计不适合作为 sine / 谐波闭环的唯一验收标准。
-- v0.4 的基础闭环应采用：`run plan` 负责设置源、采集和恢复；`capture inspect --fft --fft-expect-frequency` 负责频率验收。
-- 后续可以考虑把 FFT-based expectation 接入 `run plan` 或 `run report`，但不要混进这次小闭环。
+- 这份记录保留了 v0.4 当时“先跑通闭环、再外置 FFT 判断”的历史背景。
+- 当前主线已经把 FFT-based expectation 接入 `run plan` / `run report`；新的公开样板优先看 `plans/closure_sine_1k.toml`。
 
 ## 2026-05-01：DG4202 任意波形 -> RTM2032 采集 -> FFT / report 验证
 
@@ -145,3 +144,15 @@ harmonic_7≈7000 Hz amplitude≈0.0086892 V
 判断：闭环成立。3/5/7 次谐波明显，符合三角波奇次谐波特征；Vpp 与设置一致，report 可展示采集包与截图。测试后 DG4202 CH1 已恢复到 `SIN / 1000 Hz / 5 Vpp / output=ON`。
 
 后续不要立刻扩成任意波编辑器。`source.arb_load` run-plan step 已补上，可把上传、等待、采集、expect 检查放进同一个 plan；下一步再考虑 report 中更清楚地展示 expected vs measured。
+
+
+## 2026-05-05：公开闭环样板提升
+
+后续稳定闭环已整理为更直接的公开样板：
+
+```text
+plans/closure_sine_1k.toml
+plans/closure_triangle_1k.toml
+```
+
+它们直接把 `[steps.expect_fft]` 写进 plan，执行后 `run report` 会给出 `验收摘要 / Acceptance summary` 和 `预期 vs 实测 / Expected vs measured`。更实验室化、变化更快的 duty sweep 和 baseline 汇总继续留在 `tool-of-rei/closure-plans/`。
