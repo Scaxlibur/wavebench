@@ -13,6 +13,7 @@ from .data.packages import load_capture_package, load_run_package
 from .report.html import write_run_report_html
 from .drivers.dg4202 import SourceStatus
 from .drivers.dp800 import PowerStatus
+from .drivers.dm3000 import DmmReading
 from .drivers.rtm2032 import WaveformData
 from .errors import ConfigError, WaveBenchError
 from .arbitrary import load_arbitrary_waveform, validate_waveform_name, write_arbitrary_payload_json, write_dg4000_dac14_binary_block
@@ -20,6 +21,7 @@ from .logging import CommandLogger
 from .services.scope_service import ScopeService
 from .services.source_service import SourceService
 from .services.power_service import PowerService
+from .services.dmm_service import DmmService
 from .services.run_plan import RunPlan, RunStep, format_run_plan_schema, load_run_plan
 from .services.run_service import RunService
 from .services.sweep_service import SweepService, parse_frequency_list
@@ -37,6 +39,7 @@ def build_parser() -> argparse.ArgumentParser:
     scope_parser = subparsers.add_parser("scope", help="Oscilloscope commands")
     source_parser = subparsers.add_parser("source", help="Signal generator commands")
     power_parser = subparsers.add_parser("power", help="Power supply commands")
+    dmm_parser = subparsers.add_parser("dmm", help="Digital multimeter commands")
     sweep_parser = subparsers.add_parser("sweep", help="Source/scope sweep commands")
     run_parser = subparsers.add_parser("run", help="Multi-instrument run plan commands")
     capture_parser = subparsers.add_parser("capture", help="Offline capture package commands")
@@ -68,6 +71,14 @@ def build_parser() -> argparse.ArgumentParser:
     capture_inspect.add_argument("--harmonics", type=int, default=5, help="Highest harmonic order to report with --fft")
     capture_inspect.add_argument("--fft-expect-frequency", type=float, default=None, help="Expected FFT peak frequency in Hz")
     capture_inspect.add_argument("--fft-frequency-tolerance", type=float, default=0.05, help="Relative tolerance for --fft-expect-frequency")
+
+
+    dmm_sub = dmm_parser.add_subparsers(dest="command", required=True)
+    dmm_idn = dmm_sub.add_parser("idn", help="Query DMM *IDN? over configured backend")
+    add_runtime_options(dmm_idn)
+    dmm_read = dmm_sub.add_parser("read", help="Read one DMM measurement")
+    dmm_read.add_argument("function", nargs="?", default="dcv", help="dcv/acv/dci/aci/res/fres/freq/period/continuity/diode/cap")
+    add_runtime_options(dmm_read)
 
     power_sub = power_parser.add_subparsers(dest="command", required=True)
     power_idn = power_sub.add_parser("idn", help="Query power supply *IDN?")
@@ -270,6 +281,13 @@ def _load_power_service(args: argparse.Namespace) -> PowerService:
     return PowerService(config=config, logger=CommandLogger())
 
 
+def _load_dmm_service(args: argparse.Namespace) -> DmmService:
+    config = load_config(args.config)
+    if args.resource:
+        config = config.with_dmm_resource(args.resource)
+    return DmmService(config=config, logger=CommandLogger())
+
+
 def _load_run_service(args: argparse.Namespace) -> RunService:
     config = load_config(args.config)
     if args.resource:
@@ -316,6 +334,10 @@ def _print_run_preflight(records: list[Any]) -> None:
     print("verify=ok / 预检=通过")
     for record in records:
         print(f"instrument/仪器={record.instrument} resource/资源={record.resource} idn={record.idn}")
+
+def _print_dmm_reading(reading: DmmReading) -> None:
+    print(f"{reading.function}: {reading.value:.12g} {reading.unit} raw={reading.raw}")
+
 
 def _print_power_status(status: PowerStatus) -> None:
     set_value = f"{status.set_voltage_v}V/{status.set_current_a}A"
@@ -570,6 +592,14 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"run_json={result.run_json_path}")
                 print(f"summary={result.summary_csv_path}")
                 print(f"steps={len(result.steps)}")
+                return 0
+        if args.domain == "dmm":
+            service = _load_dmm_service(args)
+            if args.command == "idn":
+                print(service.idn())
+                return 0
+            if args.command == "read":
+                _print_dmm_reading(service.read(function=args.function))
                 return 0
         if args.domain == "power":
             service = _load_power_service(args)

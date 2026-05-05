@@ -147,3 +147,25 @@ settle_ms_after_set = 2000
 # Wait after turning output on/off before reading measured values.
 settle_ms_after_output = 1000
 
+
+[dmm]
+# Digital multimeter driver. DM3058 uses the same narrow SCPI subset as the
+# DM3000-series skeleton here: *IDN? and :MEASure:*? one-shot readings.
+driver = "dm3058"
+
+# Transport backend for the DMM. Keep this separate from the device driver:
+# the DMM driver owns SCPI; the backend owns LAN/VISA or serial bytes.
+# Use "lan" for DM3058 over Ethernet/VISA, "serial" for the older RS232 path.
+backend = "lan"
+
+# DM3058 LAN resource verified from WSL. The RS232 skeleton remains available
+# with backend="serial" and resource="/dev/ttyUSB0" when the wiring is reliable.
+resource = "TCPIP::192.168.123.5::INSTR"
+
+# Serial-only settings. Ignored by LAN/VISA backends, kept here so switching
+# back to RS232 is an explicit config edit rather than a code change.
+baudrate = 9600
+bytesize = 8
+parity = "N"
+stopbits = 1
+timeout_ms = 3000

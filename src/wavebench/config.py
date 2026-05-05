@@ -83,6 +83,17 @@ class PowerConfig:
     settle_ms_after_output: int
 
 @dataclass(frozen=True)
+class DmmConfig:
+    driver: str
+    resource: str | None
+    backend: str
+    baudrate: int
+    bytesize: int
+    parity: str
+    stopbits: float
+    timeout_ms: int
+
+@dataclass(frozen=True)
 class OutputConfig:
     directory: Path
     package_naming: str
@@ -126,6 +137,7 @@ class WaveBenchConfig:
     source_path: Path
     source: SourceConfig | None = None
     power: PowerConfig | None = None
+    dmm: DmmConfig | None = None
     quality: QualityConfig = QualityConfig()
     safety_limits: SafetyLimitsConfig = SafetyLimitsConfig()
 
@@ -146,6 +158,7 @@ class WaveBenchConfig:
             source_path=self.source_path,
             source=self.source,
             power=self.power,
+            dmm=self.dmm,
             quality=self.quality,
             safety_limits=self.safety_limits,
         )
@@ -165,6 +178,7 @@ class WaveBenchConfig:
             source_path=self.source_path,
             source=self.source,
             power=self.power,
+            dmm=self.dmm,
             quality=self.quality,
             safety_limits=self.safety_limits,
         )
@@ -189,6 +203,7 @@ class WaveBenchConfig:
             source_path=self.source_path,
             source=self.source,
             power=self.power,
+            dmm=self.dmm,
             quality=self.quality,
             safety_limits=self.safety_limits,
         )
@@ -235,6 +250,7 @@ class WaveBenchConfig:
             source_path=self.source_path,
             source=self.source,
             power=self.power,
+            dmm=self.dmm,
             quality=self.quality,
             safety_limits=self.safety_limits,
         )
@@ -264,6 +280,7 @@ class WaveBenchConfig:
                 settle_ms_after_set_frequency=source.settle_ms_after_set_frequency,
             ),
             power=self.power,
+            dmm=self.dmm,
             quality=self.quality,
             safety_limits=self.safety_limits,
         )
@@ -292,6 +309,41 @@ class WaveBenchConfig:
                 check_errors=power.check_errors,
                 settle_ms_after_set=power.settle_ms_after_set,
                 settle_ms_after_output=power.settle_ms_after_output,
+            ),
+            quality=self.quality,
+            safety_limits=self.safety_limits,
+        )
+
+    def with_dmm_resource(self, resource: str) -> "WaveBenchConfig":
+        dmm = self.dmm or DmmConfig(
+            driver="dm3058" if resource.upper().startswith("TCPIP") else "dm3000",
+            resource=None,
+            backend="lan" if resource.upper().startswith("TCPIP") else "serial",
+            baudrate=9600,
+            bytesize=8,
+            parity="N",
+            stopbits=1,
+            timeout_ms=1000,
+        )
+        is_tcpip = resource.upper().startswith("TCPIP")
+        return WaveBenchConfig(
+            connection=self.connection,
+            scope=self.scope,
+            autoscale=self.autoscale,
+            waveform=self.waveform,
+            output=self.output,
+            source_path=self.source_path,
+            source=self.source,
+            power=self.power,
+            dmm=DmmConfig(
+                driver="dm3058" if is_tcpip else dmm.driver,
+                resource=resource,
+                backend="lan" if is_tcpip else dmm.backend,
+                baudrate=dmm.baudrate,
+                bytesize=dmm.bytesize,
+                parity=dmm.parity,
+                stopbits=dmm.stopbits,
+                timeout_ms=dmm.timeout_ms,
             ),
             quality=self.quality,
             safety_limits=self.safety_limits,
@@ -337,6 +389,19 @@ def load_config(path: str | Path = "wavebench.toml") -> WaveBenchConfig:
                 check_errors=bool(pwr.get("check_errors", True)),
                 settle_ms_after_set=int(pwr.get("settle_ms_after_set", 2000)),
                 settle_ms_after_output=int(pwr.get("settle_ms_after_output", 1000)),
+            )
+        dmm_raw = raw.get("dmm")
+        dmm = None
+        if dmm_raw is not None:
+            dmm = DmmConfig(
+                driver=str(dmm_raw.get("driver", "dm3000")),
+                resource=str(dmm_raw["resource"]) if "resource" in dmm_raw else None,
+                backend=str(dmm_raw.get("backend", "serial")),
+                baudrate=int(dmm_raw.get("baudrate", 9600)),
+                bytesize=int(dmm_raw.get("bytesize", 8)),
+                parity=str(dmm_raw.get("parity", "N")),
+                stopbits=float(dmm_raw.get("stopbits", 1)),
+                timeout_ms=int(dmm_raw.get("timeout_ms", 1000)),
             )
         config = WaveBenchConfig(
             connection=ConnectionConfig(
@@ -384,6 +449,7 @@ def load_config(path: str | Path = "wavebench.toml") -> WaveBenchConfig:
             source_path=config_path,
             source=source,
             power=power,
+            dmm=dmm,
             quality=QualityConfig(
                 auto_recover_attempts=int(q.get("auto_recover_attempts", 2)),
                 consistency_required_captures=int(q.get("consistency_required_captures", 2)),
@@ -442,6 +508,21 @@ def load_config(path: str | Path = "wavebench.toml") -> WaveBenchConfig:
             raise ConfigError("source.default_channel must be >= 1")
         if config.source.settle_ms_after_set_frequency < 0:
             raise ConfigError("source.settle_ms_after_set_frequency must be >= 0")
+    if config.dmm is not None:
+        if config.dmm.driver.lower() not in {"dm3000", "dm3058"}:
+            raise ConfigError("dmm.driver must be 'dm3000' or 'dm3058'")
+        if config.dmm.backend.lower() not in {"serial", "lan", "visa", "pyvisa"}:
+            raise ConfigError("dmm.backend must be one of: serial, lan, visa, pyvisa")
+        if config.dmm.baudrate <= 0:
+            raise ConfigError("dmm.baudrate must be > 0")
+        if config.dmm.bytesize not in {7, 8}:
+            raise ConfigError("dmm.bytesize must be 7 or 8")
+        if config.dmm.parity.upper() not in {"N", "O", "E", "NONE", "ODD", "EVEN"}:
+            raise ConfigError("dmm.parity must be N, O, E, NONE, ODD, or EVEN")
+        if config.dmm.stopbits not in {1.0, 1.5, 2.0}:
+            raise ConfigError("dmm.stopbits must be 1, 1.5, or 2")
+        if config.dmm.timeout_ms <= 0:
+            raise ConfigError("dmm.timeout_ms must be > 0")
     if config.power is not None:
         if config.power.driver.lower() != "dp800":
             raise ConfigError("power.driver must be 'dp800'")

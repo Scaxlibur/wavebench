@@ -2,7 +2,7 @@ import unittest
 import tempfile
 from pathlib import Path
 
-from wavebench.config import AutoscaleConfig, ConnectionConfig, OutputConfig, PowerConfig, SafetyLimitsConfig, ScopeConfig, WaveBenchConfig, WaveformConfig, load_config
+from wavebench.config import AutoscaleConfig, ConnectionConfig, DmmConfig, OutputConfig, PowerConfig, SafetyLimitsConfig, ScopeConfig, WaveBenchConfig, WaveformConfig, load_config
 
 
 class ConfigOverrideTests(unittest.TestCase):
@@ -329,3 +329,49 @@ settle_ms_after_output = 1000
             self.assertEqual(config.power.settle_ms_after_output, 1000)
             updated = config.with_power_resource("TCPIP::192.168.1.50::INSTR")
             self.assertEqual(updated.power.resource, "TCPIP::192.168.1.50::INSTR")
+
+class DmmConfigTests(unittest.TestCase):
+    def test_loads_dm3058_lan_backend(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "wavebench.toml"
+            path.write_text('''
+[connection]
+resource = "TCPIP::scope::INSTR"
+[scope]
+[dmm]
+driver = "dm3058"
+backend = "lan"
+resource = "TCPIP::192.168.123.5::INSTR"
+timeout_ms = 3000
+''', encoding="utf-8")
+            config = load_config(path)
+            self.assertEqual(config.dmm.driver, "dm3058")
+            self.assertEqual(config.dmm.backend, "lan")
+            self.assertEqual(config.dmm.resource, "TCPIP::192.168.123.5::INSTR")
+
+    def test_dmm_resource_override_infers_lan_for_tcpip(self):
+        config = WaveBenchConfig(
+            connection=ConnectionConfig("lan", "TCPIP::127.0.0.1::INSTR", 100, 100),
+            scope=ScopeConfig("rtm2032", None, 1, False, True),
+            autoscale=AutoscaleConfig(True, True),
+            waveform=WaveformConfig("real", "lsbf", "dmax"),
+            output=OutputConfig(Path("data/raw"), "timestamp_label", True, True, True, True, False),
+            source_path=Path("test.toml"),
+        )
+        updated = config.with_dmm_resource("TCPIP::192.168.123.5::INSTR")
+        self.assertEqual(updated.dmm.driver, "dm3058")
+        self.assertEqual(updated.dmm.backend, "lan")
+
+    def test_dmm_resource_override_tcpip_switches_existing_serial_config_to_lan(self):
+        config = WaveBenchConfig(
+            connection=ConnectionConfig("lan", "TCPIP::127.0.0.1::INSTR", 100, 100),
+            scope=ScopeConfig("rtm2032", None, 1, False, True),
+            autoscale=AutoscaleConfig(True, True),
+            waveform=WaveformConfig("real", "lsbf", "dmax"),
+            output=OutputConfig(Path("data/raw"), "timestamp_label", True, True, True, True, False),
+            source_path=Path("test.toml"),
+            dmm=DmmConfig("dm3000", "/dev/ttyUSB0", "serial", 9600, 8, "N", 1, 1000),
+        )
+        updated = config.with_dmm_resource("TCPIP::192.168.123.5::INSTR")
+        self.assertEqual(updated.dmm.driver, "dm3058")
+        self.assertEqual(updated.dmm.backend, "lan")

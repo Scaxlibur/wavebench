@@ -47,6 +47,12 @@ class CliTests(unittest.TestCase):
         self.assertEqual(args.command, "status")
         self.assertEqual(args.channel, 1)
 
+    def test_dmm_read_accepts_function(self):
+        args = build_parser().parse_args(["dmm", "read", "dcv"])
+        self.assertEqual(args.domain, "dmm")
+        self.assertEqual(args.command, "read")
+        self.assertEqual(args.function, "dcv")
+
     def test_power_set_accepts_voltage_and_current_limit(self):
         args = build_parser().parse_args([
             "power", "set", "--channel", "1", "--voltage", "3.3", "--current-limit", "0.2"

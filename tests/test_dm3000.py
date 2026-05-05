@@ -1,0 +1,59 @@
+import unittest
+
+from wavebench.drivers.dm3000 import DM3000Dmm
+from wavebench.errors import DataError
+
+
+class FakeTransport:
+    def __init__(self):
+        self.commands = []
+
+    def query(self, command: str) -> str:
+        self.commands.append(command)
+        if command == "*IDN?":
+            return "RIGOL TECHNOLOGIES,DM3068,DM3A000000000,01.00"
+        if command == ":MEASure:VOLTage:DC?":
+            return "1.234500e+00"
+        if command == ":MEASure:RESistance?":
+            return "9.876000e+03"
+        return "bad"
+
+    def close(self):
+        pass
+
+
+class DM3000DriverTests(unittest.TestCase):
+    def test_idn_uses_common_scpi_query(self):
+        transport = FakeTransport()
+        dmm = DM3000Dmm(transport)
+        self.assertIn("DM3068", dmm.idn())
+        self.assertEqual(transport.commands, ["*IDN?"])
+
+    def test_read_dcv_parses_value_and_unit(self):
+        transport = FakeTransport()
+        reading = DM3000Dmm(transport).read("dcv")
+        self.assertEqual(reading.function, "dcv")
+        self.assertEqual(reading.value, 1.2345)
+        self.assertEqual(reading.unit, "V")
+        self.assertEqual(transport.commands, [":MEASure:VOLTage:DC?"])
+
+    def test_read_alias_and_resistance_unit(self):
+        transport = FakeTransport()
+        reading = DM3000Dmm(transport).read("ohm")
+        self.assertEqual(reading.function, "res")
+        self.assertEqual(reading.value, 9876.0)
+        self.assertEqual(reading.unit, "ohm")
+
+    def test_unsupported_function_is_rejected_before_io(self):
+        with self.assertRaisesRegex(DataError, "unsupported DMM function"):
+            DM3000Dmm(FakeTransport()).read("temperature")
+
+
+if __name__ == "__main__":
+    unittest.main()
+
+class DM3058LanCompatibilityTests(unittest.TestCase):
+    def test_dm3058_idn_uses_same_common_scpi_query(self):
+        transport = FakeTransport()
+        transport.query = lambda command: "Rigol Technologies,DM3058,DM3L184650025,01.01" if command == "*IDN?" else "0"
+        self.assertIn("DM3058", DM3000Dmm(transport).idn())
