@@ -150,6 +150,13 @@ python -m wavebench run plan --config wavebench.toml --plan plans/example_scope_
 python -m wavebench run report data/runs/<run_dir>
 ```
 
+DMM ACV smoke 示例：
+
+```powershell
+python -m wavebench run verify --config wavebench.toml --plan plans/example_dmm_acv_source_smoke.toml
+python -m wavebench run plan --config wavebench.toml --plan plans/example_dmm_acv_source_smoke.toml
+```
+
 公开闭环示例：
 
 ```powershell
