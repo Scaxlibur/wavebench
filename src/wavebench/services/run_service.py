@@ -16,6 +16,7 @@ from wavebench.data.package import new_package_dir
 from wavebench.errors import ConfigError, WaveBenchError
 from wavebench.logging import CommandLogger
 from wavebench.services.power_service import PowerService
+from wavebench.services.dmm_service import DmmService
 from wavebench.services.run_plan import RunPlan, RunStep
 from wavebench.services.scope_service import ScopeService
 from wavebench.services.source_service import SourceService
@@ -35,6 +36,7 @@ _EXECUTABLE_STEP_KINDS = {
     "source.set_vpp",
     "source.set_duty",
     "source.output",
+    "dmm.read",
     "sleep",
 }
 
@@ -109,6 +111,15 @@ class RunService:
                 instrument="power",
                 resource=power.resource,
                 idn=self._power_service().idn(),
+            ))
+        if "dmm" in instruments:
+            dmm = self.config.dmm
+            if dmm is None or not dmm.resource:
+                raise ConfigError("dmm resource is required by this run plan")
+            records.append(RunPreflightRecord(
+                instrument="dmm",
+                resource=dmm.resource,
+                idn=self._dmm_service().idn(),
             ))
         return records
 
@@ -332,6 +343,9 @@ class RunService:
             artifact = {"autoscale": "completed"}
         elif step.kind == "scope.capture":
             artifact = self._run_scope_capture_step(plan, step)
+        elif step.kind == "dmm.read":
+            reading = self._dmm_service().read(function=step.fields.get("function", "dcv"))
+            artifact = {"dmm_reading": _status_payload(reading)}
         elif step.kind == "sleep":
             time.sleep(step.fields["duration_s"])
             artifact = {"duration_s": step.fields["duration_s"]}
@@ -431,6 +445,9 @@ class RunService:
 
     def _source_service(self) -> SourceService:
         return SourceService(config=self.config, logger=CommandLogger())
+
+    def _dmm_service(self) -> DmmService:
+        return DmmService(config=self.config, logger=CommandLogger())
 
     def _scope_service(self) -> ScopeService:
         return ScopeService(config=self.config, logger=CommandLogger())

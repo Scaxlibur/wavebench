@@ -345,5 +345,24 @@ quality_gate = "yes"
             load_run_plan(path)
 
 
+    def test_dmm_read_step_defaults_to_dcv(self):
+        path = self._write_plan("""
+[[steps]]
+kind = "dmm.read"
+""")
+        plan = load_run_plan(path)
+        self.assertEqual(plan.steps[0].kind, "dmm.read")
+        self.assertEqual(plan.steps[0].fields["function"], "dcv")
+
+    def test_dmm_read_step_accepts_explicit_function(self):
+        path = self._write_plan("""
+[[steps]]
+kind = "dmm.read"
+function = "acv"
+""")
+        plan = load_run_plan(path)
+        self.assertEqual(plan.steps[0].fields["function"], "acv")
+
+
 if __name__ == "__main__":
     unittest.main()

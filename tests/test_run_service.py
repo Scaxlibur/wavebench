@@ -10,6 +10,7 @@ import numpy as np
 from wavebench.config import (
     AutoscaleConfig,
     ConnectionConfig,
+    DmmConfig,
     OutputConfig,
     PowerConfig,
     QualityConfig,
@@ -72,6 +73,16 @@ def make_config(
             check_errors=True,
             settle_ms_after_set=2000,
             settle_ms_after_output=1000,
+        ),
+        dmm=DmmConfig(
+            driver="dm3058",
+            resource="TCPIP::dmm::INSTR",
+            backend="lan",
+            baudrate=9600,
+            bytesize=8,
+            parity="N",
+            stopbits=1,
+            timeout_ms=1000,
         ),
         quality=quality or QualityConfig(),
         safety_limits=safety_limits or SafetyLimitsConfig(),
@@ -163,6 +174,41 @@ kind = "scope.capture"
                 scope_cls.return_value.idn.assert_called_once_with()
                 source_cls.return_value.idn.assert_called_once_with()
                 power_cls.return_value.idn.assert_called_once_with()
+
+
+
+    def test_runs_dmm_read_step(self):
+        with TemporaryDirectory() as tmp:
+            plan = load_run_plan(
+                write_plan(
+                    tmp,
+                    """
+[[steps]]
+kind = "dmm.read"
+function = "acv"
+""",
+                )
+            )
+            with patch("wavebench.services.run_service.DmmService") as dmm_cls:
+                dmm_cls.return_value.read.return_value = SimpleNamespace(
+                    function="acv", value=0.3535, unit="V", raw="3.535000E-01",
+                    as_dict=lambda : {"function": "acv", "value": 0.3535, "unit": "V", "raw": "3.535000E-01"}
+                )
+                result = RunService(config=make_config(tmp), logger=CommandLogger()).run(plan)
+                dmm_cls.return_value.read.assert_called_once_with(function="acv")
+                self.assertEqual(result.steps[0].artifact["dmm_reading"]["function"], "acv")
+
+    def test_verify_includes_dmm_when_plan_uses_it(self):
+        with TemporaryDirectory() as tmp:
+            plan = load_run_plan(write_plan(tmp, """
+[[steps]]
+kind = "dmm.read"
+"""))
+            with patch("wavebench.services.run_service.DmmService") as dmm_cls:
+                dmm_cls.return_value.idn.return_value = "DMM"
+                records = RunService(config=make_config(tmp), logger=CommandLogger()).verify(plan)
+                self.assertEqual([record.instrument for record in records], ["dmm"])
+                self.assertEqual(records[0].idn, "DMM")
 
     def test_runs_minimal_power_scope_plan_and_writes_run_files(self):
         with TemporaryDirectory() as tmp:

@@ -23,6 +23,7 @@ ALLOWED_STEP_KINDS = {
     "power.status",
     "power.set",
     "power.output",
+    "dmm.read",
     "sleep",
 }
 
@@ -69,6 +70,7 @@ _OPTIONAL_FIELDS = {
     "power.status": {"channel"},
     "power.set": {"channel"},
     "power.output": {"channel"},
+    "dmm.read": {"function"},
     "sleep": set(),
 }
 
@@ -86,6 +88,7 @@ _STEP_NOTES = {
     "power.status": "Read power-supply channel state without changing output.",
     "power.set": "Set DP800 voltage/current limit; does not change output state.",
     "power.output": "Turn power-supply channel output on or off; does not change voltage/current limit.",
+    "dmm.read": "Read one DMM measurement over the configured backend; default function is dcv unless overridden.",
     "sleep": "Wait between hardware actions.",
 }
 
@@ -367,6 +370,8 @@ def _normalize_step_fields(index: int, kind: str, fields: dict[str, Any]) -> Non
         fields["value_vpp"] = _positive_float(fields["value_vpp"], f"{prefix}.value_vpp")
     elif kind == "source.set_duty":
         fields["duty_percent"] = _duty_percent(fields["duty_percent"], f"{prefix}.duty_percent")
+    elif kind == "dmm.read":
+        fields["function"] = _non_empty_str(fields.get("function", "dcv"), f"{prefix}.function").lower()
     elif kind == "sleep":
         fields["duration_s"] = _positive_float(fields["duration_s"], f"{prefix}.duration_s")
 
