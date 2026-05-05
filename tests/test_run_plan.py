@@ -363,6 +363,18 @@ function = "acv"
         plan = load_run_plan(path)
         self.assertEqual(plan.steps[0].fields["function"], "acv")
 
+    def test_dmm_read_step_accepts_expect_limits(self):
+        path = self._write_plan("""
+[[steps]]
+kind = "dmm.read"
+function = "acv"
+
+[steps.expect]
+value = { min = 0.34, max = 0.37 }
+""")
+        plan = load_run_plan(path)
+        self.assertEqual(plan.steps[0].fields["expect"]["value"], {"min": 0.34, "max": 0.37})
+
 
 if __name__ == "__main__":
     unittest.main()

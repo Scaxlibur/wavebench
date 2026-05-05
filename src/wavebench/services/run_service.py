@@ -345,7 +345,10 @@ class RunService:
             artifact = self._run_scope_capture_step(plan, step)
         elif step.kind == "dmm.read":
             reading = self._dmm_service().read(function=step.fields.get("function", "dcv"))
-            artifact = {"dmm_reading": _status_payload(reading)}
+            reading_payload = _status_payload(reading)
+            artifact = {"dmm_reading": reading_payload}
+            if "expect" in step.fields:
+                artifact["expect"] = _evaluate_expect(reading_payload, step.fields["expect"])
         elif step.kind == "sleep":
             time.sleep(step.fields["duration_s"])
             artifact = {"duration_s": step.fields["duration_s"]}

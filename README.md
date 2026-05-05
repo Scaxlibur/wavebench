@@ -157,6 +157,8 @@ python -m wavebench run verify --config wavebench.toml --plan plans/example_dmm_
 python -m wavebench run plan --config wavebench.toml --plan plans/example_dmm_acv_source_smoke.toml
 ```
 
+DMM `dmm.read` 可用 `[steps.expect]` 对读数做门禁，例如 `value = { min = 0.34, max = 0.37 }`。
+
 公开闭环示例：
 
 ```powershell

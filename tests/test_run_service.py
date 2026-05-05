@@ -198,6 +198,27 @@ function = "acv"
                 dmm_cls.return_value.read.assert_called_once_with(function="acv")
                 self.assertEqual(result.steps[0].artifact["dmm_reading"]["function"], "acv")
 
+
+    def test_dmm_read_expect_marks_failed_step(self):
+        with TemporaryDirectory() as tmp:
+            plan = load_run_plan(write_plan(tmp, """
+[[steps]]
+kind = "dmm.read"
+function = "acv"
+
+[steps.expect]
+value = { min = 0.34, max = 0.36 }
+"""))
+            with patch("wavebench.services.run_service.DmmService") as dmm_cls:
+                dmm_cls.return_value.read.return_value = SimpleNamespace(
+                    function="acv", value=0.5, unit="V", raw="5.000000E-01",
+                    as_dict=lambda: {"function": "acv", "value": 0.5, "unit": "V", "raw": "5.000000E-01"},
+                )
+                result = RunService(config=make_config(tmp), logger=CommandLogger()).run(plan)
+                self.assertEqual(result.steps[0].status, "failed")
+                self.assertEqual(result.steps[0].artifact["expect"]["status"], "failed")
+                self.assertIn("above max", result.steps[0].artifact["expect"]["checks"]["value"]["reasons"][0])
+
     def test_verify_includes_dmm_when_plan_uses_it(self):
         with TemporaryDirectory() as tmp:
             plan = load_run_plan(write_plan(tmp, """

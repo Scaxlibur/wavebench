@@ -70,7 +70,7 @@ _OPTIONAL_FIELDS = {
     "power.status": {"channel"},
     "power.set": {"channel"},
     "power.output": {"channel"},
-    "dmm.read": {"function"},
+    "dmm.read": {"function", "expect"},
     "sleep": set(),
 }
 
@@ -146,9 +146,10 @@ def format_run_plan_schema() -> str:
             lines.append(f"      note     : {row['notes']}")
     lines.extend([
         "",
-        "scope.capture [steps.expect] metrics:",
-        "  Any numeric key from the capture quality summary may be checked with { min = ..., max = ... }.",
-        "  Common metrics: frequency_estimate_hz, frequency_error_ratio, voltage_vpp_v, voltage_mean_v, duty_cycle.",
+        "[steps.expect] metrics:",
+        "  scope.capture checks any numeric key from the capture quality summary with { min = ..., max = ... }.",
+        "  Common scope metrics: frequency_estimate_hz, frequency_error_ratio, voltage_vpp_v, voltage_mean_v, duty_cycle.",
+        "  dmm.read checks numeric keys from the DMM reading payload. Common DMM metric: value.",
         "",
         "scope.capture [steps.expect_fft] metrics:",
         "  FFT checks analyze the saved NPY waveform.",
@@ -372,6 +373,8 @@ def _normalize_step_fields(index: int, kind: str, fields: dict[str, Any]) -> Non
         fields["duty_percent"] = _duty_percent(fields["duty_percent"], f"{prefix}.duty_percent")
     elif kind == "dmm.read":
         fields["function"] = _non_empty_str(fields.get("function", "dcv"), f"{prefix}.function").lower()
+        if "expect" in fields:
+            fields["expect"] = _parse_expect(fields["expect"], f"{prefix}.expect")
     elif kind == "sleep":
         fields["duration_s"] = _positive_float(fields["duration_s"], f"{prefix}.duration_s")
 

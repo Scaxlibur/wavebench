@@ -42,3 +42,6 @@ duration_s = 0.4
 [[steps]]
 kind = "dmm.read"
 function = "acv"
+
+[steps.expect]
+value = { min = 0.34, max = 0.37 }
