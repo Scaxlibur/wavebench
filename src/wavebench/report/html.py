@@ -85,6 +85,18 @@ class ReportExpectationRow:
 
 
 @dataclass(frozen=True)
+class ReportDmmReading:
+    step_index: str
+    step_name: str
+    function: str
+    value: str
+    unit: str
+    expected: str
+    status: str
+    details: str
+
+
+@dataclass(frozen=True)
 class ReportWaveformPreview:
     step_index: str
     package: str
@@ -102,6 +114,7 @@ def render_run_report_html(run: RunPackage, output_dir: str | Path | None = None
     screenshots = _collect_screenshots(run, report_output_dir)
     signals = _collect_signal_summaries(run)
     expectations = _collect_expectation_rows(run)
+    dmm_readings = _collect_dmm_readings(run)
     waveform_previews = _collect_waveform_previews(run)
     summary = _build_report_summary(run, screenshots, signals)
     screenshots_by_step = {item.step_index: item for item in screenshots}
@@ -111,6 +124,7 @@ def render_run_report_html(run: RunPackage, output_dir: str | Path | None = None
     screenshots_block = _screenshots_block(screenshots)
     acceptance_block = _acceptance_block(expectations)
     expectations_block = _expectations_block(expectations)
+    dmm_block = _dmm_readings_block(dmm_readings)
     signals_block = _signals_block(signals)
     waveform_previews_block = _waveform_previews_block(waveform_previews)
     summary_note = "present" if run.summary_csv_path is not None else "missing"
@@ -169,6 +183,16 @@ code {{ background: #f0f4f8; padding: 0.1rem 0.3rem; border-radius: 5px; }}
 .acceptance-card div {{ display: grid; grid-template-columns: 5.5rem 1fr; gap: 0.5rem; }}
 .acceptance-card dt {{ color: var(--muted); }}
 .acceptance-card dd {{ margin: 0; font-weight: 650; overflow-wrap: anywhere; }}
+.dmm-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr)); gap: 0.75rem; margin: 0.5rem 0 1.25rem; }}
+.dmm-card {{ padding: 0.9rem; }}
+.dmm-card header {{ display: flex; justify-content: space-between; gap: 0.5rem; align-items: start; margin-bottom: 0.55rem; }}
+.dmm-card h3 {{ margin: 0; font-size: 1rem; }}
+.dmm-card .reading {{ font-size: 1.9rem; line-height: 1.15; font-weight: 800; margin: 0.1rem 0 0.65rem; overflow-wrap: anywhere; }}
+.dmm-card .reading .unit {{ color: var(--muted); font-size: 1rem; font-weight: 650; margin-left: 0.25rem; }}
+.dmm-card dl {{ margin: 0; display: grid; gap: 0.25rem; }}
+.dmm-card div {{ display: grid; grid-template-columns: 5.5rem 1fr; gap: 0.5rem; }}
+.dmm-card dt {{ color: var(--muted); }}
+.dmm-card dd {{ margin: 0; font-weight: 650; overflow-wrap: anywhere; }}
 @media print {{ body {{ background: #fff; }} main {{ max-width: none; padding: 0; }} section, article.card, figure.card, .table {{ box-shadow: none; }} }}
 </style>
 </head>
@@ -194,6 +218,7 @@ code {{ background: #f0f4f8; padding: 0.1rem 0.3rem; border-radius: 5px; }}
 </tbody>
 </table>
 </div>
+{dmm_block}
 {acceptance_block}
 {expectations_block}
 {signals_block}
@@ -329,6 +354,36 @@ def _acceptance_card(row: ReportExpectationRow) -> str:
 """
 
 
+def _dmm_readings_block(readings: list[ReportDmmReading]) -> str:
+    if not readings:
+        return ""
+    cards = "\n".join(_dmm_reading_card(reading) for reading in readings)
+    return f"""<h2>DMM 读数 / DMM readings</h2>
+<section class="dmm-grid">
+{cards}
+</section>
+"""
+
+
+def _dmm_reading_card(reading: ReportDmmReading) -> str:
+    status = escape(reading.status or "unknown")
+    unit = f'<span class="unit">{escape(reading.unit)}</span>' if reading.unit else ""
+    details = ""
+    if reading.details:
+        details = f"<div><dt>细节 / Details</dt><dd>{escape(reading.details)}</dd></div>"
+    return f"""<article class="card dmm-card">
+<header><h3>{escape(reading.step_name)}</h3><span class="badge {status}">{status}</span></header>
+<p class="reading">{escape(reading.value or "-")}{unit}</p>
+<dl>
+<div><dt>功能 / Function</dt><dd>{escape(reading.function or "-")}</dd></div>
+<div><dt>步骤 / Step</dt><dd>{escape(reading.step_index)} · {escape(reading.step_name)}</dd></div>
+<div><dt>预期 / Expected</dt><dd>{escape(reading.expected or "-")}</dd></div>
+{details}
+</dl>
+</article>
+"""
+
+
 def _metric_label(metric: str) -> str:
     labels = {
         "frequency_estimate_hz": "频率 / Frequency",
@@ -441,6 +496,67 @@ def _collect_expectation_rows(run: RunPackage) -> list[ReportExpectationRow]:
                     )
                 )
     return rows
+
+
+def _collect_dmm_readings(run: RunPackage) -> list[ReportDmmReading]:
+    readings: list[ReportDmmReading] = []
+    for step in run.steps:
+        if step.get("kind") != "dmm.read":
+            continue
+        artifact = step.get("artifact", {}) if isinstance(step.get("artifact"), dict) else {}
+        reading = artifact.get("dmm_reading", {}) if isinstance(artifact.get("dmm_reading"), dict) else {}
+        expect = artifact.get("expect", {}) if isinstance(artifact.get("expect"), dict) else {}
+        value_check = _dmm_value_check(expect)
+        unit = str(reading.get("unit", ""))
+        expected = _format_limits(value_check.get("limits", {})) if value_check else ""
+        if expected and unit:
+            expected = f"{expected} {unit}"
+        status = str(value_check.get("status", "")) if value_check else str(expect.get("status", "") or step.get("status", ""))
+        details = _format_expect_details(value_check) if value_check else _format_dmm_failures(expect)
+        step_name = _step_display_name(step)
+        readings.append(
+            ReportDmmReading(
+                step_index=str(step.get("index", "")),
+                step_name=step_name,
+                function=str(reading.get("function") or _step_field(step, "function") or ""),
+                value=_format_plain(reading.get("value")),
+                unit=unit,
+                expected=expected,
+                status=status,
+                details=details,
+            )
+        )
+    return readings
+
+
+def _dmm_value_check(expect: dict[str, Any]) -> dict[str, Any]:
+    checks = expect.get("checks", {})
+    if not isinstance(checks, dict):
+        return {}
+    value_check = checks.get("value", {})
+    return value_check if isinstance(value_check, dict) else {}
+
+
+def _format_dmm_failures(expect: dict[str, Any]) -> str:
+    failures = expect.get("failures", [])
+    if isinstance(failures, list):
+        return " | ".join(str(item) for item in failures)
+    return str(failures) if failures else ""
+
+
+def _step_display_name(step: dict[str, Any]) -> str:
+    for key in ("name", "label", "kind"):
+        value = step.get(key)
+        if value:
+            return str(value)
+    return "step"
+
+
+def _step_field(step: dict[str, Any], key: str) -> Any:
+    fields = step.get("fields", {})
+    if isinstance(fields, dict):
+        return fields.get(key)
+    return None
 
 
 def _format_limits(limits: Any) -> str:

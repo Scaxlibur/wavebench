@@ -386,6 +386,57 @@ class RunReportTests(unittest.TestCase):
             self.assertIn("<td>fft.peak_frequency_hz</td>", html)
             self.assertIn("<td>fft.harmonic_2_amplitude_v</td>", html)
 
+    def test_run_report_renders_dmm_reading_cards(self):
+        with TemporaryDirectory() as tmp:
+            run_dir = Path(tmp) / "data" / "runs" / "run_dmm"
+            run_dir.mkdir(parents=True)
+            (run_dir / "run.json").write_text(
+                json.dumps(
+                    {
+                        "status": "ok",
+                        "steps": [
+                            {
+                                "index": 6,
+                                "kind": "dmm.read",
+                                "status": "ok",
+                                "fields": {"function": "acv"},
+                                "artifact": {
+                                    "dmm_reading": {
+                                        "function": "acv",
+                                        "value": 0.3535,
+                                        "unit": "V",
+                                        "raw": "3.535000E-01",
+                                    },
+                                    "expect": {
+                                        "status": "ok",
+                                        "checks": {
+                                            "value": {
+                                                "status": "ok",
+                                                "value": 0.3535,
+                                                "limits": {"min": 0.34, "max": 0.37},
+                                            }
+                                        },
+                                        "failures": [],
+                                    },
+                                },
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            html = render_run_report_html(load_run_package(run_dir), output_dir=run_dir)
+
+            self.assertIn("<h2>DMM 读数 / DMM readings</h2>", html)
+            self.assertIn('<article class="card dmm-card">', html)
+            self.assertIn("<header><h3>dmm.read</h3><span class=\"badge ok\">ok</span></header>", html)
+            self.assertIn('<p class="reading">0.3535<span class="unit">V</span></p>', html)
+            self.assertIn("<div><dt>功能 / Function</dt><dd>acv</dd></div>", html)
+            self.assertIn("<div><dt>步骤 / Step</dt><dd>6 · dmm.read</dd></div>", html)
+            self.assertIn("<div><dt>预期 / Expected</dt><dd>0.34..0.37 V</dd></div>", html)
+            self.assertIn('<tr class="ok"><td>6</td><td>dmm.read</td><td>value</td>', html)
+
     def test_run_report_omits_expected_vs_measured_without_expect_checks(self):
         with TemporaryDirectory() as tmp:
             run_dir = Path(tmp) / "data" / "runs" / "run_no_expect"
