@@ -11,6 +11,7 @@ from .config import load_config, vertical_scale_from_vpp
 from .data.fft import analyze_fft, fft_harmonics
 from .data.packages import load_capture_package, load_run_package
 from .report.html import write_run_report_html
+from .report.index import write_report_index
 from .drivers.dg4202 import SourceStatus
 from .drivers.dp800 import PowerStatus
 from .drivers.dm3000 import DmmReading
@@ -63,6 +64,9 @@ def build_parser() -> argparse.ArgumentParser:
     run_report = run_sub.add_parser("report", help="Generate an offline HTML report for a run package")
     run_report.add_argument("path", help="Path to data/runs/<run_dir>")
     run_report.add_argument("--output", default=None, help="Output HTML path; defaults to <run_dir>/report.html")
+    run_report_index = run_sub.add_parser("report-index", help="Generate manifest JSON/CSV for multiple run directories")
+    run_report_index.add_argument("paths", nargs="+", help="Paths to data/runs/<run_dir>")
+    run_report_index.add_argument("--output", required=True, help="Output directory for manifest.json and manifest.csv")
 
     capture_sub = capture_parser.add_subparsers(dest="command", required=True)
     capture_inspect = capture_sub.add_parser("inspect", help="Inspect an offline capture package")
@@ -573,6 +577,12 @@ def main(argv: list[str] | None = None) -> int:
             if args.command == "report":
                 output = write_run_report_html(load_run_package(args.path), output_path=args.output)
                 print(f"report={output}")
+                return 0
+            if args.command == "report-index":
+                result = write_report_index(args.paths, args.output)
+                print(f"manifest_json={result.manifest_json_path}")
+                print(f"manifest_csv={result.manifest_csv_path}")
+                print(f"runs={result.count}")
                 return 0
             if args.command == "check":
                 plan = load_run_plan(args.plan)
