@@ -133,7 +133,7 @@ def format_run_plan_schema() -> str:
         "Top-level tables:",
         "  [experiment] optional: name, label",
         "  [safety] optional: scope_guard_channel, require_scope_coupling_not, allow_50ohm",
-        "  [restore] optional: source_state, source_channel",
+        "  [restore] optional: source_state, source_channel, source_channels",
         "  [[steps]] required: kind",
         "",
         "Supported step kinds:",
@@ -168,7 +168,11 @@ class SafetyGuard:
 @dataclass(frozen=True)
 class SourceRestorePolicy:
     source_state: bool
-    source_channel: int | None
+    source_channels: tuple[int, ...]
+
+    @property
+    def source_channel(self) -> int | None:
+        return self.source_channels[0] if self.source_channels else None
 
 
 @dataclass(frozen=True)
@@ -219,18 +223,31 @@ def load_run_plan(path: str | Path) -> RunPlan:
 
 def _parse_restore(raw: Any) -> SourceRestorePolicy:
     table = _table(raw, "restore")
-    allowed = {"source_state", "source_channel"}
+    allowed = {"source_state", "source_channel", "source_channels"}
     _reject_unknown_keys(table, allowed, "restore")
 
     source_state = table.get("source_state", False)
     if not isinstance(source_state, bool):
         raise ConfigError("restore.source_state must be true or false")
     source_channel = table.get("source_channel")
+    source_channels_raw = table.get("source_channels")
+    if source_channel is not None and source_channels_raw is not None:
+        raise ConfigError("restore.source_channel and restore.source_channels are mutually exclusive")
+
+    source_channels: tuple[int, ...] = ()
     if source_channel is not None:
-        source_channel = _positive_int(source_channel, "restore.source_channel")
-    if source_channel is not None and not source_state:
-        raise ConfigError("restore.source_channel requires restore.source_state = true")
-    return SourceRestorePolicy(source_state=source_state, source_channel=source_channel)
+        source_channels = (_positive_int(source_channel, "restore.source_channel"),)
+    elif source_channels_raw is not None:
+        if not isinstance(source_channels_raw, list) or not source_channels_raw:
+            raise ConfigError("restore.source_channels must be a non-empty array of positive integers")
+        parsed = tuple(_positive_int(item, "restore.source_channels") for item in source_channels_raw)
+        if len(set(parsed)) != len(parsed):
+            raise ConfigError("restore.source_channels must not contain duplicate channels")
+        source_channels = parsed
+
+    if source_channels and not source_state:
+        raise ConfigError("restore source channel settings require restore.source_state = true")
+    return SourceRestorePolicy(source_state=source_state, source_channels=source_channels)
 
 
 def _parse_safety(raw: Any) -> SafetyGuard:

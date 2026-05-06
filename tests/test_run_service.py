@@ -1,7 +1,7 @@
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import call, patch
 import json
 import unittest
 
@@ -866,6 +866,71 @@ function = "SQU"
                     RunService(config=make_config(tmp), logger=CommandLogger()).run(plan)
 
                 source.restore_restorable_state.assert_called_once_with(fake_state)
+
+
+    def test_restores_multiple_source_channels_after_success_when_enabled(self):
+        with TemporaryDirectory() as tmp:
+            plan = load_run_plan(
+                write_plan(
+                    tmp,
+                    """
+[restore]
+source_state = true
+source_channels = [1, 2]
+
+[[steps]]
+kind = "source.set_func"
+channel = 2
+function = "SQU"
+""",
+                )
+            )
+            fake_state_1 = SimpleNamespace(channel=1, as_dict=lambda: {"channel": 1, "function": "SIN"})
+            fake_state_2 = SimpleNamespace(channel=2, as_dict=lambda: {"channel": 2, "function": "SIN", "square_duty_cycle_percent": 50.0})
+            fake_status = SimpleNamespace(as_dict=lambda: {"channel": 2})
+            with patch("wavebench.services.run_service.SourceService") as source_cls:
+                source = source_cls.return_value
+                source.snapshot_restorable_state.side_effect = [fake_state_1, fake_state_2]
+                source.set_function.return_value = fake_status
+
+                result = RunService(config=make_config(tmp), logger=CommandLogger()).run(plan)
+
+                self.assertEqual(source.snapshot_restorable_state.call_args_list, [call(channel=1), call(channel=2)])
+                self.assertEqual(source.restore_restorable_state.call_args_list, [call(fake_state_1), call(fake_state_2)])
+                run_data = json.loads(result.run_json_path.read_text(encoding="utf-8"))
+                self.assertEqual(run_data["restore"]["status"], "ok")
+                self.assertEqual(run_data["restore"]["source_channels"], [1, 2])
+                self.assertEqual(len(run_data["restore"]["snapshots"]), 2)
+                self.assertNotIn("source_channel", run_data["restore"])
+
+    def test_restores_multiple_source_channels_after_step_failure_when_enabled(self):
+        with TemporaryDirectory() as tmp:
+            plan = load_run_plan(
+                write_plan(
+                    tmp,
+                    """
+[restore]
+source_state = true
+source_channels = [1, 2]
+
+[[steps]]
+kind = "source.set_func"
+channel = 2
+function = "SQU"
+""",
+                )
+            )
+            fake_state_1 = SimpleNamespace(channel=1, as_dict=lambda: {"channel": 1, "function": "SIN"})
+            fake_state_2 = SimpleNamespace(channel=2, as_dict=lambda: {"channel": 2, "function": "SIN"})
+            with patch("wavebench.services.run_service.SourceService") as source_cls:
+                source = source_cls.return_value
+                source.snapshot_restorable_state.side_effect = [fake_state_1, fake_state_2]
+                source.set_function.side_effect = ConfigError("boom")
+
+                with self.assertRaisesRegex(ConfigError, "boom"):
+                    RunService(config=make_config(tmp), logger=CommandLogger()).run(plan)
+
+                self.assertEqual(source.restore_restorable_state.call_args_list, [call(fake_state_1), call(fake_state_2)])
 
 
 if __name__ == "__main__":

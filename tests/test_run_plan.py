@@ -128,6 +128,68 @@ kind = "source.status"
         with self.assertRaises(ConfigError):
             load_run_plan(path)
 
+
+    def test_restore_source_channels_loads_multiple_channels(self):
+        path = self._write_plan("""
+[restore]
+source_state = true
+source_channels = [1, 2]
+
+[[steps]]
+kind = "source.status"
+""")
+        plan = load_run_plan(path)
+        self.assertEqual(plan.restore.source_channels, (1, 2))
+        self.assertEqual(plan.restore.source_channel, 1)
+
+    def test_restore_source_channels_requires_source_state(self):
+        path = self._write_plan("""
+[restore]
+source_channels = [1, 2]
+
+[[steps]]
+kind = "source.status"
+""")
+        with self.assertRaisesRegex(ConfigError, "restore.source_state"):
+            load_run_plan(path)
+
+    def test_restore_source_channel_and_source_channels_are_mutually_exclusive(self):
+        path = self._write_plan("""
+[restore]
+source_state = true
+source_channel = 1
+source_channels = [1, 2]
+
+[[steps]]
+kind = "source.status"
+""")
+        with self.assertRaisesRegex(ConfigError, "mutually exclusive"):
+            load_run_plan(path)
+
+    def test_restore_source_channels_rejects_duplicates(self):
+        path = self._write_plan("""
+[restore]
+source_state = true
+source_channels = [1, 1]
+
+[[steps]]
+kind = "source.status"
+""")
+        with self.assertRaisesRegex(ConfigError, "duplicate"):
+            load_run_plan(path)
+
+    def test_restore_source_channels_rejects_empty_array(self):
+        path = self._write_plan("""
+[restore]
+source_state = true
+source_channels = []
+
+[[steps]]
+kind = "source.status"
+""")
+        with self.assertRaisesRegex(ConfigError, "non-empty array"):
+            load_run_plan(path)
+
     def test_safety_coupling_guard_requires_channel(self):
         path = self._write_plan("""
 [safety]

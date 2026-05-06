@@ -151,7 +151,7 @@ class RunService:
         records: list[RunStepRecord] = []
         run_json_path = run_dir / "run.json"
         summary_csv_path = run_dir / "summary.csv"
-        restore_state: RestorableSourceState | None = None
+        restore_state: list[RestorableSourceState] | None = None
         restore_error: dict[str, str] | None = None
         try:
             restore_state = self._snapshot_source_state(plan)
@@ -455,18 +455,25 @@ class RunService:
     def _scope_service(self) -> ScopeService:
         return ScopeService(config=self.config, logger=CommandLogger())
 
-    def _snapshot_source_state(self, plan: RunPlan) -> RestorableSourceState | None:
+    def _snapshot_source_state(self, plan: RunPlan) -> list[RestorableSourceState] | None:
         if not plan.restore.source_state:
             return None
-        return self._source_service().snapshot_restorable_state(channel=plan.restore.source_channel)
+        service = self._source_service()
+        channels = plan.restore.source_channels or (None,)
+        return [service.snapshot_restorable_state(channel=channel) for channel in channels]
 
-    def _restore_source_state(self, state: RestorableSourceState | None) -> dict[str, str] | None:
-        if state is None:
+    def _restore_source_state(self, states: list[RestorableSourceState] | None) -> dict[str, Any] | None:
+        if not states:
             return None
-        try:
-            self._source_service().restore_restorable_state(state)
-        except Exception as exc:  # pragma: no cover - defensive, covered through mocks
-            return {"type": type(exc).__name__, "message": str(exc)}
+        errors: list[dict[str, str | int | None]] = []
+        service = self._source_service()
+        for state in states:
+            try:
+                service.restore_restorable_state(state)
+            except Exception as exc:  # pragma: no cover - defensive, covered through mocks
+                errors.append({"channel": state.channel, "type": type(exc).__name__, "message": str(exc)})
+        if errors:
+            return {"type": "RestoreError", "message": "source state restore failed", "errors": errors}
         return None
 
     def _scope_service_for_capture(self, plan: RunPlan, step: RunStep) -> ScopeService:
@@ -507,7 +514,7 @@ class RunService:
         status: str,
         records: list[RunStepRecord],
         error: dict[str, str] | None,
-        restore_state: RestorableSourceState | None = None,
+        restore_state: list[RestorableSourceState] | None = None,
         restore_error: dict[str, str] | None = None,
     ) -> None:
         run_data: dict[str, Any] = {
@@ -517,20 +524,27 @@ class RunService:
             "steps": [record.as_dict() for record in records],
         }
         if restore_state is not None:
+            snapshots = [state.as_dict() for state in restore_state]
+            channels = [state.channel for state in restore_state]
             run_data["restore"] = {
                 "source_state": True,
-                "source_channel": restore_state.channel,
-                "snapshot": restore_state.as_dict(),
+                "source_channels": channels,
+                "snapshots": snapshots,
                 "status": "failed" if restore_error is not None else "ok",
             }
+            if len(restore_state) == 1:
+                run_data["restore"]["source_channel"] = restore_state[0].channel
+                run_data["restore"]["snapshot"] = restore_state[0].as_dict()
             if restore_error is not None:
                 run_data["restore"]["error"] = restore_error
         elif plan.restore.source_state:
             run_data["restore"] = {
                 "source_state": True,
-                "source_channel": plan.restore.source_channel,
+                "source_channels": list(plan.restore.source_channels),
                 "status": "not_started",
             }
+            if len(plan.restore.source_channels) == 1:
+                run_data["restore"]["source_channel"] = plan.restore.source_channels[0]
         if error is not None:
             run_data["error"] = error
         run_json_path.write_text(

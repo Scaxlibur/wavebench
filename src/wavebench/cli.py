@@ -320,8 +320,11 @@ def _print_run_plan_summary(plan: RunPlan) -> None:
     else:
         print("safety: none")
     if plan.restore.source_state:
-        channel = "default" if plan.restore.source_channel is None else plan.restore.source_channel
-        print(f"restore: source state channel={channel}")
+        if plan.restore.source_channels:
+            channels = ",".join(str(channel) for channel in plan.restore.source_channels)
+        else:
+            channels = "default"
+        print(f"restore: source state channels={channels}")
     else:
         print("restore: none")
     print(f"steps={len(plan.steps)}")
