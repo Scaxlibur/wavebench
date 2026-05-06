@@ -537,48 +537,62 @@ class RunReportTests(unittest.TestCase):
             html = render_run_report_html(load_run_package(run_dir), output_dir=run_dir)
 
             self.assertIn("<h2>实验证据摘要 / Run evidence summary</h2>", html)
-            self.assertIn("<td>信号源设置步骤 / Source setting steps</td><td>1</td>", html)
-            self.assertIn("<td>示波器采集步骤 / Scope capture steps</td><td>1</td>", html)
-            self.assertIn("<td>DMM 读数 / DMM readings</td><td>1</td>", html)
-            self.assertIn('<td>失败预期项 / Failed expectations</td><td class="failed">1</td>', html)
-            self.assertIn('<td>run.json</td><td class="ok">存在 / present</td>', html)
-            self.assertIn('<td>summary.csv</td><td class="ok">存在 / present</td>', html)
-            self.assertIn("<td>采集包 / Capture packages</td><td>1</td>", html)
-            self.assertIn("<td>截图 / Screenshots</td><td>1</td>", html)
-            self.assertIn("<td>波形预览 / Waveform previews</td><td>1</td>", html)
+            self.assertIn('<section class="evidence-grid">', html)
+            self.assertIn('<div class="label">信号源设置步骤 / Source setting steps</div>', html)
+            self.assertIn('<div class="label">示波器采集步骤 / Scope capture steps</div>', html)
+            self.assertIn('<div class="label">DMM 读数 / DMM readings</div>', html)
+            self.assertIn('<div class="label">失败预期项 / Failed expectations</div>', html)
+            self.assertIn('<div class="value failed">1</div>', html)
+            self.assertIn('<div class="label">run.json</div>', html)
+            self.assertIn('<div class="value ok">存在 / present</div>', html)
+            self.assertIn('<div class="label">summary.csv</div>', html)
+            self.assertIn('<div class="label">采集包 / Capture packages</div>', html)
+            self.assertIn('<div class="label">截图 / Screenshots</div>', html)
+            self.assertIn('<div class="label">波形预览 / Waveform previews</div>', html)
             self.assertIn("<h2>证据时间线 / Evidence timeline</h2>", html)
             self.assertIn("<th>证据 / Evidence</th>", html)
             self.assertIn("<td>0</td><td>source.set_freq</td><td><span class=\"badge ok\">ok</span></td>", html)
-            self.assertIn("信号源 / Source; 通道 / Channel: 1; 频率 / Frequency: 1000 Hz", html)
+            self.assertIn('<span class="evidence-token">信号源 / Source</span>', html)
+            self.assertIn('<span class="evidence-token">通道 / Channel: 1</span>', html)
+            self.assertIn('<span class="evidence-token">频率 / Frequency: 1000 Hz</span>', html)
             self.assertIn("<td>1</td><td>scope.capture</td><td><span class=\"badge failed\">failed</span></td>", html)
-            self.assertIn(
-                "示波器 / Scope; 采集包 / Package: data/raw/evidence; 截图 / Screenshot: 存在 / present",
-                html,
-            )
-            self.assertIn("预期 / Expect: failed", html)
+            self.assertIn('<span class="evidence-token">示波器 / Scope</span>', html)
+            self.assertIn('<span class="evidence-token">采集包 / Package: data/raw/evidence</span>', html)
+            self.assertIn('<span class="evidence-token">截图 / Screenshot: 存在 / present</span>', html)
+            self.assertIn('<span class="evidence-token">预期 / Expect: failed</span>', html)
             self.assertIn("<td>2</td><td>dmm.read</td><td><span class=\"badge ok\">ok</span></td>", html)
-            self.assertIn("DMM; 功能 / Function: dcv; 读数 / Reading: 3.3 V; 预期 / Expect: ok", html)
+            self.assertIn('<span class="evidence-token">DMM</span>', html)
+            self.assertIn('<span class="evidence-token">功能 / Function: dcv</span>', html)
+            self.assertIn('<span class="evidence-token">读数 / Reading: 3.3 V</span>', html)
             self.assertIn("<td>3</td><td>sleep</td><td><span class=\"badge ok\">ok</span></td>", html)
-            self.assertIn("等待 / Sleep; 时长 / Duration: 0.25 s", html)
+            self.assertIn('<span class="evidence-token">等待 / Sleep</span>', html)
+            self.assertIn('<span class="evidence-token">时长 / Duration: 0.25 s</span>', html)
             self.assertIn("<h2>产物链接 / Artifact links</h2>", html)
-            self.assertIn('<td>运行记录 / Run JSON</td><td>run.json</td><td><a href="run.json">run.json</a></td>', html)
             self.assertIn(
-                '<td>摘要 CSV / Summary CSV</td><td>summary.csv</td><td><a href="summary.csv">summary.csv</a></td>',
+                '<td>运行记录 / Run JSON</td><td><code>run.json</code></td>'
+                '<td><a class="artifact-link" href="run.json">run.json</a></td>',
                 html,
             )
             self.assertIn(
-                '<td>采集包 / Capture package</td><td>data/raw/evidence</td>'
-                '<td><a href="../../raw/evidence">../../raw/evidence</a></td>',
+                '<td>摘要 CSV / Summary CSV</td><td><code>summary.csv</code></td>'
+                '<td><a class="artifact-link" href="summary.csv">summary.csv</a></td>',
                 html,
             )
             self.assertIn(
-                '<td>截图 / Screenshot</td><td>screenshot.png</td>'
-                '<td><a href="../../raw/evidence/screenshot.png">../../raw/evidence/screenshot.png</a></td>',
+                '<td>采集包 / Capture package</td><td><code>data/raw/evidence</code></td>'
+                '<td><a class="artifact-link" href="../../raw/evidence">../../raw/evidence</a></td>',
                 html,
             )
             self.assertIn(
-                '<td>波形原始数据 / Waveform raw artifact</td><td>ch1 ch1.npy</td>'
-                '<td><a href="../../raw/evidence/ch1.npy">../../raw/evidence/ch1.npy</a></td>',
+                '<td>截图 / Screenshot</td><td><code>screenshot.png</code></td>'
+                '<td><a class="artifact-link" href="../../raw/evidence/screenshot.png">'
+                "../../raw/evidence/screenshot.png</a></td>",
+                html,
+            )
+            self.assertIn(
+                '<td>波形原始数据 / Waveform raw artifact</td><td><code>ch1 ch1.npy</code></td>'
+                '<td><a class="artifact-link" href="../../raw/evidence/ch1.npy">'
+                "../../raw/evidence/ch1.npy</a></td>",
                 html,
             )
 
@@ -652,17 +666,22 @@ class RunReportTests(unittest.TestCase):
             self.assertIn("<h2>证据时间线 / Evidence timeline</h2>", html)
             self.assertIn("<th>步骤 / Step</th><th>类型 / Kind</th><th>状态 / Status</th><th>证据 / Evidence</th>", html)
             self.assertIn('<td>0</td><td>source.set_freq</td><td><span class="badge ok">ok</span></td>', html)
-            self.assertIn("信号源 / Source; 通道 / Channel: 1", html)
-            self.assertIn("频率 / Frequency: 1000 Hz", html)
-            self.assertIn("幅度 / Amplitude: 1.2 VPP", html)
+            self.assertIn('<span class="evidence-token">信号源 / Source</span>', html)
+            self.assertIn('<span class="evidence-token">通道 / Channel: 1</span>', html)
+            self.assertIn('<span class="evidence-token">频率 / Frequency: 1000 Hz</span>', html)
+            self.assertIn('<span class="evidence-token">幅度 / Amplitude: 1.2 VPP</span>', html)
             self.assertIn('<td>1</td><td>scope.capture</td><td><span class="badge failed">failed</span></td>', html)
-            self.assertIn("采集包 / Package: data/raw/timeline", html)
-            self.assertIn("截图 / Screenshot: 存在 / present", html)
-            self.assertIn("预期 / Expect: failed", html)
+            self.assertIn('<span class="evidence-token">采集包 / Package: data/raw/timeline</span>', html)
+            self.assertIn('<span class="evidence-token">截图 / Screenshot: 存在 / present</span>', html)
+            self.assertIn('<span class="evidence-token">预期 / Expect: failed</span>', html)
             self.assertIn('<td>2</td><td>dmm.read</td><td><span class="badge ok">ok</span></td>', html)
-            self.assertIn("DMM; 功能 / Function: dcv; 读数 / Reading: 3.3 V; 预期 / Expect: ok", html)
+            self.assertIn('<span class="evidence-token">DMM</span>', html)
+            self.assertIn('<span class="evidence-token">功能 / Function: dcv</span>', html)
+            self.assertIn('<span class="evidence-token">读数 / Reading: 3.3 V</span>', html)
+            self.assertIn('<span class="evidence-token">预期 / Expect: ok</span>', html)
             self.assertIn('<td>3</td><td>sleep</td><td><span class="badge ok">ok</span></td>', html)
-            self.assertIn("等待 / Sleep; 时长 / Duration: 0.5 s", html)
+            self.assertIn('<span class="evidence-token">等待 / Sleep</span>', html)
+            self.assertIn('<span class="evidence-token">时长 / Duration: 0.5 s</span>', html)
 
     def test_run_report_omits_expected_vs_measured_without_expect_checks(self):
         with TemporaryDirectory() as tmp:

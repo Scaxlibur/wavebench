@@ -178,6 +178,10 @@ th {{ background: #f0f4f8; color: #334e68; font-weight: 650; }}
 tr:last-child td {{ border-bottom: 0; }}
 code {{ background: #f0f4f8; padding: 0.1rem 0.3rem; border-radius: 5px; }}
 .table {{ overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); margin: 0.5rem 0 1.25rem; }}
+.compact-table table {{ font-size: 0.92rem; }}
+.compact-table th, .compact-table td {{ padding: 0.42rem 0.55rem; }}
+.compact-table code, .artifact-link {{ font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace; font-size: 0.86rem; overflow-wrap: anywhere; }}
+.artifact-table td:nth-child(3), .artifact-table td:nth-child(4) {{ color: var(--muted); }}
 .meta-card {{ padding: 0.85rem 1rem; margin: 1rem 0 1.25rem; }}
 .meta-card p {{ margin: 0.35rem 0; }}
 .screenshot-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr)); gap: 1rem; }}
@@ -195,6 +199,13 @@ code {{ background: #f0f4f8; padding: 0.1rem 0.3rem; border-radius: 5px; }}
 .summary-card .value.ok, .badge.ok {{ background: var(--ok-bg); color: var(--ok); }}
 .summary-card .value.failed, .badge.failed {{ background: var(--failed-bg); color: var(--failed); }}
 .summary-card .value.warning, .badge.warning {{ background: var(--warning-bg); color: var(--warning); }}
+.evidence-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: 0.6rem; margin: 0.5rem 0 1.25rem; }}
+.evidence-card {{ padding: 0.7rem 0.8rem; min-width: 0; }}
+.evidence-card .label {{ color: var(--muted); font-size: 0.82rem; line-height: 1.35; }}
+.evidence-card .value {{ display: inline-block; margin-top: 0.2rem; font-weight: 750; overflow-wrap: anywhere; }}
+.evidence-card .value.ok, .evidence-card .value.failed, .evidence-card .value.warning {{ border-radius: 999px; padding: 0.08rem 0.5rem; }}
+.evidence-cell {{ min-width: 18rem; max-width: 40rem; }}
+.evidence-token {{ display: inline-block; margin: 0 0.35rem 0.25rem 0; padding: 0.1rem 0.4rem; border: 1px solid #e5e7eb; border-radius: 999px; background: #f8fafc; line-height: 1.35; }}
 .muted {{ color: var(--muted); font-weight: 500; }}
 .ok {{ color: var(--ok); }}
 .failed {{ color: var(--failed); }}
@@ -351,7 +362,7 @@ def _summary_card(label: str, value: str, *, css_class: str = "") -> str:
 
 
 def _evidence_summary_block(evidence: ReportEvidenceSummary) -> str:
-    rows = [
+    cards = [
         ("信号源设置步骤 / Source setting steps", str(evidence.source_step_count), ""),
         ("示波器采集步骤 / Scope capture steps", str(evidence.scope_capture_count), ""),
         ("DMM 读数 / DMM readings", str(evidence.dmm_reading_count), ""),
@@ -370,21 +381,22 @@ def _evidence_summary_block(evidence: ReportEvidenceSummary) -> str:
         ("截图 / Screenshots", str(evidence.screenshot_count), ""),
         ("波形预览 / Waveform previews", str(evidence.waveform_preview_count), ""),
     ]
-    body = "\n".join(_evidence_summary_row(label, value, css_class) for label, value, css_class in rows)
+    body = "\n".join(_evidence_summary_card(label, value, css_class) for label, value, css_class in cards)
     return f"""<h2>实验证据摘要 / Run evidence summary</h2>
-<div class="table"><table>
-<thead><tr><th>证据 / Evidence</th><th>状态或数量 / Status or count</th></tr></thead>
-<tbody>
+<section class="evidence-grid">
 {body}
-</tbody>
-</table>
-</div>
+</section>
 """
 
 
-def _evidence_summary_row(label: str, value: str, css_class: str) -> str:
-    safe_class = f' class="{escape(css_class)}"' if css_class else ""
-    return f"<tr><td>{escape(label)}</td><td{safe_class}>{escape(value)}</td></tr>"
+def _evidence_summary_card(label: str, value: str, css_class: str) -> str:
+    safe_class = f" {escape(css_class)}" if css_class else ""
+    return (
+        '<article class="card evidence-card">'
+        f'<div class="label">{escape(label)}</div>'
+        f'<div class="value{safe_class}">{escape(value)}</div>'
+        "</article>"
+    )
 
 
 def _availability_text(available: bool) -> str:
@@ -408,14 +420,22 @@ def _evidence_timeline_block(run: RunPackage, screenshots_by_step: dict[str, Rep
 
 def _evidence_timeline_row(step: dict[str, Any], screenshots_by_step: dict[str, ReportScreenshot]) -> str:
     status = str(step.get("status", ""))
+    evidence = _evidence_text_html(_step_evidence_summary(step, screenshots_by_step))
     return (
         "<tr>"
         f"<td>{escape(str(step.get('index', '')))}</td>"
         f"<td>{escape(str(step.get('kind', '')))}</td>"
         f'<td><span class="badge {escape(status)}">{escape(status)}</span></td>'
-        f"<td>{escape(_step_evidence_summary(step, screenshots_by_step))}</td>"
+        f'<td class="evidence-cell">{evidence}</td>'
         "</tr>"
     )
+
+
+def _evidence_text_html(text: str) -> str:
+    parts = [part.strip() for part in text.split(";") if part.strip()]
+    if not parts:
+        return ""
+    return "".join(f'<span class="evidence-token">{escape(part)}</span>' for part in parts)
 
 
 def _step_evidence_summary(step: dict[str, Any], screenshots_by_step: dict[str, ReportScreenshot]) -> str:
@@ -505,7 +525,7 @@ def _artifact_links_block(links: list[ReportArtifactLink]) -> str:
         return ""
     rows = "\n".join(_artifact_link_row(link) for link in links)
     return f"""<h2>产物链接 / Artifact links</h2>
-<div class="table"><table>
+<div class="table compact-table artifact-table"><table>
 <thead><tr><th>步骤 / Step</th><th>类型 / Type</th><th>产物 / Artifact</th><th>链接 / Link</th><th>状态 / Status</th></tr></thead>
 <tbody>
 {rows}
@@ -521,8 +541,8 @@ def _artifact_link_row(link: ReportArtifactLink) -> str:
         "<tr>"
         f"<td>{escape(link.step_index)}</td>"
         f"<td>{escape(link.kind)}</td>"
-        f"<td>{escape(link.label)}</td>"
-        f'<td><a href="{href}">{escape(link.href)}</a></td>'
+        f"<td><code>{escape(link.label)}</code></td>"
+        f'<td><a class="artifact-link" href="{href}">{escape(link.href)}</a></td>'
         f"<td>{escape(link.status)}</td>"
         "</tr>"
     )
