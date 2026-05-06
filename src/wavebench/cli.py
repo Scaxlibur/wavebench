@@ -583,6 +583,7 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"manifest_json={result.manifest_json_path}")
                 print(f"manifest_csv={result.manifest_csv_path}")
                 print(f"runs={result.count}")
+                print(f"index_html={result.index_html_path}")
                 return 0
             if args.command == "check":
                 plan = load_run_plan(args.plan)
