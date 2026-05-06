@@ -142,6 +142,7 @@ def render_run_report_html(run: RunPackage, output_dir: str | Path | None = None
     artifact_links = _collect_artifact_links(run, report_output_dir, screenshots)
     summary = _build_report_summary(run, screenshots, signals)
     screenshots_by_step = {item.step_index: item for item in screenshots}
+    evidence_timeline_block = _evidence_timeline_block(run, screenshots_by_step)
     rows = "\n".join(_step_row(step, screenshots_by_step.get(str(step.get("index", "")))) for step in run.steps)
     if not rows:
         rows = '<tr><td colspan="9">没有记录步骤 / No steps recorded.</td></tr>'
@@ -227,6 +228,7 @@ code {{ background: #f0f4f8; padding: 0.1rem 0.3rem; border-radius: 5px; }}
 <p class="muted">A static, self-contained hardware validation report.</p>
 {_summary_block(summary)}
 {_evidence_summary_block(evidence)}
+{evidence_timeline_block}
 {artifact_links_block}
 <article class="card meta-card">
 <p><b>运行目录 / Run directory:</b> <code>{escape(str(run.path))}</code></p>
@@ -387,6 +389,113 @@ def _evidence_summary_row(label: str, value: str, css_class: str) -> str:
 
 def _availability_text(available: bool) -> str:
     return "存在 / present" if available else "缺失 / missing"
+
+
+def _evidence_timeline_block(run: RunPackage, screenshots_by_step: dict[str, ReportScreenshot]) -> str:
+    rows = "\n".join(_evidence_timeline_row(step, screenshots_by_step) for step in run.steps)
+    if not rows:
+        rows = '<tr><td colspan="4">没有记录步骤 / No steps recorded.</td></tr>'
+    return f"""<h2>证据时间线 / Evidence timeline</h2>
+<div class="table"><table>
+<thead><tr><th>步骤 / Step</th><th>类型 / Kind</th><th>状态 / Status</th><th>证据 / Evidence</th></tr></thead>
+<tbody>
+{rows}
+</tbody>
+</table>
+</div>
+"""
+
+
+def _evidence_timeline_row(step: dict[str, Any], screenshots_by_step: dict[str, ReportScreenshot]) -> str:
+    status = str(step.get("status", ""))
+    return (
+        "<tr>"
+        f"<td>{escape(str(step.get('index', '')))}</td>"
+        f"<td>{escape(str(step.get('kind', '')))}</td>"
+        f'<td><span class="badge {escape(status)}">{escape(status)}</span></td>'
+        f"<td>{escape(_step_evidence_summary(step, screenshots_by_step))}</td>"
+        "</tr>"
+    )
+
+
+def _step_evidence_summary(step: dict[str, Any], screenshots_by_step: dict[str, ReportScreenshot]) -> str:
+    kind = str(step.get("kind", ""))
+    artifact = step.get("artifact", {}) if isinstance(step.get("artifact"), dict) else {}
+    if kind.startswith("source."):
+        return _source_step_evidence(step, artifact)
+    if kind == "scope.capture":
+        return _scope_step_evidence(step, artifact, screenshots_by_step)
+    if kind == "dmm.read":
+        return _dmm_step_evidence(step, artifact)
+    if kind == "sleep":
+        duration = artifact.get("duration_s", _step_field(step, "duration_s"))
+        return _join_evidence_parts(["等待 / Sleep", _labeled_value("时长 / Duration", _format_metric(duration, "s"))])
+    if kind == "scope.auto":
+        return _join_evidence_parts(["示波器 / Scope", _labeled_value("自动设置 / Autoscale", artifact.get("autoscale"))])
+    return _join_evidence_parts([_labeled_value("产物 / Artifact", ", ".join(sorted(artifact.keys())))])
+
+
+def _source_step_evidence(step: dict[str, Any], artifact: dict[str, Any]) -> str:
+    status = artifact.get("source_status", {}) if isinstance(artifact.get("source_status"), dict) else {}
+    parts = ["信号源 / Source"]
+    for label, key, unit in (
+        ("通道 / Channel", "channel", ""),
+        ("功能 / Function", "function", ""),
+        ("频率 / Frequency", "frequency_hz", "Hz"),
+        ("幅度 / Amplitude", "amplitude_vpp", "Vpp"),
+        ("输出 / Output", "output", ""),
+    ):
+        value = status.get(key, _step_field(step, key))
+        parts.append(_labeled_value(label, _format_metric(value, unit) if unit else _format_plain(value)))
+    return _join_evidence_parts(parts)
+
+
+def _scope_step_evidence(
+    step: dict[str, Any], artifact: dict[str, Any], screenshots_by_step: dict[str, ReportScreenshot]
+) -> str:
+    quality = artifact.get("quality", {}) if isinstance(artifact.get("quality"), dict) else {}
+    expect = artifact.get("expect", {}) if isinstance(artifact.get("expect"), dict) else {}
+    expect_fft = artifact.get("expect_fft", {}) if isinstance(artifact.get("expect_fft"), dict) else {}
+    warnings = quality.get("warnings", [])
+    warnings_text = " | ".join(str(item) for item in warnings) if isinstance(warnings, list) else str(warnings)
+    step_index = str(step.get("index", ""))
+    screenshot_text = "存在 / present" if step_index in screenshots_by_step else "缺失 / missing"
+    parts = [
+        "示波器 / Scope",
+        _labeled_value("采集包 / Package", artifact.get("package")),
+        _labeled_value("截图 / Screenshot", screenshot_text),
+        _labeled_value("质量 / Quality", quality.get("status")),
+        _labeled_value("预期 / Expect", expect.get("status")),
+        _labeled_value("FFT 预期 / FFT expect", expect_fft.get("status")),
+        _labeled_value("警告 / Warnings", warnings_text),
+    ]
+    return _join_evidence_parts(parts)
+
+
+def _dmm_step_evidence(step: dict[str, Any], artifact: dict[str, Any]) -> str:
+    reading = artifact.get("dmm_reading", {}) if isinstance(artifact.get("dmm_reading"), dict) else {}
+    expect = artifact.get("expect", {}) if isinstance(artifact.get("expect"), dict) else {}
+    value = _format_plain(reading.get("value"))
+    unit = str(reading.get("unit", ""))
+    if value and unit:
+        value = f"{value} {unit}"
+    return _join_evidence_parts(
+        [
+            "DMM",
+            _labeled_value("功能 / Function", reading.get("function") or _step_field(step, "function")),
+            _labeled_value("读数 / Reading", value),
+            _labeled_value("预期 / Expect", expect.get("status")),
+        ]
+    )
+
+
+def _labeled_value(label: str, value: Any) -> str:
+    text = _format_plain(value)
+    return f"{label}: {text}" if text else ""
+
+
+def _join_evidence_parts(parts: list[str]) -> str:
+    return "; ".join(part for part in parts if part)
 
 
 def _artifact_links_block(links: list[ReportArtifactLink]) -> str:

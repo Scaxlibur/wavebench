@@ -468,7 +468,7 @@ class RunReportTests(unittest.TestCase):
             run_dir = root / "data" / "runs" / "run_evidence"
             run_dir.mkdir(parents=True)
             (run_dir / "summary.csv").write_text(
-                "index,kind,status\n0,source.set_freq,ok\n1,scope.capture,failed\n2,dmm.read,ok\n",
+                "index,kind,status\n0,source.set_freq,ok\n1,scope.capture,failed\n2,dmm.read,ok\n3,sleep,ok\n",
                 encoding="utf-8",
             )
             (run_dir / "run.json").write_text(
@@ -480,7 +480,8 @@ class RunReportTests(unittest.TestCase):
                                 "index": 0,
                                 "kind": "source.set_freq",
                                 "status": "ok",
-                                "artifact": {"source_status": {"frequency_hz": 1000.0}},
+                                "fields": {"channel": 1, "frequency_hz": 1000.0},
+                                "artifact": {"source_status": {"channel": 1, "frequency_hz": 1000.0}},
                             },
                             {
                                 "index": 1,
@@ -520,6 +521,13 @@ class RunReportTests(unittest.TestCase):
                                     },
                                 },
                             },
+                            {
+                                "index": 3,
+                                "kind": "sleep",
+                                "status": "ok",
+                                "fields": {"duration_s": 0.25},
+                                "artifact": {"duration_s": 0.25},
+                            },
                         ],
                     }
                 ),
@@ -538,6 +546,20 @@ class RunReportTests(unittest.TestCase):
             self.assertIn("<td>采集包 / Capture packages</td><td>1</td>", html)
             self.assertIn("<td>截图 / Screenshots</td><td>1</td>", html)
             self.assertIn("<td>波形预览 / Waveform previews</td><td>1</td>", html)
+            self.assertIn("<h2>证据时间线 / Evidence timeline</h2>", html)
+            self.assertIn("<th>证据 / Evidence</th>", html)
+            self.assertIn("<td>0</td><td>source.set_freq</td><td><span class=\"badge ok\">ok</span></td>", html)
+            self.assertIn("信号源 / Source; 通道 / Channel: 1; 频率 / Frequency: 1000 Hz", html)
+            self.assertIn("<td>1</td><td>scope.capture</td><td><span class=\"badge failed\">failed</span></td>", html)
+            self.assertIn(
+                "示波器 / Scope; 采集包 / Package: data/raw/evidence; 截图 / Screenshot: 存在 / present",
+                html,
+            )
+            self.assertIn("预期 / Expect: failed", html)
+            self.assertIn("<td>2</td><td>dmm.read</td><td><span class=\"badge ok\">ok</span></td>", html)
+            self.assertIn("DMM; 功能 / Function: dcv; 读数 / Reading: 3.3 V; 预期 / Expect: ok", html)
+            self.assertIn("<td>3</td><td>sleep</td><td><span class=\"badge ok\">ok</span></td>", html)
+            self.assertIn("等待 / Sleep; 时长 / Duration: 0.25 s", html)
             self.assertIn("<h2>产物链接 / Artifact links</h2>", html)
             self.assertIn('<td>运行记录 / Run JSON</td><td>run.json</td><td><a href="run.json">run.json</a></td>', html)
             self.assertIn(
