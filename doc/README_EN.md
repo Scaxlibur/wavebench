@@ -2,7 +2,7 @@
 
 WaveBench is a lightweight Python measurement bench for electronics contest debugging.
 
-It provides small, explicit CLI commands for LAN-connected lab instruments. The current focus is reliable waveform capture, source-to-scope checks, basic programmable power-supply control, and explicit multi-instrument run plans without hidden resets or automatic output changes.
+It provides small, explicit CLI commands for LAN-connected lab instruments. The current focus is reliable waveform capture, source-to-scope checks, basic programmable power-supply control, DMM readings, and explicit multi-instrument run plans without hidden resets or automatic output changes.
 
 ## Current capabilities
 
@@ -40,11 +40,19 @@ It provides small, explicit CLI commands for LAN-connected lab instruments. The 
   - `power.settle_ms_after_set`
   - `power.settle_ms_after_output`
 
+### Digital multimeter: RIGOL DM3000 / DM3058 series
+
+- `dmm idn`
+- `dmm read dcv|acv|dci|aci|res|fres|freq|period|continuity|diode|cap`
+- First-stage DM3058 LAN/VISA reads are supported, with a DM3000 RS232 skeleton kept separate from the DMM driver.
+- `python scripts/dmm_dcv_staircase_smoke.py --config <toml>` runs a conservative `DP800 -> DMM` DCV staircase smoke and restores power output.
+- `python scripts/dmm_acv_source_smoke.py --config <toml>` runs a conservative `DG4202 -> DMM` ACV/RMS smoke and restores source state.
+
 ### Multi-instrument run plans
 
 - `run check --plan <plan.toml>` parses and summarizes a plan without connecting to instruments
 - `run verify --plan <plan.toml>` runs read-only high-impedance guard checks and `*IDN?` preflight checks for instruments referenced by the plan
-- `run plan --plan <plan.toml>` executes explicit source, power, scope, and sleep steps
+- `run plan --plan <plan.toml>` executes explicit source, power, scope, DMM, and sleep steps
 - `run report <run_dir>` generates a static offline HTML report from `run.json` / `summary.csv`, includes per-capture signal analysis metrics, and embeds capture screenshots when present
 - `capture inspect <capture_dir>` prints a human-readable offline capture summary
 - default scope high-impedance guard: `scope.capture` / `scope.fetch` / `sweep discrete` / run-plan `scope.capture` query `CHAN<n>:COUP?` before acquisition; `DCL`/`ACL` are treated as high impedance, `DC`/`AC` are refused by default unless `--allow-50ohm` or `[safety] allow_50ohm = true` is explicit
@@ -56,7 +64,7 @@ It provides small, explicit CLI commands for LAN-connected lab instruments. The 
 
 ## Current release
 
-Current package version: `0.4.2`.
+Current package version: `0.4.4`.
 
 Release notes are published on the GitHub Releases page.
 

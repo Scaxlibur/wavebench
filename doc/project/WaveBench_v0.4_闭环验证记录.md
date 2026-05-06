@@ -155,4 +155,4 @@ plans/closure_sine_1k.toml
 plans/closure_triangle_1k.toml
 ```
 
-它们直接把 `[steps.expect_fft]` 写进 plan，执行后 `run report` 会给出 `验收摘要 / Acceptance summary` 和 `预期 vs 实测 / Expected vs measured`。更实验室化、变化更快的 duty sweep 和 baseline 汇总继续留在 `tool-of-rei/closure-plans/`。
+它们直接把 `[steps.expect_fft]` 写进 plan，执行后 `run report` 会给出 `验收摘要 / Acceptance summary` 和 `预期 vs 实测 / Expected vs measured`。更实验室化、变化更快的 duty sweep 和 baseline 汇总继续作为发布外的本地实验资产维护。
