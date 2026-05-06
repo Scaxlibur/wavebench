@@ -169,3 +169,7 @@ bytesize = 8
 parity = "N"
 stopbits = 1
 timeout_ms = 3000
+
+# Optional DMM stabilization wait before each reading. Set 0 for no wait.
+# 每次万用表读数前的可选稳定等待时间。设为 0 表示不等待。
+settle_ms_before_read = 0

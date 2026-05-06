@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import time
 
 from wavebench.config import ConnectionConfig, DmmConfig, WaveBenchConfig
 from wavebench.drivers.dm3000 import DM3000Dmm, DmmReading
@@ -49,6 +50,9 @@ class DmmService:
     def read(self, function: str = "dcv") -> DmmReading:
         dmm = self._open_dmm()
         try:
+            settle_s = self._dmm_config().settle_ms_before_read / 1000.0
+            if settle_s > 0:
+                time.sleep(settle_s)
             return dmm.read(function=function)
         finally:
             dmm.close()
