@@ -442,11 +442,13 @@ def _source_step_evidence(step: dict[str, Any], artifact: dict[str, Any]) -> str
         ("通道 / Channel", "channel", ""),
         ("功能 / Function", "function", ""),
         ("频率 / Frequency", "frequency_hz", "Hz"),
-        ("幅度 / Amplitude", "amplitude_vpp", "Vpp"),
         ("输出 / Output", "output", ""),
     ):
         value = status.get(key, _step_field(step, key))
         parts.append(_labeled_value(label, _format_metric(value, unit) if unit else _format_plain(value)))
+    amplitude = status.get("amplitude", _step_field(step, "value_vpp"))
+    amplitude_unit = str(status.get("amplitude_unit") or "Vpp")
+    parts.append(_labeled_value("幅度 / Amplitude", _format_metric(amplitude, amplitude_unit)))
     return _join_evidence_parts(parts)
 
 

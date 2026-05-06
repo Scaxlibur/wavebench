@@ -582,6 +582,88 @@ class RunReportTests(unittest.TestCase):
                 html,
             )
 
+    def test_run_report_renders_evidence_timeline(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            capture = root / "data" / "raw" / "timeline"
+            capture.mkdir(parents=True)
+            (capture / "screenshot.png").write_bytes(b"\x89PNG\r\n\x1a\n")
+            (capture / "metadata.json").write_text(
+                json.dumps({"files": {"screenshot": "data/raw/timeline/screenshot.png"}}),
+                encoding="utf-8",
+            )
+            run_dir = root / "data" / "runs" / "run_timeline"
+            run_dir.mkdir(parents=True)
+            (run_dir / "run.json").write_text(
+                json.dumps(
+                    {
+                        "status": "ok",
+                        "steps": [
+                            {
+                                "index": 0,
+                                "kind": "source.set_freq",
+                                "status": "ok",
+                                "fields": {"frequency_hz": 1000.0},
+                                "artifact": {
+                                    "source_status": {
+                                        "channel": 1,
+                                        "output": "ON",
+                                        "function": "SIN",
+                                        "frequency_hz": 1000.0,
+                                        "amplitude": 1.2,
+                                        "amplitude_unit": "VPP",
+                                    }
+                                },
+                            },
+                            {
+                                "index": 1,
+                                "kind": "scope.capture",
+                                "status": "failed",
+                                "artifact": {
+                                    "package": "data/raw/timeline",
+                                    "metadata": "data/raw/timeline/metadata.json",
+                                    "quality": {"status": "ok", "warnings": []},
+                                    "expect": {"status": "failed"},
+                                },
+                            },
+                            {
+                                "index": 2,
+                                "kind": "dmm.read",
+                                "status": "ok",
+                                "artifact": {
+                                    "dmm_reading": {"function": "dcv", "value": 3.3, "unit": "V"},
+                                    "expect": {"status": "ok"},
+                                },
+                            },
+                            {
+                                "index": 3,
+                                "kind": "sleep",
+                                "status": "ok",
+                                "artifact": {"duration_s": 0.5},
+                            },
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            html = render_run_report_html(load_run_package(run_dir), output_dir=run_dir)
+
+            self.assertIn("<h2>证据时间线 / Evidence timeline</h2>", html)
+            self.assertIn("<th>步骤 / Step</th><th>类型 / Kind</th><th>状态 / Status</th><th>证据 / Evidence</th>", html)
+            self.assertIn('<td>0</td><td>source.set_freq</td><td><span class="badge ok">ok</span></td>', html)
+            self.assertIn("信号源 / Source; 通道 / Channel: 1", html)
+            self.assertIn("频率 / Frequency: 1000 Hz", html)
+            self.assertIn("幅度 / Amplitude: 1.2 VPP", html)
+            self.assertIn('<td>1</td><td>scope.capture</td><td><span class="badge failed">failed</span></td>', html)
+            self.assertIn("采集包 / Package: data/raw/timeline", html)
+            self.assertIn("截图 / Screenshot: 存在 / present", html)
+            self.assertIn("预期 / Expect: failed", html)
+            self.assertIn('<td>2</td><td>dmm.read</td><td><span class="badge ok">ok</span></td>', html)
+            self.assertIn("DMM; 功能 / Function: dcv; 读数 / Reading: 3.3 V; 预期 / Expect: ok", html)
+            self.assertIn('<td>3</td><td>sleep</td><td><span class="badge ok">ok</span></td>', html)
+            self.assertIn("等待 / Sleep; 时长 / Duration: 0.5 s", html)
+
     def test_run_report_omits_expected_vs_measured_without_expect_checks(self):
         with TemporaryDirectory() as tmp:
             run_dir = Path(tmp) / "data" / "runs" / "run_no_expect"
