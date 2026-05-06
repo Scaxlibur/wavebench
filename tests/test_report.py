@@ -437,6 +437,108 @@ class RunReportTests(unittest.TestCase):
             self.assertIn("<div><dt>预期 / Expected</dt><dd>0.34..0.37 V</dd></div>", html)
             self.assertIn('<tr class="ok"><td>6</td><td>dmm.read</td><td>value</td>', html)
 
+    def test_run_report_renders_evidence_summary(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            capture = root / "data" / "raw" / "evidence"
+            capture.mkdir(parents=True)
+            np.save(capture / "ch1.npy", np.array([[0.0, 0.0], [1e-3, 1.0], [2e-3, 0.0]]))
+            (capture / "screenshot.png").write_bytes(b"\x89PNG\r\n\x1a\n")
+            (capture / "metadata.json").write_text(
+                json.dumps(
+                    {
+                        "operation": {"command": "scope capture", "channel": 1},
+                        "waveform": {
+                            "summary": {
+                                "channel": 1,
+                                "samples": 3,
+                                "frequency_estimate_hz": 1000.0,
+                                "voltage_vpp_v": 1.0,
+                                "quality_warnings": [],
+                            }
+                        },
+                        "files": {
+                            "npy": "data/raw/evidence/ch1.npy",
+                            "screenshot": "data/raw/evidence/screenshot.png",
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            run_dir = root / "data" / "runs" / "run_evidence"
+            run_dir.mkdir(parents=True)
+            (run_dir / "summary.csv").write_text(
+                "index,kind,status\n0,source.set_freq,ok\n1,scope.capture,failed\n2,dmm.read,ok\n",
+                encoding="utf-8",
+            )
+            (run_dir / "run.json").write_text(
+                json.dumps(
+                    {
+                        "status": "failed",
+                        "steps": [
+                            {
+                                "index": 0,
+                                "kind": "source.set_freq",
+                                "status": "ok",
+                                "artifact": {"source_status": {"frequency_hz": 1000.0}},
+                            },
+                            {
+                                "index": 1,
+                                "kind": "scope.capture",
+                                "status": "failed",
+                                "artifact": {
+                                    "package": "data/raw/evidence",
+                                    "metadata": "data/raw/evidence/metadata.json",
+                                    "expect": {
+                                        "status": "failed",
+                                        "checks": {
+                                            "voltage_vpp_v": {
+                                                "status": "failed",
+                                                "value": 1.0,
+                                                "limits": {"min": 2.0},
+                                            }
+                                        },
+                                        "failures": ["voltage_vpp_v below min"],
+                                    },
+                                },
+                            },
+                            {
+                                "index": 2,
+                                "kind": "dmm.read",
+                                "status": "ok",
+                                "artifact": {
+                                    "dmm_reading": {"function": "dcv", "value": 3.3, "unit": "V"},
+                                    "expect": {
+                                        "status": "ok",
+                                        "checks": {
+                                            "value": {
+                                                "status": "ok",
+                                                "value": 3.3,
+                                                "limits": {"min": 3.2, "max": 3.4},
+                                            }
+                                        },
+                                    },
+                                },
+                            },
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            html = render_run_report_html(load_run_package(run_dir), output_dir=run_dir)
+
+            self.assertIn("<h2>实验证据摘要 / Run evidence summary</h2>", html)
+            self.assertIn("<td>信号源设置步骤 / Source setting steps</td><td>1</td>", html)
+            self.assertIn("<td>示波器采集步骤 / Scope capture steps</td><td>1</td>", html)
+            self.assertIn("<td>DMM 读数 / DMM readings</td><td>1</td>", html)
+            self.assertIn('<td>失败预期项 / Failed expectations</td><td class="failed">1</td>', html)
+            self.assertIn('<td>run.json</td><td class="ok">存在 / present</td>', html)
+            self.assertIn('<td>summary.csv</td><td class="ok">存在 / present</td>', html)
+            self.assertIn("<td>采集包 / Capture packages</td><td>1</td>", html)
+            self.assertIn("<td>截图 / Screenshots</td><td>1</td>", html)
+            self.assertIn("<td>波形预览 / Waveform previews</td><td>1</td>", html)
+
     def test_run_report_omits_expected_vs_measured_without_expect_checks(self):
         with TemporaryDirectory() as tmp:
             run_dir = Path(tmp) / "data" / "runs" / "run_no_expect"

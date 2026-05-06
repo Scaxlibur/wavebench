@@ -106,6 +106,19 @@ class ReportWaveformPreview:
     warning: str
 
 
+@dataclass(frozen=True)
+class ReportEvidenceSummary:
+    source_step_count: int
+    scope_capture_count: int
+    dmm_reading_count: int
+    failed_expectation_count: int
+    run_json_available: bool
+    summary_csv_available: bool
+    capture_package_count: int
+    screenshot_count: int
+    waveform_preview_count: int
+
+
 def render_run_report_html(run: RunPackage, output_dir: str | Path | None = None) -> str:
     experiment = run.run.get("experiment", {}) if isinstance(run.run.get("experiment"), dict) else {}
     restore = run.run.get("restore", {}) if isinstance(run.run.get("restore"), dict) else {}
@@ -116,6 +129,7 @@ def render_run_report_html(run: RunPackage, output_dir: str | Path | None = None
     expectations = _collect_expectation_rows(run)
     dmm_readings = _collect_dmm_readings(run)
     waveform_previews = _collect_waveform_previews(run)
+    evidence = _build_evidence_summary(run, expectations, dmm_readings, screenshots, waveform_previews)
     summary = _build_report_summary(run, screenshots, signals)
     screenshots_by_step = {item.step_index: item for item in screenshots}
     rows = "\n".join(_step_row(step, screenshots_by_step.get(str(step.get("index", "")))) for step in run.steps)
@@ -201,6 +215,7 @@ code {{ background: #f0f4f8; padding: 0.1rem 0.3rem; border-radius: 5px; }}
 <h1>WaveBench 运行报告 <span class="muted">Run report</span></h1>
 <p class="muted">A static, self-contained hardware validation report.</p>
 {_summary_block(summary)}
+{_evidence_summary_block(evidence)}
 <article class="card meta-card">
 <p><b>运行目录 / Run directory:</b> <code>{escape(str(run.path))}</code></p>
 <p><b>状态 / Status:</b> <span class="badge {escape(run.status)}">{escape(run.status)}</span></p>
@@ -319,6 +334,47 @@ def _summary_card(label: str, value: str, *, css_class: str = "") -> str:
         f'<div class="value{safe_class}">{escape(value) if value else "-"}</div>'
         '</article>'
     )
+
+
+def _evidence_summary_block(evidence: ReportEvidenceSummary) -> str:
+    rows = [
+        ("信号源设置步骤 / Source setting steps", str(evidence.source_step_count), ""),
+        ("示波器采集步骤 / Scope capture steps", str(evidence.scope_capture_count), ""),
+        ("DMM 读数 / DMM readings", str(evidence.dmm_reading_count), ""),
+        (
+            "失败预期项 / Failed expectations",
+            str(evidence.failed_expectation_count),
+            "failed" if evidence.failed_expectation_count else "ok",
+        ),
+        ("run.json", _availability_text(evidence.run_json_available), "ok" if evidence.run_json_available else "failed"),
+        (
+            "summary.csv",
+            _availability_text(evidence.summary_csv_available),
+            "ok" if evidence.summary_csv_available else "warning",
+        ),
+        ("采集包 / Capture packages", str(evidence.capture_package_count), ""),
+        ("截图 / Screenshots", str(evidence.screenshot_count), ""),
+        ("波形预览 / Waveform previews", str(evidence.waveform_preview_count), ""),
+    ]
+    body = "\n".join(_evidence_summary_row(label, value, css_class) for label, value, css_class in rows)
+    return f"""<h2>实验证据摘要 / Run evidence summary</h2>
+<div class="table"><table>
+<thead><tr><th>证据 / Evidence</th><th>状态或数量 / Status or count</th></tr></thead>
+<tbody>
+{body}
+</tbody>
+</table>
+</div>
+"""
+
+
+def _evidence_summary_row(label: str, value: str, css_class: str) -> str:
+    safe_class = f' class="{escape(css_class)}"' if css_class else ""
+    return f"<tr><td>{escape(label)}</td><td{safe_class}>{escape(value)}</td></tr>"
+
+
+def _availability_text(available: bool) -> str:
+    return "存在 / present" if available else "缺失 / missing"
 
 
 def _acceptance_block(expectations: list[ReportExpectationRow]) -> str:
@@ -636,6 +692,32 @@ def _build_report_summary(
         restore_status=str(restore.get("status", "not configured")) if restore else "not configured",
         primary_frequency=primary.frequency_hz if primary is not None else "",
         primary_vpp=primary.vpp_v if primary is not None else "",
+    )
+
+
+def _build_evidence_summary(
+    run: RunPackage,
+    expectations: list[ReportExpectationRow],
+    dmm_readings: list[ReportDmmReading],
+    screenshots: list[ReportScreenshot],
+    waveform_previews: list[ReportWaveformPreview],
+) -> ReportEvidenceSummary:
+    packages = {
+        str(artifact.get("package"))
+        for step in run.steps
+        for artifact in [step.get("artifact", {}) if isinstance(step.get("artifact"), dict) else {}]
+        if artifact.get("package")
+    }
+    return ReportEvidenceSummary(
+        source_step_count=sum(1 for step in run.steps if str(step.get("kind", "")).startswith("source.")),
+        scope_capture_count=sum(1 for step in run.steps if step.get("kind") == "scope.capture"),
+        dmm_reading_count=len(dmm_readings),
+        failed_expectation_count=sum(1 for row in expectations if row.status == "failed"),
+        run_json_available=run.run_json_path.exists(),
+        summary_csv_available=run.summary_csv_path is not None and run.summary_csv_path.exists(),
+        capture_package_count=len(packages),
+        screenshot_count=len(screenshots),
+        waveform_preview_count=len(waveform_previews),
     )
 
 
