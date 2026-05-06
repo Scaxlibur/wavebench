@@ -538,6 +538,27 @@ class RunReportTests(unittest.TestCase):
             self.assertIn("<td>采集包 / Capture packages</td><td>1</td>", html)
             self.assertIn("<td>截图 / Screenshots</td><td>1</td>", html)
             self.assertIn("<td>波形预览 / Waveform previews</td><td>1</td>", html)
+            self.assertIn("<h2>产物链接 / Artifact links</h2>", html)
+            self.assertIn('<td>运行记录 / Run JSON</td><td>run.json</td><td><a href="run.json">run.json</a></td>', html)
+            self.assertIn(
+                '<td>摘要 CSV / Summary CSV</td><td>summary.csv</td><td><a href="summary.csv">summary.csv</a></td>',
+                html,
+            )
+            self.assertIn(
+                '<td>采集包 / Capture package</td><td>data/raw/evidence</td>'
+                '<td><a href="../../raw/evidence">../../raw/evidence</a></td>',
+                html,
+            )
+            self.assertIn(
+                '<td>截图 / Screenshot</td><td>screenshot.png</td>'
+                '<td><a href="../../raw/evidence/screenshot.png">../../raw/evidence/screenshot.png</a></td>',
+                html,
+            )
+            self.assertIn(
+                '<td>波形原始数据 / Waveform raw artifact</td><td>ch1 ch1.npy</td>'
+                '<td><a href="../../raw/evidence/ch1.npy">../../raw/evidence/ch1.npy</a></td>',
+                html,
+            )
 
     def test_run_report_omits_expected_vs_measured_without_expect_checks(self):
         with TemporaryDirectory() as tmp:

@@ -107,6 +107,15 @@ class ReportWaveformPreview:
 
 
 @dataclass(frozen=True)
+class ReportArtifactLink:
+    step_index: str
+    kind: str
+    label: str
+    href: str
+    status: str
+
+
+@dataclass(frozen=True)
 class ReportEvidenceSummary:
     source_step_count: int
     scope_capture_count: int
@@ -130,6 +139,7 @@ def render_run_report_html(run: RunPackage, output_dir: str | Path | None = None
     dmm_readings = _collect_dmm_readings(run)
     waveform_previews = _collect_waveform_previews(run)
     evidence = _build_evidence_summary(run, expectations, dmm_readings, screenshots, waveform_previews)
+    artifact_links = _collect_artifact_links(run, report_output_dir, screenshots)
     summary = _build_report_summary(run, screenshots, signals)
     screenshots_by_step = {item.step_index: item for item in screenshots}
     rows = "\n".join(_step_row(step, screenshots_by_step.get(str(step.get("index", "")))) for step in run.steps)
@@ -139,6 +149,7 @@ def render_run_report_html(run: RunPackage, output_dir: str | Path | None = None
     acceptance_block = _acceptance_block(expectations)
     expectations_block = _expectations_block(expectations)
     dmm_block = _dmm_readings_block(dmm_readings)
+    artifact_links_block = _artifact_links_block(artifact_links)
     signals_block = _signals_block(signals)
     waveform_previews_block = _waveform_previews_block(waveform_previews)
     summary_note = "present" if run.summary_csv_path is not None else "missing"
@@ -216,6 +227,7 @@ code {{ background: #f0f4f8; padding: 0.1rem 0.3rem; border-radius: 5px; }}
 <p class="muted">A static, self-contained hardware validation report.</p>
 {_summary_block(summary)}
 {_evidence_summary_block(evidence)}
+{artifact_links_block}
 <article class="card meta-card">
 <p><b>运行目录 / Run directory:</b> <code>{escape(str(run.path))}</code></p>
 <p><b>状态 / Status:</b> <span class="badge {escape(run.status)}">{escape(run.status)}</span></p>
@@ -375,6 +387,34 @@ def _evidence_summary_row(label: str, value: str, css_class: str) -> str:
 
 def _availability_text(available: bool) -> str:
     return "存在 / present" if available else "缺失 / missing"
+
+
+def _artifact_links_block(links: list[ReportArtifactLink]) -> str:
+    if not links:
+        return ""
+    rows = "\n".join(_artifact_link_row(link) for link in links)
+    return f"""<h2>产物链接 / Artifact links</h2>
+<div class="table"><table>
+<thead><tr><th>步骤 / Step</th><th>类型 / Type</th><th>产物 / Artifact</th><th>链接 / Link</th><th>状态 / Status</th></tr></thead>
+<tbody>
+{rows}
+</tbody>
+</table>
+</div>
+"""
+
+
+def _artifact_link_row(link: ReportArtifactLink) -> str:
+    href = escape(link.href, quote=True)
+    return (
+        "<tr>"
+        f"<td>{escape(link.step_index)}</td>"
+        f"<td>{escape(link.kind)}</td>"
+        f"<td>{escape(link.label)}</td>"
+        f'<td><a href="{href}">{escape(link.href)}</a></td>'
+        f"<td>{escape(link.status)}</td>"
+        "</tr>"
+    )
 
 
 def _acceptance_block(expectations: list[ReportExpectationRow]) -> str:
@@ -719,6 +759,77 @@ def _build_evidence_summary(
         screenshot_count=len(screenshots),
         waveform_preview_count=len(waveform_previews),
     )
+
+
+def _collect_artifact_links(
+    run: RunPackage, output_dir: Path, screenshots: list[ReportScreenshot]
+) -> list[ReportArtifactLink]:
+    links = [
+        ReportArtifactLink(
+            step_index="-",
+            kind="运行记录 / Run JSON",
+            label="run.json",
+            href=_relative_url(run.run_json_path, output_dir),
+            status=_availability_text(run.run_json_path.exists()),
+        )
+    ]
+    if run.summary_csv_path is not None:
+        links.append(
+            ReportArtifactLink(
+                step_index="-",
+                kind="摘要 CSV / Summary CSV",
+                label="summary.csv",
+                href=_relative_url(run.summary_csv_path, output_dir),
+                status=_availability_text(run.summary_csv_path.exists()),
+            )
+        )
+    screenshots_by_step = {item.step_index: item for item in screenshots}
+    for step in run.steps:
+        artifact = step.get("artifact", {}) if isinstance(step.get("artifact"), dict) else {}
+        package_text = artifact.get("package")
+        if not package_text:
+            continue
+        step_index = str(step.get("index", ""))
+        package = str(package_text)
+        package_dir = _resolve_artifact_path(run.path, package)
+        links.append(
+            ReportArtifactLink(
+                step_index=step_index,
+                kind="采集包 / Capture package",
+                label=package,
+                href=_relative_url(package_dir, output_dir),
+                status=_availability_text(package_dir.exists()),
+            )
+        )
+        screenshot = screenshots_by_step.get(step_index)
+        if screenshot is not None:
+            links.append(
+                ReportArtifactLink(
+                    step_index=step_index,
+                    kind="截图 / Screenshot",
+                    label=Path(screenshot.src).name,
+                    href=screenshot.src,
+                    status=_availability_text(screenshot.path.exists()),
+                )
+            )
+        metadata = _read_capture_metadata(package_dir, artifact.get("metadata"))
+        for channel, npy_text, _summary in _metadata_waveform_npy_files(metadata):
+            if not npy_text:
+                continue
+            npy_path = _resolve_capture_file_path(run.path, package_dir, str(npy_text))
+            if not npy_path.exists():
+                continue
+            npy_name = Path(str(npy_text).replace("\\", "/")).name
+            links.append(
+                ReportArtifactLink(
+                    step_index=step_index,
+                    kind="波形原始数据 / Waveform raw artifact",
+                    label=f"ch{channel} {npy_name}",
+                    href=_relative_url(npy_path, output_dir),
+                    status=_availability_text(True),
+                )
+            )
+    return links
 
 
 def _screenshots_block(screenshots: list[ReportScreenshot]) -> str:
