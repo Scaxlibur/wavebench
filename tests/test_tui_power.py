@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib
+import time
 import unittest
 from pathlib import Path
 
@@ -17,10 +18,14 @@ from wavebench.config import (
 from wavebench.drivers.dp800 import PowerMeasurement, PowerProtectionStatus, PowerStatus
 from wavebench.errors import WaveBenchError
 from wavebench.logging import CommandLogger
+from wavebench.tui.dmm import FakeDmmPanelAdapter
 from wavebench.tui.power import FakePowerPanelAdapter, PowerServicePanelAdapter, build_power_panel_state
 from wavebench.tui.state import channel_state_from_status, format_output_state
 
 from wavebench.tui import app as tui_app
+
+if tui_app._TEXTUAL_IMPORT_ERROR is None:
+    from textual.widgets import Button
 
 
 def make_config() -> WaveBenchConfig:
@@ -340,6 +345,108 @@ class TuiPowerTests(unittest.TestCase):
         app = tui_app.build_app(fake=True, refresh_interval_s=10.0)
         self.assertEqual(type(app).__name__, "WaveBenchTuiApp")
         self.assertTrue(hasattr(app, "action_auto_refresh"))
+
+
+@unittest.skipIf(tui_app._TEXTUAL_IMPORT_ERROR is not None, "Textual extra is not installed")
+class TuiPowerBusyBehaviorTests(unittest.IsolatedAsyncioTestCase):
+    async def test_measurement_refresh_does_not_disable_write_controls(self):
+        class SlowReadAdapter(FakePowerPanelAdapter):
+            def refresh_measurements(self):  # type: ignore[override]
+                time.sleep(0.2)
+                return super().refresh_measurements()
+
+        app = tui_app.WaveBenchTuiApp(
+            power_adapter=SlowReadAdapter(),
+            dmm_adapter=FakeDmmPanelAdapter(),
+            refresh_interval_s=60.0,
+        )
+        async with app.run_test() as pilot:
+            await pilot.pause(0.25)
+            app.action_auto_refresh()
+            await pilot.pause(0.02)
+            self.assertTrue(app.query_one("#refresh", Button).disabled)
+            self.assertTrue(app.query_one("#protection-refresh", Button).disabled)
+            self.assertFalse(app.query_one("#toggle-1", Button).disabled)
+            self.assertFalse(app.query_one("#set-limits", Button).disabled)
+            self.assertFalse(app.query_one("#set-protection", Button).disabled)
+
+    async def test_measurement_refresh_coalesces_pending_reads(self):
+        class SlowReadAdapter(FakePowerPanelAdapter):
+            def __init__(self):
+                super().__init__()
+                self.measurement_refresh_calls = 0
+
+            def refresh_measurements(self):  # type: ignore[override]
+                self.measurement_refresh_calls += 1
+                time.sleep(0.2)
+                return super().refresh_measurements()
+
+        power = SlowReadAdapter()
+        app = tui_app.WaveBenchTuiApp(
+            power_adapter=power,
+            dmm_adapter=FakeDmmPanelAdapter(),
+            refresh_interval_s=60.0,
+        )
+        async with app.run_test() as pilot:
+            await pilot.pause(0.25)
+            app.action_auto_refresh()
+            app.action_auto_refresh()
+            app.action_auto_refresh()
+            await pilot.pause(0.6)
+            self.assertEqual(power.measurement_refresh_calls, 2)
+
+    async def test_toggle_write_reentry_is_blocked_for_same_channel(self):
+        class SlowWriteAdapter(FakePowerPanelAdapter):
+            def __init__(self):
+                super().__init__()
+                self.output_calls: list[tuple[int, bool]] = []
+
+            def set_output(self, channel: int, enabled: bool):  # type: ignore[override]
+                self.output_calls.append((channel, enabled))
+                time.sleep(0.2)
+                return super().set_output(channel, enabled)
+
+        power = SlowWriteAdapter()
+        app = tui_app.WaveBenchTuiApp(
+            power_adapter=power,
+            dmm_adapter=FakeDmmPanelAdapter(),
+            refresh_interval_s=60.0,
+        )
+        async with app.run_test() as pilot:
+            await pilot.pause(0.25)
+            app._toggle_output(1)
+            app._toggle_output(1)
+            await pilot.pause(0.5)
+            self.assertEqual(power.output_calls, [(1, True)])
+            self.assertFalse(app.query_one("#toggle-1", Button).disabled)
+
+    async def test_write_request_during_read_refresh_is_not_rejected(self):
+        class SlowReadWriteAdapter(FakePowerPanelAdapter):
+            def __init__(self):
+                super().__init__()
+                self.output_calls: list[tuple[int, bool]] = []
+
+            def refresh_measurements(self):  # type: ignore[override]
+                time.sleep(0.2)
+                return super().refresh_measurements()
+
+            def set_output(self, channel: int, enabled: bool):  # type: ignore[override]
+                self.output_calls.append((channel, enabled))
+                return super().set_output(channel, enabled)
+
+        power = SlowReadWriteAdapter()
+        app = tui_app.WaveBenchTuiApp(
+            power_adapter=power,
+            dmm_adapter=FakeDmmPanelAdapter(),
+            refresh_interval_s=60.0,
+        )
+        async with app.run_test() as pilot:
+            await pilot.pause(0.25)
+            app.action_auto_refresh()
+            await pilot.pause(0.02)
+            await pilot.click("#toggle-1")
+            await pilot.pause(0.5)
+            self.assertEqual(power.output_calls, [(1, True)])
 
 
 if __name__ == "__main__":
