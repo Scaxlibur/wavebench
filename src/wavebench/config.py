@@ -311,6 +311,7 @@ class WaveBenchConfig:
                 settle_ms_after_set=power.settle_ms_after_set,
                 settle_ms_after_output=power.settle_ms_after_output,
             ),
+            dmm=self.dmm,
             quality=self.quality,
             safety_limits=self.safety_limits,
         )

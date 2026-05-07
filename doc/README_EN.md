@@ -2,7 +2,7 @@
 
 WaveBench is a lightweight Python measurement bench for electronics contest debugging.
 
-It provides small, explicit CLI commands for LAN-connected lab instruments. The current focus is reliable waveform capture, source-to-scope checks, basic programmable power-supply control, DMM readings, and explicit multi-instrument run plans without hidden resets or automatic output changes.
+It provides small, explicit CLI commands for LAN-connected lab instruments, and now includes an experimental terminal TUI control panel. The current focus is reliable waveform capture, source-to-scope checks, basic programmable power-supply control, DMM readings, and explicit multi-instrument run plans without hidden resets or automatic output changes.
 
 ## Current capabilities
 
@@ -48,6 +48,14 @@ It provides small, explicit CLI commands for LAN-connected lab instruments. The 
 - configurable DMM settling delay before formal reads: `dmm.settle_ms_before_read`
 - `python scripts/dmm_dcv_staircase_smoke.py --config <toml>` runs a conservative `DP800 -> DMM` DCV staircase smoke and restores power output.
 - `python scripts/dmm_acv_source_smoke.py --config <toml>` runs a conservative `DG4202 -> DMM` ACV/RMS smoke and restores source state.
+
+
+### Terminal TUI: experimental control panel
+
+- `tui` launches the Textual terminal UI. It currently provides a DP800 power panel and a DMM readout panel.
+- `tui --fake` uses fake power and DMM adapters without connecting to real instruments.
+- `tui --refresh-interval 5` sets the automatic refresh interval; the default is 5 seconds.
+- Instrument I/O runs in background workers so refresh/read operations do not block the terminal UI.
 
 ### Multi-instrument run plans
 
@@ -107,6 +115,14 @@ Capture from the oscilloscope:
 ```powershell
 python -m wavebench scope capture --config wavebench.toml --channel 1 --label smoke --points def --window-frequency 1000 --target-cycles 10 --expect-frequency 1000 --frequency-tolerance 0.05 --target-vpp 1.0 --no-csv
 python -m wavebench scope capture --config wavebench.toml --channel 1 --label smoke_with_screen --points def --no-csv --screenshot
+```
+
+
+Launch the experimental TUI:
+
+```powershell
+python -m wavebench tui --config wavebench.toml
+python -m wavebench tui --fake
 ```
 
 Set DG4202 source frequency:

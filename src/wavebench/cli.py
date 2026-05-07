@@ -44,6 +44,20 @@ def build_parser() -> argparse.ArgumentParser:
     sweep_parser = subparsers.add_parser("sweep", help="Source/scope sweep commands")
     run_parser = subparsers.add_parser("run", help="Multi-instrument run plan commands")
     capture_parser = subparsers.add_parser("capture", help="Offline capture package commands")
+    tui_parser = subparsers.add_parser("tui", help="Launch terminal UI / 启动终端界面")
+    tui_parser.add_argument("--config", default="wavebench.toml", help="Path to wavebench TOML config")
+    tui_parser.add_argument("--resource", help="Override power VISA resource / 覆盖电源 VISA 资源")
+    tui_parser.add_argument(
+        "--fake",
+        action="store_true",
+        help="Use fake power and DMM snapshots / 使用模拟电源和万用表快照",
+    )
+    tui_parser.add_argument(
+        "--refresh-interval",
+        type=float,
+        default=5.0,
+        help="Refresh interval in seconds / 刷新间隔（秒）",
+    )
 
     run_sub = run_parser.add_subparsers(dest="command", required=True)
     run_check = run_sub.add_parser(
@@ -561,6 +575,17 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     try:
+        if args.domain == "tui":
+            if args.refresh_interval <= 0:
+                raise ConfigError("--refresh-interval must be > 0 / 刷新间隔必须 > 0")
+            from .tui import run as run_tui
+
+            return run_tui(
+                config_path=args.config,
+                resource=args.resource,
+                fake=args.fake,
+                refresh_interval_s=args.refresh_interval,
+            )
         if args.domain == "capture":
             if args.command == "inspect":
                 package = load_capture_package(args.path)
