@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import unittest
 from pathlib import Path
+import time
 
 from wavebench.config import (
     AutoscaleConfig,
@@ -18,6 +19,9 @@ from wavebench.tui.dmm import FakeDmmPanelAdapter, build_dmm_panel_state
 from wavebench.tui.state import dmm_config_status, dmm_state_from_reading
 
 from wavebench.tui import app as tui_app
+
+if tui_app._TEXTUAL_IMPORT_ERROR is None:
+    from textual.widgets import Button
 
 
 def make_config() -> WaveBenchConfig:
@@ -108,6 +112,14 @@ class TuiDmmTests(unittest.TestCase):
         self.assertEqual(state.value, "1000")
         self.assertEqual(state.unit, "ohm")
         self.assertTrue(any("fake DMM" in line for line in state.log_lines))
+        self.assertEqual(adapter.function_status(), "res")
+
+    def test_fake_dmm_adapter_set_function_updates_state_and_readout(self):
+        adapter = FakeDmmPanelAdapter()
+        state = adapter.set_function("acv")
+        self.assertEqual(state.function, "acv")
+        self.assertEqual(adapter.function_status(), "acv")
+        self.assertTrue(any("Function set fake DMM acv" in line for line in state.log_lines))
 
     def test_power_resource_override_preserves_dmm_config(self):
         config = make_config().with_power_resource("TCPIP::new-power::INSTR")
@@ -120,6 +132,54 @@ class TuiDmmTests(unittest.TestCase):
         app = tui_app.build_app(fake=True, refresh_interval_s=10.0)
         self.assertEqual(type(app.power_adapter).__name__, "FakePowerPanelAdapter")
         self.assertEqual(type(app.dmm_adapter).__name__, "FakeDmmPanelAdapter")
+
+
+@unittest.skipIf(tui_app._TEXTUAL_IMPORT_ERROR is not None, "Textual extra is not installed")
+class TuiDmmBusyBehaviorTests(unittest.IsolatedAsyncioTestCase):
+    async def test_read_refresh_does_not_disable_apply_button(self):
+        class SlowReadAdapter(FakeDmmPanelAdapter):
+            def read(self, function: str | None = None):  # type: ignore[override]
+                time.sleep(0.2)
+                return super().read(function=function)
+
+        app = tui_app.WaveBenchTuiApp(
+            power_adapter=tui_app.FakePowerPanelAdapter(),
+            dmm_adapter=SlowReadAdapter(),
+            refresh_interval_s=60.0,
+        )
+        async with app.run_test() as pilot:
+            await pilot.pause(0.25)
+            app._read_dmm()
+            await pilot.pause(0.02)
+            self.assertTrue(app.query_one("#dmm-read", Button).disabled)
+            self.assertFalse(app.query_one("#dmm-apply", Button).disabled)
+
+    async def test_apply_reentry_is_blocked(self):
+        class SlowApplyAdapter(FakeDmmPanelAdapter):
+            def __init__(self):
+                super().__init__()
+                self.apply_calls: list[str] = []
+
+            def set_function(self, function: str):  # type: ignore[override]
+                self.apply_calls.append(function)
+                time.sleep(0.2)
+                return super().set_function(function)
+
+        adapter = SlowApplyAdapter()
+        app = tui_app.WaveBenchTuiApp(
+            power_adapter=tui_app.FakePowerPanelAdapter(),
+            dmm_adapter=adapter,
+            refresh_interval_s=60.0,
+        )
+        async with app.run_test() as pilot:
+            await pilot.pause(0.25)
+            app.query_one("#dmm-function").value = "acv"
+            app._set_dmm_function()
+            app._set_dmm_function()
+            await pilot.pause(0.5)
+            self.assertEqual(adapter.apply_calls, ["acv"])
+            self.assertFalse(app.query_one("#dmm-apply", Button).disabled)
+            self.assertEqual(app.query_one("#dmm-function").value, "acv")
 
 
 if __name__ == "__main__":

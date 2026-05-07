@@ -87,7 +87,9 @@ if _TEXTUAL_IMPORT_ERROR is None:
             self._pending_power_read_kind: str | None = None
             self._power_write_channels_in_flight: set[int] = set()
             self._power_worker_context: dict[int, tuple[str, int | None, str | None]] = {}
-            self._dmm_io_in_flight = False
+            self._dmm_adapter_lock = Lock()
+            self._dmm_read_in_flight = False
+            self._dmm_write_in_flight = False
             self._last_state: PowerPanelState | None = None
             self._last_dmm_state: DmmPanelState | None = None
             self._power_log_lines: tuple[str, ...] = ()
@@ -121,6 +123,7 @@ if _TEXTUAL_IMPORT_ERROR is None:
                 yield Static("读数 / Reading: 未知 / N/A", id="dmm-readout")
                 with Horizontal(id="dmm-controls"):
                     yield Input(value="dcv", placeholder="功能 / Function", id="dmm-function")
+                    yield Button("应用功能 / Apply Func", id="dmm-apply", variant="success")
                     yield Button("读取 / Read", id="dmm-read", variant="primary")
             yield RichLog(id="log", highlight=True, markup=False)
             yield Footer()
@@ -153,6 +156,8 @@ if _TEXTUAL_IMPORT_ERROR is None:
                     self._set_limits()
                 elif button_id == "set-protection":
                     self._set_protection()
+                elif button_id == "dmm-apply":
+                    self._set_dmm_function()
                 elif button_id == "dmm-read":
                     self._read_dmm()
             except (ValueError, WaveBenchError) as exc:
@@ -236,23 +241,55 @@ if _TEXTUAL_IMPORT_ERROR is None:
 
             return _locked_operation
 
-        def _run_dmm_io(
+        def _wrap_dmm_operation(
+            self,
+            operation: Callable[[], DmmPanelState],
+        ) -> Callable[[], DmmPanelState]:
+            def _locked_operation() -> DmmPanelState:
+                with self._dmm_adapter_lock:
+                    return operation()
+
+            return _locked_operation
+
+        def _run_dmm_read_io(
             self,
             name: str,
             operation: Callable[[], DmmPanelState],
             *,
             skip_if_busy: bool = False,
         ) -> None:
-            if self._dmm_io_in_flight:
+            if self._dmm_write_in_flight or self._dmm_read_in_flight:
                 if not skip_if_busy:
                     self._log("忙碌 / Busy: previous DMM operation is still running")
                 return
-            self._dmm_io_in_flight = True
+            self._dmm_read_in_flight = True
             self.query_one("#dmm-read", Button).disabled = True
             self.run_worker(
-                operation,
+                self._wrap_dmm_operation(operation),
                 name=name,
-                group="dmm-io",
+                group="dmm-read",
+                thread=True,
+                exclusive=True,
+                exit_on_error=False,
+            )
+
+        def _run_dmm_write_io(
+            self,
+            name: str,
+            operation: Callable[[], DmmPanelState],
+            *,
+            skip_if_busy: bool = False,
+        ) -> None:
+            if self._dmm_write_in_flight:
+                if not skip_if_busy:
+                    self._log("忙碌 / Busy: DMM function apply is still running")
+                return
+            self._dmm_write_in_flight = True
+            self.query_one("#dmm-apply", Button).disabled = True
+            self.run_worker(
+                self._wrap_dmm_operation(operation),
+                name=name,
+                group="dmm-write",
                 thread=True,
                 exclusive=True,
                 exit_on_error=False,
@@ -298,8 +335,8 @@ if _TEXTUAL_IMPORT_ERROR is None:
                         self._log(f"错误 / Error: {error}")
                     else:
                         self._log("已取消 / Cancelled")
-            elif worker.group == "dmm-io":
-                self._dmm_io_in_flight = False
+            elif worker.group == "dmm-read":
+                self._dmm_read_in_flight = False
                 self.query_one("#dmm-read", Button).disabled = False
                 if event.state == WorkerState.SUCCESS:
                     self._render_dmm_state(worker.result)
@@ -308,6 +345,16 @@ if _TEXTUAL_IMPORT_ERROR is None:
                     self._log(f"万用表错误 / DMM error: {error}")
                 else:
                     self._log("万用表已取消 / DMM cancelled")
+            elif worker.group == "dmm-write":
+                self._dmm_write_in_flight = False
+                self.query_one("#dmm-apply", Button).disabled = False
+                if event.state == WorkerState.SUCCESS:
+                    self._render_dmm_state(worker.result)
+                elif event.state == WorkerState.ERROR:
+                    error = worker.error
+                    self._log(f"万用表功能错误 / DMM function error: {error}")
+                else:
+                    self._log("万用表功能已取消 / DMM function cancelled")
 
         def _toggle_output(self, channel: int) -> None:
             if self._last_state is None:
@@ -380,11 +427,17 @@ if _TEXTUAL_IMPORT_ERROR is None:
                 return False
             raise ConfigError("state must be on/off or empty / 状态必须为 on/off 或留空")
 
-        def _read_dmm(self, *, skip_if_busy: bool = False) -> None:
+        def _set_dmm_function(self) -> None:
             function = self.query_one("#dmm-function", Input).value.strip() or "dcv"
-            self._run_dmm_io(
+            self._run_dmm_write_io(
+                "dmm-set-function",
+                lambda: self.dmm_adapter.set_function(function=function),
+            )
+
+        def _read_dmm(self, *, skip_if_busy: bool = False) -> None:
+            self._run_dmm_read_io(
                 "dmm-read",
-                lambda: self.dmm_adapter.read(function=function),
+                lambda: self.dmm_adapter.read(),
                 skip_if_busy=skip_if_busy,
             )
 
@@ -431,6 +484,7 @@ if _TEXTUAL_IMPORT_ERROR is None:
                 f"读数 / Reading: {state.value} {state.unit} | "
                 f"原始 / Raw: {state.raw_reading}"
             )
+            self.query_one("#dmm-function", Input).value = state.function
             self._dmm_log_lines = state.log_lines
             self._render_log()
 

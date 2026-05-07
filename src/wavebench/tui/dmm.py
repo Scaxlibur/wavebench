@@ -12,7 +12,13 @@ from wavebench.tui.state import DmmPanelState, dmm_state_from_reading
 
 
 class DmmPanelAdapter(Protocol):
-    def read(self, function: str = "dcv") -> DmmPanelState:
+    def read(self, function: str | None = None) -> DmmPanelState:
+        ...
+
+    def function_status(self) -> str:
+        ...
+
+    def set_function(self, function: str) -> DmmPanelState:
         ...
 
 
@@ -30,10 +36,29 @@ class DmmServicePanelAdapter:
             config = config.with_dmm_resource(resource)
         return cls(service=DmmService(config=config, logger=CommandLogger()))
 
-    def read(self, function: str = "dcv") -> DmmPanelState:
+    def function_status(self) -> str:
+        return self.service.function_status()
+
+    def read(self, function: str | None = None) -> DmmPanelState:
         if self._instrument_id is None:
             self._instrument_id = self.service.idn()
-        reading = self.service.read(function=function)
+        active_function = self.service.function_status() if function is None else function
+        normalized_function = active_function.strip().lower()
+        if not normalized_function:
+            normalized_function = "dcv"
+        reading = self.service.read(function=normalized_function)
+        return build_dmm_panel_state(
+            config=self.service.config,
+            instrument_id=self._instrument_id,
+            reading=reading,
+            log_lines=_logger_lines(self.service.logger),
+        )
+
+    def set_function(self, function: str) -> DmmPanelState:
+        if self._instrument_id is None:
+            self._instrument_id = self.service.idn()
+        applied_function = self.service.set_function(function=function)
+        reading = self.service.read(function=applied_function)
         return build_dmm_panel_state(
             config=self.service.config,
             instrument_id=self._instrument_id,
@@ -47,6 +72,7 @@ class FakeDmmPanelAdapter:
     readings: dict[str, DmmReading] = field(default_factory=dict)
     log_lines: list[str] = field(default_factory=list)
     instrument_id: str = "RIGOL TECHNOLOGIES,DM3058,FAKE,0.0"
+    current_function: str = "dcv"
 
     def __post_init__(self) -> None:
         if not self.readings:
@@ -56,10 +82,25 @@ class FakeDmmPanelAdapter:
                 "res": DmmReading(function="res", value=1000.0, unit="ohm", raw="1000"),
             }
 
-    def read(self, function: str = "dcv") -> DmmPanelState:
+    def function_status(self) -> str:
+        return self.current_function
+
+    def set_function(self, function: str) -> DmmPanelState:
         key = function.strip().lower() or "dcv"
-        aliases = {"vdc": "dcv", "vac": "acv", "ohm": "res", "r": "res"}
+        aliases = {"vdc": "dcv", "vac": "acv", "ohm": "res", "r": "res", "cont": "continuity"}
         key = aliases.get(key, key)
+        if key not in self.readings:
+            self.readings[key] = DmmReading(function=key, value=0.0, unit="", raw="0")
+        self.current_function = key
+        self.log_lines.append(f"功能切换 / Function set fake DMM {self.current_function}")
+        return self.read(function=self.current_function)
+
+    def read(self, function: str | None = None) -> DmmPanelState:
+        key = self.current_function if function is None else function.strip().lower()
+        key = key or self.current_function or "dcv"
+        aliases = {"vdc": "dcv", "vac": "acv", "ohm": "res", "r": "res", "cont": "continuity"}
+        key = aliases.get(key, key)
+        self.current_function = key
         reading = self.readings.get(
             key,
             DmmReading(function=key, value=0.0, unit="", raw="0"),

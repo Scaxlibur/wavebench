@@ -47,6 +47,20 @@ class DmmService:
         finally:
             dmm.close()
 
+    def function_status(self) -> str:
+        dmm = self._open_dmm()
+        try:
+            return dmm.function_status()
+        finally:
+            dmm.close()
+
+    def set_function(self, function: str) -> str:
+        dmm = self._open_dmm()
+        try:
+            return dmm.set_function(function=function)
+        finally:
+            dmm.close()
+
     def read(self, function: str = "dcv") -> DmmReading:
         dmm = self._open_dmm()
         try:

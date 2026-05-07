@@ -41,6 +41,16 @@ def make_config(settle_ms_before_read: int) -> WaveBenchConfig:
 class FakeDmm:
     def __init__(self, events: list[str]):
         self.events = events
+        self.active_function = "dcv"
+
+    def function_status(self) -> str:
+        self.events.append("function_status")
+        return self.active_function
+
+    def set_function(self, function: str) -> str:
+        self.events.append(f"set_function:{function}")
+        self.active_function = function
+        return self.active_function
 
     def read(self, function: str = "dcv"):
         self.events.append(f"read:{function}")
@@ -75,6 +85,26 @@ class DmmServiceTests(unittest.TestCase):
 
         sleep.assert_not_called()
         self.assertEqual(events, ["read:dcv", "close"])
+
+    def test_function_status_closes_transport(self):
+        events: list[str] = []
+        service = DmmService(config=make_config(0), logger=CommandLogger())
+
+        with patch.object(service, "_open_dmm", return_value=FakeDmm(events)):
+            result = service.function_status()
+
+        self.assertEqual(result, "dcv")
+        self.assertEqual(events, ["function_status", "close"])
+
+    def test_set_function_closes_transport(self):
+        events: list[str] = []
+        service = DmmService(config=make_config(0), logger=CommandLogger())
+
+        with patch.object(service, "_open_dmm", return_value=FakeDmm(events)):
+            result = service.set_function("acv")
+
+        self.assertEqual(result, "acv")
+        self.assertEqual(events, ["set_function:acv", "close"])
 
 
 if __name__ == "__main__":

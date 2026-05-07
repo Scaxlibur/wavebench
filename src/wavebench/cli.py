@@ -97,6 +97,24 @@ def build_parser() -> argparse.ArgumentParser:
     dmm_read = dmm_sub.add_parser("read", help="Read one DMM measurement")
     dmm_read.add_argument("function", nargs="?", default="dcv", help="dcv/acv/dci/aci/res/fres/freq/period/continuity/diode/cap")
     add_runtime_options(dmm_read)
+    dmm_function = dmm_sub.add_parser(
+        "function", help="Query or set DMM function / 查询或设置万用表功能"
+    )
+    dmm_function_sub = dmm_function.add_subparsers(
+        dest="dmm_function_command", required=True
+    )
+    dmm_function_status = dmm_function_sub.add_parser(
+        "status", help="Query current DMM function / 查询当前万用表功能"
+    )
+    add_runtime_options(dmm_function_status)
+    dmm_function_set = dmm_function_sub.add_parser(
+        "set", help="Set DMM function / 设置万用表功能"
+    )
+    dmm_function_set.add_argument(
+        "function",
+        help="dcv/acv/dci/aci/res/fres/freq/period/continuity/diode/cap",
+    )
+    add_runtime_options(dmm_function_set)
 
     power_sub = power_parser.add_subparsers(dest="command", required=True)
     power_idn = power_sub.add_parser("idn", help="Query power supply *IDN?")
@@ -370,6 +388,13 @@ def _print_run_preflight(records: list[Any]) -> None:
 
 def _print_dmm_reading(reading: DmmReading) -> None:
     print(f"{reading.function}: {reading.value:.12g} {reading.unit} raw={reading.raw}")
+
+def _print_dmm_function_status(function: str) -> None:
+    print(f"功能 / Function: {function}")
+
+
+def _print_dmm_function_set(function: str) -> None:
+    print(f"功能已切换 / Function set: {function}")
 
 
 def _print_power_status(status: PowerStatus) -> None:
@@ -658,6 +683,13 @@ def main(argv: list[str] | None = None) -> int:
             if args.command == "read":
                 _print_dmm_reading(service.read(function=args.function))
                 return 0
+            if args.command == "function":
+                if args.dmm_function_command == "status":
+                    _print_dmm_function_status(service.function_status())
+                    return 0
+                if args.dmm_function_command == "set":
+                    _print_dmm_function_set(service.set_function(function=args.function))
+                    return 0
         if args.domain == "power":
             service = _load_power_service(args)
             if args.command == "idn":

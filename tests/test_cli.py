@@ -4,6 +4,7 @@ import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
 import numpy as np
 
@@ -52,6 +53,43 @@ class CliTests(unittest.TestCase):
         self.assertEqual(args.domain, "dmm")
         self.assertEqual(args.command, "read")
         self.assertEqual(args.function, "dcv")
+
+    def test_dmm_function_status_accepts_subcommand(self):
+        args = build_parser().parse_args(["dmm", "function", "status"])
+        self.assertEqual(args.domain, "dmm")
+        self.assertEqual(args.command, "function")
+        self.assertEqual(args.dmm_function_command, "status")
+
+    def test_dmm_function_set_accepts_function(self):
+        args = build_parser().parse_args(["dmm", "function", "set", "acv"])
+        self.assertEqual(args.domain, "dmm")
+        self.assertEqual(args.command, "function")
+        self.assertEqual(args.dmm_function_command, "set")
+        self.assertEqual(args.function, "acv")
+
+    def test_dmm_function_status_prints_bilingual_output(self):
+        class StubDmmService:
+            def function_status(self):
+                return "res"
+
+        stdout = io.StringIO()
+        with patch("wavebench.cli._load_dmm_service", return_value=StubDmmService()):
+            with redirect_stdout(stdout):
+                code = main(["dmm", "function", "status"])
+        self.assertEqual(code, 0)
+        self.assertEqual(stdout.getvalue().strip(), "功能 / Function: res")
+
+    def test_dmm_function_set_prints_bilingual_output(self):
+        class StubDmmService:
+            def set_function(self, function):
+                return function
+
+        stdout = io.StringIO()
+        with patch("wavebench.cli._load_dmm_service", return_value=StubDmmService()):
+            with redirect_stdout(stdout):
+                code = main(["dmm", "function", "set", "freq"])
+        self.assertEqual(code, 0)
+        self.assertEqual(stdout.getvalue().strip(), "功能已切换 / Function set: freq")
 
     def test_power_set_accepts_voltage_and_current_limit(self):
         args = build_parser().parse_args([

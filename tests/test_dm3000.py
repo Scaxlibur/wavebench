@@ -7,16 +7,37 @@ from wavebench.errors import DataError
 class FakeTransport:
     def __init__(self):
         self.commands = []
+        self.function_status = "DCV"
 
     def query(self, command: str) -> str:
         self.commands.append(command)
         if command == "*IDN?":
             return "RIGOL TECHNOLOGIES,DM3068,DM3A000000000,01.00"
+        if command == ":FUNCtion?":
+            return self.function_status
         if command == ":MEASure:VOLTage:DC?":
             return "1.234500e+00"
         if command == ":MEASure:RESistance?":
             return "9.876000e+03"
         return "bad"
+
+    def write(self, command: str) -> None:
+        self.commands.append(command)
+        mapping = {
+            ":FUNCtion:VOLTage:DC": "DCV",
+            ":FUNCtion:VOLTage:AC": "ACV",
+            ":FUNCtion:CURRent:DC": "DCI",
+            ":FUNCtion:CURRent:AC": "ACI",
+            ":FUNCtion:RESistance": "RESISTANCE",
+            ":FUNCtion:FRESistance": "FRESISTANCE",
+            ":FUNCtion:FREQuency": "FREQUENCY",
+            ":FUNCtion:PERiod": "PERIOD",
+            ":FUNCtion:CONTinuity": "CONTINUITY",
+            ":FUNCtion:DIODe": "DIODE",
+            ":FUNCtion:CAPacitance": "CAPACITANCE",
+        }
+        if command in mapping:
+            self.function_status = mapping[command]
 
     def close(self):
         pass
@@ -47,6 +68,32 @@ class DM3000DriverTests(unittest.TestCase):
     def test_unsupported_function_is_rejected_before_io(self):
         with self.assertRaisesRegex(DataError, "unsupported DMM function"):
             DM3000Dmm(FakeTransport()).read("temperature")
+
+    def test_function_status_reads_and_normalizes_scpi_response(self):
+        transport = FakeTransport()
+        transport.function_status = "RESISTANCE"
+        status = DM3000Dmm(transport).function_status()
+        self.assertEqual(status, "res")
+        self.assertEqual(transport.commands, [":FUNCtion?"])
+
+    def test_set_function_writes_and_returns_normalized_status(self):
+        transport = FakeTransport()
+        dmm = DM3000Dmm(transport)
+        status = dmm.set_function("vac")
+        self.assertEqual(status, "acv")
+        self.assertEqual(transport.commands, [":FUNCtion:VOLTage:AC", ":FUNCtion?"])
+
+    def test_set_function_rejects_unsupported_function_before_io(self):
+        transport = FakeTransport()
+        with self.assertRaisesRegex(DataError, "unsupported DMM function"):
+            DM3000Dmm(transport).set_function("temperature")
+        self.assertEqual(transport.commands, [])
+
+    def test_function_status_rejects_unknown_scpi_symbol(self):
+        transport = FakeTransport()
+        transport.function_status = "MYSTERY"
+        with self.assertRaisesRegex(DataError, "unexpected DMM function status"):
+            DM3000Dmm(transport).function_status()
 
 
 if __name__ == "__main__":
