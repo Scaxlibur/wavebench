@@ -141,6 +141,7 @@ square duty-cycle command verified with :SOUR2:FUNC:SQU:DCYC
 RIGOL DP832A @ <dp800-ip>
 resource = TCPIP::<dp800-ip>::INSTR
 power idn/status read-only smoke verified
+power protection status reads OVP/OCP settings separately from set/output
 CH1 output/set/status smoke verified
 power set smoke: 5.0V -> 3.3V -> 5.0V verified with RTM2032 CH2
 power output smoke: ON -> OFF -> ON verified with RTM2032 CH2
@@ -178,11 +179,12 @@ python -m wavebench source status --config wavebench.toml --channel 2
 ```bash
 python -m wavebench power idn --config wavebench.toml --resource TCPIP::<dp800-ip>::INSTR
 python -m wavebench power status --config wavebench.toml --resource TCPIP::<dp800-ip>::INSTR --channel 1
+python -m wavebench power protection status --config wavebench.toml --resource TCPIP::<dp800-ip>::INSTR --channel 1
 python -m wavebench power set --config wavebench.toml --resource TCPIP::<dp800-ip>::INSTR --channel 1 --voltage 5.0 --current-limit 0.1
 python -m wavebench power output --config wavebench.toml --resource TCPIP::<dp800-ip>::INSTR --channel 1 on
 ```
 
-`power set` 不改变 output 状态；`power output` 不改变电压/电流限值。
+`power set` 不改变 output 状态；`power output` 不改变电压/电流限值；`power protection` 与两者分离。
 
 多仪器流程检查、执行与离线报告：
 
@@ -268,7 +270,7 @@ python -m wavebench scope capture --config wavebench.toml   --channel 1 --channe
 - [x] 为离散扫点流程增加 source-mode 防呆：在固定频点实验前明确检查 `FREQ:MODE`，必要时从 `SWE` 切到 `FIX`。
 - [x] 正式最小闭环已验证：`source set-freq` -> `scope capture`。
 - [x] 正式离散扫点命令：`sweep discrete`。
-- [x] 接入 DP800 电源命令：`power idn/status/set/output`。
+- [x] 接入 DP800 电源命令：`power idn/status/set/output/protection`。
 - [x] 设计实验流程层，必须显式组合 power/source/scope 动作，不允许 capture/sweep 默认修改电源。
 - [x] 实现 `run check`、可配置 scope coupling guard、最小 `run plan` 执行器。
 - [x] DP800 电压阶跃 run plan 实机 smoke 通过：5 V -> 3.3 V -> 5 V，并写入 `data/runs/...`。

@@ -322,7 +322,7 @@ settle_ms_after_set = 2000
 settle_ms_after_output = 1000
 ```
 
-当前 power 支持 DP800 系列。`power set` 与 `power output` 是两个独立动作：前者只改电压/限流，后者只改输出开关。两个 settle 配置分别用于写入后等待读回稳定。
+当前 power 支持 DP800 系列。`power set`、`power output` 与 `power protection` 是独立动作：`power set` 只改电压/限流，`power output` 只改输出开关，`power protection` 只查询或修改 OVP/OCP 保护。两个 settle 配置分别用于写入后等待读回稳定。
 
 ## 不进入第一阶段配置的内容
 

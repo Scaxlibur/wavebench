@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 from wavebench.config import WaveBenchConfig
 from wavebench.drivers.dm3000 import DmmReading
-from wavebench.drivers.dp800 import PowerStatus
+from wavebench.drivers.dp800 import PowerProtectionStatus, PowerStatus
 
 
 @dataclass(frozen=True)
@@ -18,6 +18,12 @@ class PowerChannelState:
     measured_voltage: str
     measured_current: str
     measured_power: str
+    ovp_enabled: str = "未知 / N/A"
+    ovp_threshold: str = "未知 / N/A"
+    ovp_tripped: str = "未知 / N/A"
+    ocp_enabled: str = "未知 / N/A"
+    ocp_threshold: str = "未知 / N/A"
+    ocp_tripped: str = "未知 / N/A"
 
 
 @dataclass(frozen=True)
@@ -50,6 +56,12 @@ POWER_TABLE_COLUMNS = (
     "实测电压 / Meas V",
     "实测电流 / Meas A",
     "功率 / Power W",
+    "OVP启用 / OVP",
+    "OVP阈值 / OVP V",
+    "OVP触发 / OVP Trip",
+    "OCP启用 / OCP",
+    "OCP阈值 / OCP A",
+    "OCP触发 / OCP Trip",
 )
 
 
@@ -69,7 +81,28 @@ def format_output_state(output: str) -> str:
     return f"未知 / {output}"
 
 
-def channel_state_from_status(status: PowerStatus) -> PowerChannelState:
+def format_enabled_state(value: str) -> str:
+    normalized = value.strip().upper()
+    if normalized in {"ON", "1", "YES"}:
+        return "启用 / ON"
+    if normalized in {"OFF", "0", "NO"}:
+        return "禁用 / OFF"
+    return f"未知 / {value}"
+
+
+def format_tripped_state(value: str) -> str:
+    normalized = value.strip().upper()
+    if normalized in {"YES", "ON", "1"}:
+        return "已触发 / YES"
+    if normalized in {"NO", "OFF", "0"}:
+        return "未触发 / NO"
+    return f"未知 / {value}"
+
+
+def channel_state_from_status(
+    status: PowerStatus,
+    protection: PowerProtectionStatus | None = None,
+) -> PowerChannelState:
     return PowerChannelState(
         channel=status.channel,
         output=format_output_state(status.output),
@@ -80,6 +113,12 @@ def channel_state_from_status(status: PowerStatus) -> PowerChannelState:
         measured_voltage=format_optional_number(status.measured_voltage_v, " V"),
         measured_current=format_optional_number(status.measured_current_a, " A"),
         measured_power=format_optional_number(status.measured_power_w, " W"),
+        ovp_enabled="未知 / N/A" if protection is None else format_enabled_state(protection.ovp_enabled),
+        ovp_threshold="未知 / N/A" if protection is None else format_optional_number(protection.ovp_threshold_v, " V"),
+        ovp_tripped="未知 / N/A" if protection is None else format_tripped_state(protection.ovp_tripped),
+        ocp_enabled="未知 / N/A" if protection is None else format_enabled_state(protection.ocp_enabled),
+        ocp_threshold="未知 / N/A" if protection is None else format_optional_number(protection.ocp_threshold_a, " A"),
+        ocp_tripped="未知 / N/A" if protection is None else format_tripped_state(protection.ocp_tripped),
     )
 
 

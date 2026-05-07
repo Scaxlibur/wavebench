@@ -13,7 +13,7 @@ from .data.packages import load_capture_package, load_run_package
 from .report.html import write_run_report_html
 from .report.index import write_report_index
 from .drivers.dg4202 import SourceStatus
-from .drivers.dp800 import PowerStatus
+from .drivers.dp800 import PowerProtectionStatus, PowerStatus
 from .drivers.dm3000 import DmmReading
 from .drivers.rtm2032 import WaveformData
 from .errors import ConfigError, WaveBenchError
@@ -113,6 +113,18 @@ def build_parser() -> argparse.ArgumentParser:
     power_output.add_argument("--channel", type=int, default=None)
     power_output.add_argument("state", choices=["on", "off"])
     add_runtime_options(power_output)
+    power_protection = power_sub.add_parser("protection", help="Query or set power supply OVP/OCP protection")
+    protection_sub = power_protection.add_subparsers(dest="protection_command", required=True)
+    protection_status = protection_sub.add_parser("status", help="Query OVP/OCP protection status")
+    protection_status.add_argument("--channel", type=int, default=None)
+    add_runtime_options(protection_status)
+    protection_set = protection_sub.add_parser("set", help="Set OVP/OCP thresholds or enable state")
+    protection_set.add_argument("--channel", type=int, default=None)
+    protection_set.add_argument("--ovp-threshold", type=float, default=None)
+    protection_set.add_argument("--ovp", choices=["on", "off"], default=None)
+    protection_set.add_argument("--ocp-threshold", type=float, default=None)
+    protection_set.add_argument("--ocp", choices=["on", "off"], default=None)
+    add_runtime_options(protection_set)
 
     source_sub = source_parser.add_subparsers(dest="command", required=True)
 
@@ -364,6 +376,12 @@ def _print_power_status(status: PowerStatus) -> None:
     set_value = f"{status.set_voltage_v}V/{status.set_current_a}A"
     measured = f"{status.measured_voltage_v}V/{status.measured_current_a}A/{status.measured_power_w}W"
     print(f"CH{status.channel}: output={status.output} mode={status.mode} set={set_value} measured={measured} rating={status.rating}")
+
+
+def _print_power_protection_status(status: PowerProtectionStatus) -> None:
+    ovp = f"enabled={status.ovp_enabled} threshold={status.ovp_threshold_v}V tripped={status.ovp_tripped}"
+    ocp = f"enabled={status.ocp_enabled} threshold={status.ocp_threshold_a}A tripped={status.ocp_tripped}"
+    print(f"CH{status.channel} protection / 保护: OVP {ovp}; OCP {ocp}")
 
 
 def _print_source_status(status: SourceStatus) -> None:
@@ -660,6 +678,21 @@ def main(argv: list[str] | None = None) -> int:
             if args.command == "output":
                 _print_power_status(service.set_output(channel=args.channel, enabled=args.state == "on"))
                 return 0
+            if args.command == "protection":
+                if args.protection_command == "status":
+                    _print_power_protection_status(service.protection_status(channel=args.channel))
+                    return 0
+                if args.protection_command == "set":
+                    _print_power_protection_status(
+                        service.set_protection(
+                            channel=args.channel,
+                            ovp_threshold_v=args.ovp_threshold,
+                            ovp_enabled=None if args.ovp is None else args.ovp == "on",
+                            ocp_threshold_a=args.ocp_threshold,
+                            ocp_enabled=None if args.ocp is None else args.ocp == "on",
+                        )
+                    )
+                    return 0
         if args.domain == "source":
             if args.command == "arb-load":
                 if args.amplitude <= 0:

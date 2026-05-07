@@ -40,6 +40,28 @@ class PowerMeasurement:
     measured_power_w: float | None
 
 
+@dataclass(frozen=True)
+class PowerProtectionStatus:
+    channel: int
+    ovp_enabled: str
+    ovp_threshold_v: float | None
+    ovp_tripped: str
+    ocp_enabled: str
+    ocp_threshold_a: float | None
+    ocp_tripped: str
+
+    def as_dict(self) -> dict[str, object]:
+        return {
+            "channel": self.channel,
+            "ovp_enabled": self.ovp_enabled,
+            "ovp_threshold_v": self.ovp_threshold_v,
+            "ovp_tripped": self.ovp_tripped,
+            "ocp_enabled": self.ocp_enabled,
+            "ocp_threshold_a": self.ocp_threshold_a,
+            "ocp_tripped": self.ocp_tripped,
+        }
+
+
 def parse_apply_response(response: str) -> tuple[str | None, float | None, float | None]:
     parts = [part.strip() for part in response.strip().split(",")]
     if len(parts) != 3:
@@ -56,6 +78,10 @@ def parse_measure_all_response(response: str) -> tuple[float | None, float | Non
     if len(parts) != 3:
         raise DataError(f"unexpected DP800 MEAS:ALL? response: {response!r}")
     return float(parts[0]), float(parts[1]), float(parts[2])
+
+
+def parse_protection_value_response(response: str) -> float | None:
+    return float(response.strip())
 
 
 @dataclass
@@ -110,6 +136,48 @@ class DP800Power:
             measured_current_a=measured_current_a,
             measured_power_w=measured_power_w,
         )
+
+    def get_protection_status(self, channel: int) -> PowerProtectionStatus:
+        if channel < 1:
+            raise DataError("channel must be >= 1")
+        return PowerProtectionStatus(
+            channel=channel,
+            ovp_enabled=self.transport.query(f":OUTP:OVP? CH{channel}").strip().upper(),
+            ovp_threshold_v=parse_protection_value_response(self.transport.query(f":OUTP:OVP:VAL? CH{channel}")),
+            ovp_tripped=self.transport.query(f":OUTP:OVP:QUES? CH{channel}").strip().upper(),
+            ocp_enabled=self.transport.query(f":OUTP:OCP? CH{channel}").strip().upper(),
+            ocp_threshold_a=parse_protection_value_response(self.transport.query(f":OUTP:OCP:VAL? CH{channel}")),
+            ocp_tripped=self.transport.query(f":OUTP:OCP:QUES? CH{channel}").strip().upper(),
+        )
+
+    def set_protection(
+        self,
+        channel: int,
+        *,
+        ovp_threshold_v: float | None = None,
+        ovp_enabled: bool | None = None,
+        ocp_threshold_a: float | None = None,
+        ocp_enabled: bool | None = None,
+        check_errors: bool = True,
+    ) -> PowerProtectionStatus:
+        if channel < 1:
+            raise DataError("channel must be >= 1")
+        if ovp_threshold_v is not None and ovp_threshold_v < 0:
+            raise DataError("OVP threshold must be >= 0")
+        if ocp_threshold_a is not None and ocp_threshold_a <= 0:
+            raise DataError("OCP threshold must be > 0")
+        if ovp_threshold_v is not None:
+            self.transport.write(f":OUTP:OVP:VAL CH{channel},{ovp_threshold_v:.12g}")
+        if ovp_enabled is not None:
+            self.transport.write(f":OUTP:OVP CH{channel},{'ON' if ovp_enabled else 'OFF'}")
+        if ocp_threshold_a is not None:
+            self.transport.write(f":OUTP:OCP:VAL CH{channel},{ocp_threshold_a:.12g}")
+        if ocp_enabled is not None:
+            self.transport.write(f":OUTP:OCP CH{channel},{'ON' if ocp_enabled else 'OFF'}")
+        status = self.get_protection_status(channel)
+        if check_errors:
+            self.assert_no_errors()
+        return status
 
     def set_voltage_current_limit(
         self,

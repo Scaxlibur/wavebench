@@ -34,6 +34,8 @@ It provides small, explicit CLI commands for LAN-connected lab instruments, and 
 ### Power supply: RIGOL DP800 series
 
 - `power idn`, `power status`
+- `power protection status`
+- `power protection set --ovp-threshold --ovp on|off --ocp-threshold --ocp on|off`
 - `power set --voltage --current-limit`
 - `power output on|off`
 - configurable readback settle delays:
@@ -86,6 +88,7 @@ WaveBench deliberately avoids hidden high-impact actions:
 - `scope fetch` / `scope capture` refuse possible 50 Ω input by default; they only query state and never auto-change coupling
 - `power set` does not turn output on or off
 - `power output` does not change voltage or current limit
+- `power protection` is separate from voltage/current-limit and output control; protection writes check current setpoints and safety limits first
 - `sweep discrete` does not restore source function/amplitude unless explicitly requested with `--restore-source-state`
 - `sweep discrete` refuses 50 Ω scope input by default; pass `--allow-50ohm` only after confirming the setup is safe
 - no command should silently change oscilloscope input impedance

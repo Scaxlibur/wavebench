@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Protocol
 
 from wavebench.config import WaveBenchConfig, load_config
-from wavebench.drivers.dp800 import PowerMeasurement, PowerStatus
+from wavebench.drivers.dp800 import PowerMeasurement, PowerProtectionStatus, PowerStatus
 from wavebench.errors import WaveBenchError
 from wavebench.logging import CommandLogger
 from wavebench.services.power_service import PowerService
@@ -19,11 +19,25 @@ class PowerPanelAdapter(Protocol):
     def refresh_measurements(self) -> PowerPanelState:
         ...
 
+    def refresh_protection(self) -> PowerPanelState:
+        ...
+
     def set_output(self, channel: int, enabled: bool) -> PowerPanelState:
         ...
 
     def set_voltage_current_limit(
         self, channel: int, voltage_v: float, current_limit_a: float
+    ) -> PowerPanelState:
+        ...
+
+    def set_protection(
+        self,
+        channel: int,
+        *,
+        ovp_threshold_v: float | None = None,
+        ovp_enabled: bool | None = None,
+        ocp_threshold_a: float | None = None,
+        ocp_enabled: bool | None = None,
     ) -> PowerPanelState:
         ...
 
@@ -34,6 +48,8 @@ class PowerServicePanelAdapter:
     channels: tuple[int, ...] = (1, 2, 3)
     _instrument_id: str | None = None
     _statuses: dict[int, PowerStatus] = field(default_factory=dict)
+    _protections: dict[int, PowerProtectionStatus] = field(default_factory=dict)
+    _ui_log_lines: list[str] = field(default_factory=list)
     _needs_full_refresh: bool = True
 
     @classmethod
@@ -49,7 +65,9 @@ class PowerServicePanelAdapter:
         if self._instrument_id is None:
             self._instrument_id = self.service.idn()
         statuses = [self.service.status(channel=channel) for channel in self.channels]
+        protections = [self.service.protection_status(channel=channel) for channel in self.channels]
         self._statuses = {status.channel: status for status in statuses}
+        self._protections = {protection.channel: protection for protection in protections}
         self._needs_full_refresh = False
         return self._build_state(statuses=statuses)
 
@@ -67,12 +85,20 @@ class PowerServicePanelAdapter:
             ) from exc
         return self._build_state(statuses=[self._statuses[channel] for channel in self.channels])
 
+    def refresh_protection(self) -> PowerPanelState:
+        if self._needs_full_refresh or not self._has_full_cache():
+            return self.refresh()
+        protections = [self.service.protection_status(channel=channel) for channel in self.channels]
+        self._protections = {protection.channel: protection for protection in protections}
+        return self._build_state(statuses=[self._statuses[channel] for channel in self.channels])
+
     def _build_state(self, *, statuses: list[PowerStatus]) -> PowerPanelState:
         return build_power_panel_state(
             config=self.service.config,
             instrument_id=self._instrument_id,
             statuses=statuses,
-            log_lines=_logger_lines(self.service.logger),
+            protections=[self._protections.get(status.channel) for status in statuses],
+            log_lines=self._log_lines(),
         )
 
     def set_output(self, channel: int, enabled: bool) -> PowerPanelState:
@@ -91,6 +117,26 @@ class PowerServicePanelAdapter:
         )
         return self.refresh_measurements()
 
+    def set_protection(
+        self,
+        channel: int,
+        *,
+        ovp_threshold_v: float | None = None,
+        ovp_enabled: bool | None = None,
+        ocp_threshold_a: float | None = None,
+        ocp_enabled: bool | None = None,
+    ) -> PowerPanelState:
+        self.service.set_protection(
+            channel=channel,
+            ovp_threshold_v=ovp_threshold_v,
+            ovp_enabled=ovp_enabled,
+            ocp_threshold_a=ocp_threshold_a,
+            ocp_enabled=ocp_enabled,
+        )
+        self._ui_log_lines.append(f"CH{channel} 保护设定完成 / Protection set complete")
+        self.refresh()
+        return self.refresh_measurements()
+
     def _has_full_cache(self) -> bool:
         return all(channel in self._statuses for channel in self.channels)
 
@@ -103,10 +149,14 @@ class PowerServicePanelAdapter:
             measurement,
         )
 
+    def _log_lines(self) -> list[str]:
+        return (_logger_lines(self.service.logger) + self._ui_log_lines)[-80:]
+
 
 @dataclass
 class FakePowerPanelAdapter:
     statuses: dict[int, PowerStatus] = field(default_factory=dict)
+    protections: dict[int, PowerProtectionStatus] = field(default_factory=dict)
     log_lines: list[str] = field(default_factory=list)
     instrument_id: str = "RIGOL TECHNOLOGIES,DP832A,FAKE,0.0"
 
@@ -126,13 +176,29 @@ class FakePowerPanelAdapter:
                 )
                 for channel in (1, 2, 3)
             }
+        if not self.protections:
+            self.protections = {
+                channel: PowerProtectionStatus(
+                    channel=channel,
+                    ovp_enabled="ON",
+                    ovp_threshold_v=6.0 if channel < 3 else 5.5,
+                    ovp_tripped="NO",
+                    ocp_enabled="ON",
+                    ocp_threshold_a=0.5,
+                    ocp_tripped="NO",
+                )
+                for channel in (1, 2, 3)
+            }
 
     def refresh(self) -> PowerPanelState:
         self.log_lines.append("刷新 / Refresh fake DP832A snapshot")
         return PowerPanelState(
             config_status="演示模式 / Fake mode: DP832A snapshot",
             instrument_status=f"仪器 / Instrument: {self.instrument_id}",
-            channels=tuple(channel_state_from_status(self.statuses[channel]) for channel in (1, 2, 3)),
+            channels=tuple(
+                channel_state_from_status(self.statuses[channel], self.protections[channel])
+                for channel in (1, 2, 3)
+            ),
             log_lines=tuple(self.log_lines[-80:]),
         )
 
@@ -147,6 +213,10 @@ class FakePowerPanelAdapter:
                 measured_power_w=(voltage or 0.0) * (old.measured_current_a or 0.0),
             )
             self.statuses[channel] = merge_power_measurement(old, measurement)
+        return self.refresh()
+
+    def refresh_protection(self) -> PowerPanelState:
+        self.log_lines.append("保护刷新 / Protection refresh fake DP832A snapshot")
         return self.refresh()
 
     def set_output(self, channel: int, enabled: bool) -> PowerPanelState:
@@ -183,6 +253,32 @@ class FakePowerPanelAdapter:
         self.log_lines.append(f"CH{channel} 设定 / Set {voltage_v:g} V, {current_limit_a:g} A")
         return self.refresh_measurements()
 
+    def set_protection(
+        self,
+        channel: int,
+        *,
+        ovp_threshold_v: float | None = None,
+        ovp_enabled: bool | None = None,
+        ocp_threshold_a: float | None = None,
+        ocp_enabled: bool | None = None,
+    ) -> PowerPanelState:
+        old = self.protections[channel]
+        self.protections[channel] = PowerProtectionStatus(
+            channel=old.channel,
+            ovp_enabled=old.ovp_enabled if ovp_enabled is None else ("ON" if ovp_enabled else "OFF"),
+            ovp_threshold_v=old.ovp_threshold_v if ovp_threshold_v is None else ovp_threshold_v,
+            ovp_tripped=old.ovp_tripped,
+            ocp_enabled=old.ocp_enabled if ocp_enabled is None else ("ON" if ocp_enabled else "OFF"),
+            ocp_threshold_a=old.ocp_threshold_a if ocp_threshold_a is None else ocp_threshold_a,
+            ocp_tripped=old.ocp_tripped,
+        )
+        self.log_lines.append(
+            f"CH{channel} 保护设定 / Protection set: "
+            f"OVP={self.protections[channel].ovp_enabled} {self.protections[channel].ovp_threshold_v:g} V, "
+            f"OCP={self.protections[channel].ocp_enabled} {self.protections[channel].ocp_threshold_a:g} A"
+        )
+        return self.refresh_measurements()
+
 
 def merge_power_measurement(status: PowerStatus, measurement: PowerMeasurement) -> PowerStatus:
     return replace(
@@ -198,12 +294,17 @@ def build_power_panel_state(
     config: WaveBenchConfig,
     instrument_id: str,
     statuses: list[PowerStatus],
+    protections: list[PowerProtectionStatus | None] | None = None,
     log_lines: list[str] | tuple[str, ...] = (),
 ) -> PowerPanelState:
+    protections = [None] * len(statuses) if protections is None else protections
     return PowerPanelState(
         config_status=config_status(config),
         instrument_status=f"仪器 / Instrument: {instrument_id}",
-        channels=tuple(channel_state_from_status(status) for status in statuses),
+        channels=tuple(
+            channel_state_from_status(status, protection)
+            for status, protection in zip(statuses, protections, strict=True)
+        ),
         log_lines=tuple(log_lines),
     )
 

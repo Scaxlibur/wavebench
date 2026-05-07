@@ -1,6 +1,11 @@
 import unittest
 
-from wavebench.drivers.dp800 import DP800Power, parse_apply_response, parse_measure_all_response
+from wavebench.drivers.dp800 import (
+    DP800Power,
+    parse_apply_response,
+    parse_measure_all_response,
+    parse_protection_value_response,
+)
 
 
 class FakeTransport:
@@ -19,6 +24,12 @@ class FakeTransport:
             ":MEAS:ALL? CH1": "5.0114,0.0000,0.000",
             ":OUTP? CH1": "ON",
             ":OUTP:MODE? CH1": "CV",
+            ":OUTP:OVP? CH1": "ON",
+            ":OUTP:OVP:VAL? CH1": "6.000",
+            ":OUTP:OVP:QUES? CH1": "NO",
+            ":OUTP:OCP? CH1": "ON",
+            ":OUTP:OCP:VAL? CH1": "0.5000",
+            ":OUTP:OCP:QUES? CH1": "NO",
             "SYST:ERR?": '0,"No error"',
         }
         return mapping[command]
@@ -47,6 +58,9 @@ class DP800Tests(unittest.TestCase):
     def test_parse_measure_all_response_rejects_unexpected_format(self):
         with self.assertRaisesRegex(Exception, "unexpected DP800 MEAS:ALL"):
             parse_measure_all_response("5.0,0.1")
+
+    def test_parse_protection_value_response(self):
+        self.assertEqual(parse_protection_value_response("8.800"), 8.8)
 
     def test_get_status_reads_read_only_fields(self):
         transport = FakeTransport()
@@ -77,6 +91,45 @@ class DP800Tests(unittest.TestCase):
         self.assertEqual(measurement.measured_current_a, 0.0)
         self.assertEqual(measurement.measured_power_w, 0.0)
         self.assertEqual(transport.queries, [":MEAS:ALL? CH1"])
+
+    def test_get_protection_status_reads_ovp_and_ocp(self):
+        transport = FakeTransport()
+        driver = DP800Power(transport=transport)
+        status = driver.get_protection_status(1)
+        self.assertEqual(status.channel, 1)
+        self.assertEqual(status.ovp_enabled, "ON")
+        self.assertEqual(status.ovp_threshold_v, 6.0)
+        self.assertEqual(status.ovp_tripped, "NO")
+        self.assertEqual(status.ocp_enabled, "ON")
+        self.assertEqual(status.ocp_threshold_a, 0.5)
+        self.assertEqual(status.ocp_tripped, "NO")
+        self.assertEqual(transport.queries, [
+            ":OUTP:OVP? CH1",
+            ":OUTP:OVP:VAL? CH1",
+            ":OUTP:OVP:QUES? CH1",
+            ":OUTP:OCP? CH1",
+            ":OUTP:OCP:VAL? CH1",
+            ":OUTP:OCP:QUES? CH1",
+        ])
+
+    def test_set_protection_writes_thresholds_and_states(self):
+        transport = FakeTransport()
+        driver = DP800Power(transport=transport)
+        status = driver.set_protection(
+            1,
+            ovp_threshold_v=6.5,
+            ovp_enabled=True,
+            ocp_threshold_a=0.6,
+            ocp_enabled=False,
+            check_errors=True,
+        )
+        self.assertEqual(transport.writes, [
+            ":OUTP:OVP:VAL CH1,6.5",
+            ":OUTP:OVP CH1,ON",
+            ":OUTP:OCP:VAL CH1,0.6",
+            ":OUTP:OCP CH1,OFF",
+        ])
+        self.assertEqual(status.ovp_threshold_v, 6.0)
 
     def test_set_voltage_current_limit_writes_apply_only(self):
         transport = FakeTransport()

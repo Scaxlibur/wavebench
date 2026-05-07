@@ -14,7 +14,7 @@ from wavebench.config import (
     WaveformConfig,
 )
 from wavebench.drivers.dg4202 import SourceStatus
-from wavebench.drivers.dp800 import PowerStatus
+from wavebench.drivers.dp800 import PowerProtectionStatus, PowerStatus
 from wavebench.errors import ConfigError
 from wavebench.logging import CommandLogger
 from wavebench.services.power_service import PowerService
@@ -69,6 +69,18 @@ def power_status(voltage: float, current_limit: float) -> PowerStatus:
     )
 
 
+def protection_status(ovp_threshold: float, ocp_threshold: float) -> PowerProtectionStatus:
+    return PowerProtectionStatus(
+        channel=1,
+        ovp_enabled="ON",
+        ovp_threshold_v=ovp_threshold,
+        ovp_tripped="NO",
+        ocp_enabled="ON",
+        ocp_threshold_a=ocp_threshold,
+        ocp_tripped="NO",
+    )
+
+
 class FakeSource:
     def __init__(self, status: SourceStatus):
         self.status = status
@@ -87,13 +99,38 @@ class FakeSource:
 
 
 class FakePower:
-    def __init__(self, status: PowerStatus):
+    def __init__(self, status: PowerStatus, protection: PowerProtectionStatus | None = None):
         self.status = status
+        self.protection = protection or protection_status(6.0, 0.3)
         self.output_calls = []
+        self.protection_calls = []
         self.closed = False
 
     def get_status(self, channel: int) -> PowerStatus:
         return self.status
+
+    def get_protection_status(self, channel: int) -> PowerProtectionStatus:
+        return self.protection
+
+    def set_protection(
+        self,
+        channel: int,
+        *,
+        ovp_threshold_v: float | None = None,
+        ovp_enabled: bool | None = None,
+        ocp_threshold_a: float | None = None,
+        ocp_enabled: bool | None = None,
+        check_errors: bool = True,
+    ) -> PowerProtectionStatus:
+        self.protection_calls.append((
+            channel,
+            ovp_threshold_v,
+            ovp_enabled,
+            ocp_threshold_a,
+            ocp_enabled,
+            check_errors,
+        ))
+        return self.protection
 
     def set_output(
         self,
@@ -150,6 +187,47 @@ class SafetyLimitsOutputTests(unittest.TestCase):
             service.set_output(channel=1, enabled=False)
 
         self.assertEqual(fake.output_calls, [(1, False, True, 0)])
+
+    def test_power_protection_rejects_ovp_below_current_set_voltage_before_write(self):
+        fake = FakePower(power_status(5.0, 0.1))
+        service = PowerService(config=make_config(), logger=CommandLogger())
+
+        with patch.object(service, "_open_power", return_value=fake):
+            with self.assertRaisesRegex(ConfigError, "保护阈值不安全"):
+                service.set_protection(channel=1, ovp_threshold_v=4.9)
+
+        self.assertEqual(fake.protection_calls, [])
+        self.assertTrue(fake.closed)
+
+    def test_power_protection_rejects_ocp_below_current_limit_before_write(self):
+        fake = FakePower(power_status(3.3, 0.2))
+        service = PowerService(config=make_config(), logger=CommandLogger())
+
+        with patch.object(service, "_open_power", return_value=fake):
+            with self.assertRaisesRegex(ConfigError, "保护阈值不安全"):
+                service.set_protection(channel=1, ocp_threshold_a=0.1)
+
+        self.assertEqual(fake.protection_calls, [])
+
+    def test_power_protection_rejects_threshold_over_safety_limit_before_open(self):
+        fake = FakePower(power_status(3.3, 0.1))
+        service = PowerService(config=make_config(), logger=CommandLogger())
+
+        with patch.object(service, "_open_power", return_value=fake) as open_power:
+            with self.assertRaisesRegex(ConfigError, "安全上限已超出"):
+                service.set_protection(channel=1, ovp_threshold_v=12.0)
+
+        open_power.assert_not_called()
+        self.assertEqual(fake.protection_calls, [])
+
+    def test_power_protection_allows_safe_write(self):
+        fake = FakePower(power_status(3.3, 0.1))
+        service = PowerService(config=make_config(), logger=CommandLogger())
+
+        with patch.object(service, "_open_power", return_value=fake):
+            service.set_protection(channel=1, ovp_threshold_v=4.0, ovp_enabled=True, ocp_threshold_a=0.2)
+
+        self.assertEqual(fake.protection_calls, [(1, 4.0, True, 0.2, None, True)])
 
 
 if __name__ == "__main__":

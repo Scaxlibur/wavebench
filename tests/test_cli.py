@@ -70,6 +70,31 @@ class CliTests(unittest.TestCase):
         self.assertEqual(args.channel, 1)
         self.assertEqual(args.state, "off")
 
+    def test_power_protection_status_accepts_channel(self):
+        args = build_parser().parse_args(["power", "protection", "status", "--channel", "1"])
+        self.assertEqual(args.domain, "power")
+        self.assertEqual(args.command, "protection")
+        self.assertEqual(args.protection_command, "status")
+        self.assertEqual(args.channel, 1)
+
+    def test_power_protection_set_accepts_thresholds_and_states(self):
+        args = build_parser().parse_args([
+            "power", "protection", "set",
+            "--channel", "1",
+            "--ovp-threshold", "6.0",
+            "--ovp", "on",
+            "--ocp-threshold", "0.3",
+            "--ocp", "off",
+        ])
+        self.assertEqual(args.domain, "power")
+        self.assertEqual(args.command, "protection")
+        self.assertEqual(args.protection_command, "set")
+        self.assertEqual(args.channel, 1)
+        self.assertEqual(args.ovp_threshold, 6.0)
+        self.assertEqual(args.ovp, "on")
+        self.assertEqual(args.ocp_threshold, 0.3)
+        self.assertEqual(args.ocp, "off")
+
     def test_source_status_accepts_channel(self):
         args = build_parser().parse_args(["source", "status", "--channel", "2"])
         self.assertEqual(args.domain, "source")

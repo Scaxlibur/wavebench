@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from wavebench.config import ConnectionConfig, PowerConfig, WaveBenchConfig
-from wavebench.drivers.dp800 import DP800Power, PowerMeasurement, PowerStatus
+from wavebench.drivers.dp800 import DP800Power, PowerMeasurement, PowerProtectionStatus, PowerStatus
 from wavebench.errors import ConfigError
 from wavebench.logging import CommandLogger
 from wavebench.transport.pyvisa_transport import PyVisaTransport
@@ -55,6 +55,57 @@ class PowerService:
         finally:
             power.close()
 
+    def protection_status(self, channel: int | None = None) -> PowerProtectionStatus:
+        power_cfg = self._power_config()
+        channel = power_cfg.default_channel if channel is None else channel
+        power = self._open_power()
+        try:
+            return power.get_protection_status(channel)
+        finally:
+            power.close()
+
+    def set_protection(
+        self,
+        channel: int | None,
+        *,
+        ovp_threshold_v: float | None = None,
+        ovp_enabled: bool | None = None,
+        ocp_threshold_a: float | None = None,
+        ocp_enabled: bool | None = None,
+    ) -> PowerProtectionStatus:
+        power_cfg = self._power_config()
+        channel = power_cfg.default_channel if channel is None else channel
+        if (
+            ovp_threshold_v is None
+            and ovp_enabled is None
+            and ocp_threshold_a is None
+            and ocp_enabled is None
+        ):
+            raise ConfigError("no protection change requested / 未请求保护设置变更")
+        self._check_power_limits(voltage_v=ovp_threshold_v, current_limit_a=ocp_threshold_a)
+        power = self._open_power()
+        try:
+            setpoints = power.get_status(channel)
+            protection = power.get_protection_status(channel)
+            effective_ovp = ovp_threshold_v if ovp_threshold_v is not None else protection.ovp_threshold_v
+            effective_ocp = ocp_threshold_a if ocp_threshold_a is not None else protection.ocp_threshold_a
+            self._check_protection_relationship(
+                set_voltage_v=setpoints.set_voltage_v,
+                set_current_a=setpoints.set_current_a,
+                ovp_threshold_v=effective_ovp,
+                ocp_threshold_a=effective_ocp,
+            )
+            return power.set_protection(
+                channel,
+                ovp_threshold_v=ovp_threshold_v,
+                ovp_enabled=ovp_enabled,
+                ocp_threshold_a=ocp_threshold_a,
+                ocp_enabled=ocp_enabled,
+                check_errors=power_cfg.check_errors,
+            )
+        finally:
+            power.close()
+
     def set_voltage_current_limit(
         self, channel: int | None, voltage_v: float, current_limit_a: float
     ) -> PowerStatus:
@@ -85,6 +136,25 @@ class PowerService:
             raise ConfigError(
                 f"safety limit exceeded / 安全上限已超出: power current limit {current_limit_a:.12g} A "
                 f"> max_power_current_limit_a {max_current:.12g} A"
+            )
+
+    def _check_protection_relationship(
+        self,
+        *,
+        set_voltage_v: float | None,
+        set_current_a: float | None,
+        ovp_threshold_v: float | None,
+        ocp_threshold_a: float | None,
+    ) -> None:
+        if set_voltage_v is not None and ovp_threshold_v is not None and ovp_threshold_v < set_voltage_v:
+            raise ConfigError(
+                f"protection threshold unsafe / 保护阈值不安全: OVP {ovp_threshold_v:.12g} V "
+                f"< set voltage {set_voltage_v:.12g} V"
+            )
+        if set_current_a is not None and ocp_threshold_a is not None and ocp_threshold_a < set_current_a:
+            raise ConfigError(
+                f"protection threshold unsafe / 保护阈值不安全: OCP {ocp_threshold_a:.12g} A "
+                f"< current limit {set_current_a:.12g} A"
             )
 
     def set_output(self, channel: int | None, enabled: bool) -> PowerStatus:

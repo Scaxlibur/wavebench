@@ -41,6 +41,11 @@ if _TEXTUAL_IMPORT_ERROR is None:
             padding: 0 1;
         }
 
+        #power-protection-controls {
+            height: 3;
+            padding: 0 1;
+        }
+
         #dmm-panel {
             height: 8;
             padding: 0 1;
@@ -98,6 +103,14 @@ if _TEXTUAL_IMPORT_ERROR is None:
                 yield Input(placeholder="电压 V / Voltage", id="set-voltage")
                 yield Input(placeholder="限流 A / Current", id="set-current")
                 yield Button("设定 / Set", id="set-limits", variant="success")
+            with Horizontal(id="power-protection-controls"):
+                yield Button("保护刷新 / Prot Refresh", id="protection-refresh", variant="primary")
+                yield Input(value="1", placeholder="保护通道 / Prot CH", id="protection-channel")
+                yield Input(placeholder="OVP阈值 V / OVP V", id="ovp-threshold")
+                yield Input(placeholder="OVP on/off/空 / keep", id="ovp-state")
+                yield Input(placeholder="OCP阈值 A / OCP A", id="ocp-threshold")
+                yield Input(placeholder="OCP on/off/空 / keep", id="ocp-state")
+                yield Button("保护设定 / Set Prot", id="set-protection", variant="warning")
             with Vertical(id="dmm-panel"):
                 yield Static("万用表 / DMM", id="dmm-status")
                 yield Static("读数 / Reading: 未知 / N/A", id="dmm-readout")
@@ -130,11 +143,15 @@ if _TEXTUAL_IMPORT_ERROR is None:
             try:
                 if button_id == "refresh":
                     self.action_refresh()
+                elif button_id == "protection-refresh":
+                    self._refresh_protection()
                 elif button_id.startswith("toggle-"):
                     channel = int(button_id.removeprefix("toggle-"))
                     self._toggle_output(channel)
                 elif button_id == "set-limits":
                     self._set_limits()
+                elif button_id == "set-protection":
+                    self._set_protection()
                 elif button_id == "dmm-read":
                     self._read_dmm()
             except (ValueError, WaveBenchError) as exc:
@@ -242,6 +259,42 @@ if _TEXTUAL_IMPORT_ERROR is None:
                 ),
             )
 
+        def _refresh_protection(self) -> None:
+            self._run_power_io("protection-refresh", self.power_adapter.refresh_protection)
+
+        def _set_protection(self) -> None:
+            channel = int(self.query_one("#protection-channel", Input).value)
+            if channel < 1:
+                raise ConfigError("channel must be >= 1 / 通道必须 >= 1")
+            ovp_threshold = self._optional_float("#ovp-threshold")
+            ocp_threshold = self._optional_float("#ocp-threshold")
+            ovp_enabled = self._optional_on_off("#ovp-state")
+            ocp_enabled = self._optional_on_off("#ocp-state")
+            self._run_power_io(
+                "set-protection",
+                lambda: self.power_adapter.set_protection(
+                    channel=channel,
+                    ovp_threshold_v=ovp_threshold,
+                    ovp_enabled=ovp_enabled,
+                    ocp_threshold_a=ocp_threshold,
+                    ocp_enabled=ocp_enabled,
+                ),
+            )
+
+        def _optional_float(self, selector: str) -> float | None:
+            value = self.query_one(selector, Input).value.strip()
+            return None if value == "" else float(value)
+
+        def _optional_on_off(self, selector: str) -> bool | None:
+            value = self.query_one(selector, Input).value.strip().lower()
+            if value == "":
+                return None
+            if value in {"on", "1", "yes", "true"}:
+                return True
+            if value in {"off", "0", "no", "false"}:
+                return False
+            raise ConfigError("state must be on/off or empty / 状态必须为 on/off 或留空")
+
         def _read_dmm(self, *, skip_if_busy: bool = False) -> None:
             function = self.query_one("#dmm-function", Input).value.strip() or "dcv"
             self._run_dmm_io(
@@ -267,6 +320,12 @@ if _TEXTUAL_IMPORT_ERROR is None:
                     channel.measured_voltage,
                     channel.measured_current,
                     channel.measured_power,
+                    channel.ovp_enabled,
+                    channel.ovp_threshold,
+                    channel.ovp_tripped,
+                    channel.ocp_enabled,
+                    channel.ocp_threshold,
+                    channel.ocp_tripped,
                     key=str(channel.channel),
                 )
             self._power_log_lines = state.log_lines
@@ -297,7 +356,15 @@ if _TEXTUAL_IMPORT_ERROR is None:
                 log.write(line)
 
         def _set_controls_enabled(self, enabled: bool) -> None:
-            for widget_id in ("refresh", "toggle-1", "toggle-2", "toggle-3", "set-limits"):
+            for widget_id in (
+                "refresh",
+                "protection-refresh",
+                "toggle-1",
+                "toggle-2",
+                "toggle-3",
+                "set-limits",
+                "set-protection",
+            ):
                 self.query_one(f"#{widget_id}", Button).disabled = not enabled
 
         def _log(self, line: str) -> None:

@@ -14,7 +14,7 @@ from wavebench.config import (
     WaveBenchConfig,
     WaveformConfig,
 )
-from wavebench.drivers.dp800 import PowerMeasurement, PowerStatus
+from wavebench.drivers.dp800 import PowerMeasurement, PowerProtectionStatus, PowerStatus
 from wavebench.errors import WaveBenchError
 from wavebench.logging import CommandLogger
 from wavebench.tui.power import FakePowerPanelAdapter, PowerServicePanelAdapter, build_power_panel_state
@@ -84,11 +84,33 @@ def make_status(
     )
 
 
+def make_protection(
+    *,
+    channel: int = 1,
+    ovp_enabled: str = "ON",
+    ovp_threshold: float = 6.0,
+    ovp_tripped: str = "NO",
+    ocp_enabled: str = "ON",
+    ocp_threshold: float = 0.5,
+    ocp_tripped: str = "NO",
+) -> PowerProtectionStatus:
+    return PowerProtectionStatus(
+        channel=channel,
+        ovp_enabled=ovp_enabled,
+        ovp_threshold_v=ovp_threshold,
+        ovp_tripped=ovp_tripped,
+        ocp_enabled=ocp_enabled,
+        ocp_threshold_a=ocp_threshold,
+        ocp_tripped=ocp_tripped,
+    )
+
+
 class FakePowerService:
     def __init__(self) -> None:
         self.config = make_config()
         self.logger = CommandLogger()
         self.statuses = {1: make_status(channel=1, voltage=3.3, current=0.2)}
+        self.protections = {1: make_protection(channel=1)}
         self.measurements = {
             1: PowerMeasurement(
                 channel=1,
@@ -98,6 +120,8 @@ class FakePowerService:
             )
         }
         self.status_calls: list[int] = []
+        self.protection_calls: list[int] = []
+        self.protection_set_calls: list[tuple[int, float | None, bool | None, float | None, bool | None]] = []
         self.measurement_calls: list[int] = []
         self.fail_measurement = False
 
@@ -115,6 +139,35 @@ class FakePowerService:
         if self.fail_measurement:
             raise RuntimeError("LAN timeout")
         return self.measurements[channel]
+
+    def protection_status(self, channel: int | None = None) -> PowerProtectionStatus:
+        channel = 1 if channel is None else channel
+        self.protection_calls.append(channel)
+        return self.protections[channel]
+
+    def set_protection(
+        self,
+        channel: int,
+        *,
+        ovp_threshold_v: float | None = None,
+        ovp_enabled: bool | None = None,
+        ocp_threshold_a: float | None = None,
+        ocp_enabled: bool | None = None,
+    ) -> PowerProtectionStatus:
+        self.protection_set_calls.append(
+            (channel, ovp_threshold_v, ovp_enabled, ocp_threshold_a, ocp_enabled)
+        )
+        old = self.protections[channel]
+        self.protections[channel] = PowerProtectionStatus(
+            channel=channel,
+            ovp_enabled=old.ovp_enabled if ovp_enabled is None else ("ON" if ovp_enabled else "OFF"),
+            ovp_threshold_v=old.ovp_threshold_v if ovp_threshold_v is None else ovp_threshold_v,
+            ovp_tripped=old.ovp_tripped,
+            ocp_enabled=old.ocp_enabled if ocp_enabled is None else ("ON" if ocp_enabled else "OFF"),
+            ocp_threshold_a=old.ocp_threshold_a if ocp_threshold_a is None else ocp_threshold_a,
+            ocp_tripped=old.ocp_tripped,
+        )
+        return self.protections[channel]
 
     def set_output(self, channel: int, enabled: bool) -> PowerStatus:
         self.statuses[channel] = make_status(
@@ -168,6 +221,17 @@ class TuiPowerTests(unittest.TestCase):
         self.assertEqual(state.set_voltage, "5 V")
         self.assertEqual(state.measured_power, "0.0501 W")
 
+    def test_channel_state_formats_protection_status(self):
+        state = channel_state_from_status(
+            make_status(channel=1),
+            make_protection(channel=1, ovp_tripped="YES", ocp_enabled="OFF"),
+        )
+        self.assertEqual(state.ovp_enabled, "启用 / ON")
+        self.assertEqual(state.ovp_threshold, "6 V")
+        self.assertEqual(state.ovp_tripped, "已触发 / YES")
+        self.assertEqual(state.ocp_enabled, "禁用 / OFF")
+        self.assertEqual(state.ocp_threshold, "0.5 A")
+
     def test_build_power_panel_state_includes_config_and_log(self):
         status = PowerStatus(
             channel=1,
@@ -184,11 +248,13 @@ class TuiPowerTests(unittest.TestCase):
             config=make_config(),
             instrument_id="RIGOL,DP832A,SN,FW",
             statuses=[status],
+            protections=[make_protection(channel=1)],
             log_lines=["Q :APPL? CH1"],
         )
         self.assertIn("驱动 / Driver: dp800", state.config_status)
         self.assertIn("仪器 / Instrument: RIGOL,DP832A", state.instrument_status)
         self.assertEqual(state.channels[0].output, "关 / OFF")
+        self.assertEqual(state.channels[0].ovp_enabled, "启用 / ON")
         self.assertEqual(state.log_lines, ("Q :APPL? CH1",))
 
     def test_fake_adapter_updates_snapshot_without_instruments(self):
@@ -198,6 +264,9 @@ class TuiPowerTests(unittest.TestCase):
         state = adapter.set_output(channel=1, enabled=True)
         self.assertEqual(state.channels[0].output, "开 / ON")
         self.assertTrue(any("Output -> ON" in line for line in state.log_lines))
+        state = adapter.refresh_protection()
+        self.assertEqual(state.channels[0].ovp_threshold, "6 V")
+        self.assertTrue(any("Protection refresh" in line for line in state.log_lines))
 
     def test_measurement_refresh_preserves_cached_static_fields(self):
         service = FakePowerService()
@@ -205,6 +274,7 @@ class TuiPowerTests(unittest.TestCase):
         adapter.refresh()
         state = adapter.refresh_measurements()
         self.assertEqual(service.status_calls, [1])
+        self.assertEqual(service.protection_calls, [1])
         self.assertEqual(service.measurement_calls, [1])
         self.assertEqual(state.channels[0].output, "关 / OFF")
         self.assertEqual(state.channels[0].set_voltage, "3.3 V")
@@ -221,6 +291,17 @@ class TuiPowerTests(unittest.TestCase):
         adapter.refresh_measurements()
         self.assertEqual(service.status_calls, [1, 1])
 
+    def test_manual_protection_refresh_does_not_read_measurements(self):
+        service = FakePowerService()
+        adapter = PowerServicePanelAdapter(service=service, channels=(1,))
+        adapter.refresh()
+        service.measurement_calls.clear()
+        service.protection_calls.clear()
+        state = adapter.refresh_protection()
+        self.assertEqual(service.protection_calls, [1])
+        self.assertEqual(service.measurement_calls, [])
+        self.assertEqual(state.channels[0].ocp_threshold, "0.5 A")
+
     def test_set_updates_cache_then_refreshes_measurements(self):
         service = FakePowerService()
         adapter = PowerServicePanelAdapter(service=service, channels=(1,))
@@ -231,6 +312,28 @@ class TuiPowerTests(unittest.TestCase):
         self.assertEqual(state.channels[0].set_voltage, "4.2 V")
         self.assertEqual(state.channels[0].set_current, "0.3 A")
         self.assertEqual(state.channels[0].measured_power, "0.0331 W")
+
+    def test_set_protection_uses_service_api_then_full_and_measurement_refresh(self):
+        service = FakePowerService()
+        adapter = PowerServicePanelAdapter(service=service, channels=(1,))
+        adapter.refresh()
+        service.status_calls.clear()
+        service.protection_calls.clear()
+        service.measurement_calls.clear()
+        state = adapter.set_protection(
+            channel=1,
+            ovp_threshold_v=5.5,
+            ovp_enabled=True,
+            ocp_threshold_a=0.4,
+            ocp_enabled=None,
+        )
+        self.assertEqual(service.protection_set_calls, [(1, 5.5, True, 0.4, None)])
+        self.assertEqual(service.status_calls, [1])
+        self.assertEqual(service.protection_calls, [1])
+        self.assertEqual(service.measurement_calls, [1])
+        self.assertEqual(state.channels[0].ovp_threshold, "5.5 V")
+        self.assertEqual(state.channels[0].ocp_threshold, "0.4 A")
+        self.assertIn("保护设定完成 / Protection set complete", "\n".join(state.log_lines))
 
     @unittest.skipIf(tui_app._TEXTUAL_IMPORT_ERROR is not None, "Textual extra is not installed")
     def test_textual_app_builds_against_fake_adapter(self):
