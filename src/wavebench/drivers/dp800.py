@@ -32,6 +32,14 @@ class PowerStatus:
         }
 
 
+@dataclass(frozen=True)
+class PowerMeasurement:
+    channel: int
+    measured_voltage_v: float | None
+    measured_current_a: float | None
+    measured_power_w: float | None
+
+
 def parse_apply_response(response: str) -> tuple[str | None, float | None, float | None]:
     parts = [part.strip() for part in response.strip().split(",")]
     if len(parts) != 3:
@@ -77,9 +85,7 @@ class DP800Power:
         if channel < 1:
             raise DataError("channel must be >= 1")
         rating, set_voltage_v, set_current_a = parse_apply_response(self.transport.query(f":APPL? CH{channel}"))
-        measured_voltage_v, measured_current_a, measured_power_w = parse_measure_all_response(
-            self.transport.query(f":MEAS:ALL? CH{channel}")
-        )
+        measurement = self.get_measurement(channel)
         return PowerStatus(
             channel=channel,
             output=self.transport.query(f":OUTP? CH{channel}").strip().upper(),
@@ -87,6 +93,19 @@ class DP800Power:
             rating=rating,
             set_voltage_v=set_voltage_v,
             set_current_a=set_current_a,
+            measured_voltage_v=measurement.measured_voltage_v,
+            measured_current_a=measurement.measured_current_a,
+            measured_power_w=measurement.measured_power_w,
+        )
+
+    def get_measurement(self, channel: int) -> PowerMeasurement:
+        if channel < 1:
+            raise DataError("channel must be >= 1")
+        measured_voltage_v, measured_current_a, measured_power_w = parse_measure_all_response(
+            self.transport.query(f":MEAS:ALL? CH{channel}")
+        )
+        return PowerMeasurement(
+            channel=channel,
             measured_voltage_v=measured_voltage_v,
             measured_current_a=measured_current_a,
             measured_power_w=measured_power_w,

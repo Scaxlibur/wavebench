@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Protocol
 
 from wavebench.config import WaveBenchConfig, load_config
-from wavebench.drivers.dp800 import PowerStatus
+from wavebench.drivers.dp800 import PowerMeasurement, PowerStatus
+from wavebench.errors import WaveBenchError
 from wavebench.logging import CommandLogger
 from wavebench.services.power_service import PowerService
 from wavebench.tui.state import PowerPanelState, channel_state_from_status, config_status
@@ -13,6 +14,9 @@ from wavebench.tui.state import PowerPanelState, channel_state_from_status, conf
 
 class PowerPanelAdapter(Protocol):
     def refresh(self) -> PowerPanelState:
+        ...
+
+    def refresh_measurements(self) -> PowerPanelState:
         ...
 
     def set_output(self, channel: int, enabled: bool) -> PowerPanelState:
@@ -29,6 +33,8 @@ class PowerServicePanelAdapter:
     service: PowerService
     channels: tuple[int, ...] = (1, 2, 3)
     _instrument_id: str | None = None
+    _statuses: dict[int, PowerStatus] = field(default_factory=dict)
+    _needs_full_refresh: bool = True
 
     @classmethod
     def from_config(
@@ -43,6 +49,25 @@ class PowerServicePanelAdapter:
         if self._instrument_id is None:
             self._instrument_id = self.service.idn()
         statuses = [self.service.status(channel=channel) for channel in self.channels]
+        self._statuses = {status.channel: status for status in statuses}
+        self._needs_full_refresh = False
+        return self._build_state(statuses=statuses)
+
+    def refresh_measurements(self) -> PowerPanelState:
+        if self._needs_full_refresh or not self._has_full_cache():
+            return self.refresh()
+        try:
+            for channel in self.channels:
+                self._merge_measurement(self.service.measurement(channel=channel))
+        except Exception as exc:
+            self._needs_full_refresh = True
+            raise WaveBenchError(
+                "测量刷新失败，下次将执行完整刷新 / "
+                f"Measurement refresh failed; next refresh will run full refresh: {exc}"
+            ) from exc
+        return self._build_state(statuses=[self._statuses[channel] for channel in self.channels])
+
+    def _build_state(self, *, statuses: list[PowerStatus]) -> PowerPanelState:
         return build_power_panel_state(
             config=self.service.config,
             instrument_id=self._instrument_id,
@@ -51,18 +76,32 @@ class PowerServicePanelAdapter:
         )
 
     def set_output(self, channel: int, enabled: bool) -> PowerPanelState:
-        self.service.set_output(channel=channel, enabled=enabled)
-        return self.refresh()
+        self._merge_status(self.service.set_output(channel=channel, enabled=enabled))
+        return self.refresh_measurements()
 
     def set_voltage_current_limit(
         self, channel: int, voltage_v: float, current_limit_a: float
     ) -> PowerPanelState:
-        self.service.set_voltage_current_limit(
-            channel=channel,
-            voltage_v=voltage_v,
-            current_limit_a=current_limit_a,
+        self._merge_status(
+            self.service.set_voltage_current_limit(
+                channel=channel,
+                voltage_v=voltage_v,
+                current_limit_a=current_limit_a,
+            )
         )
-        return self.refresh()
+        return self.refresh_measurements()
+
+    def _has_full_cache(self) -> bool:
+        return all(channel in self._statuses for channel in self.channels)
+
+    def _merge_status(self, status: PowerStatus) -> None:
+        self._statuses[status.channel] = status
+
+    def _merge_measurement(self, measurement: PowerMeasurement) -> None:
+        self._statuses[measurement.channel] = merge_power_measurement(
+            self._statuses[measurement.channel],
+            measurement,
+        )
 
 
 @dataclass
@@ -97,6 +136,19 @@ class FakePowerPanelAdapter:
             log_lines=tuple(self.log_lines[-80:]),
         )
 
+    def refresh_measurements(self) -> PowerPanelState:
+        self.log_lines.append("测量刷新 / Measurement refresh fake DP832A snapshot")
+        for channel, old in self.statuses.items():
+            voltage = old.set_voltage_v if old.output == "ON" else 0.0
+            measurement = PowerMeasurement(
+                channel=channel,
+                measured_voltage_v=voltage,
+                measured_current_a=old.measured_current_a,
+                measured_power_w=(voltage or 0.0) * (old.measured_current_a or 0.0),
+            )
+            self.statuses[channel] = merge_power_measurement(old, measurement)
+        return self.refresh()
+
     def set_output(self, channel: int, enabled: bool) -> PowerPanelState:
         old = self.statuses[channel]
         self.statuses[channel] = PowerStatus(
@@ -111,7 +163,7 @@ class FakePowerPanelAdapter:
             measured_power_w=(old.set_voltage_v or 0.0) * (old.measured_current_a or 0.0),
         )
         self.log_lines.append(f"CH{channel} 输出 / Output -> {'ON' if enabled else 'OFF'}")
-        return self.refresh()
+        return self.refresh_measurements()
 
     def set_voltage_current_limit(
         self, channel: int, voltage_v: float, current_limit_a: float
@@ -129,7 +181,16 @@ class FakePowerPanelAdapter:
             measured_power_w=(voltage_v if old.output == "ON" else 0.0) * (old.measured_current_a or 0.0),
         )
         self.log_lines.append(f"CH{channel} 设定 / Set {voltage_v:g} V, {current_limit_a:g} A")
-        return self.refresh()
+        return self.refresh_measurements()
+
+
+def merge_power_measurement(status: PowerStatus, measurement: PowerMeasurement) -> PowerStatus:
+    return replace(
+        status,
+        measured_voltage_v=measurement.measured_voltage_v,
+        measured_current_a=measurement.measured_current_a,
+        measured_power_w=measurement.measured_power_w,
+    )
 
 
 def build_power_panel_state(

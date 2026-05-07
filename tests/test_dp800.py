@@ -68,6 +68,16 @@ class DP800Tests(unittest.TestCase):
             ":OUTP:MODE? CH1",
         ])
 
+    def test_get_measurement_reads_measurement_only(self):
+        transport = FakeTransport()
+        driver = DP800Power(transport=transport)
+        measurement = driver.get_measurement(1)
+        self.assertEqual(measurement.channel, 1)
+        self.assertEqual(measurement.measured_voltage_v, 5.0114)
+        self.assertEqual(measurement.measured_current_a, 0.0)
+        self.assertEqual(measurement.measured_power_w, 0.0)
+        self.assertEqual(transport.queries, [":MEAS:ALL? CH1"])
+
     def test_set_voltage_current_limit_writes_apply_only(self):
         transport = FakeTransport()
         driver = DP800Power(transport=transport)

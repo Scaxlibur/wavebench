@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from wavebench.config import ConnectionConfig, PowerConfig, WaveBenchConfig
-from wavebench.drivers.dp800 import DP800Power, PowerStatus
+from wavebench.drivers.dp800 import DP800Power, PowerMeasurement, PowerStatus
 from wavebench.errors import ConfigError
 from wavebench.logging import CommandLogger
 from wavebench.transport.pyvisa_transport import PyVisaTransport
@@ -43,6 +43,15 @@ class PowerService:
         power = self._open_power()
         try:
             return power.get_status(channel)
+        finally:
+            power.close()
+
+    def measurement(self, channel: int | None = None) -> PowerMeasurement:
+        power_cfg = self._power_config()
+        channel = power_cfg.default_channel if channel is None else channel
+        power = self._open_power()
+        try:
+            return power.get_measurement(channel)
         finally:
             power.close()
 

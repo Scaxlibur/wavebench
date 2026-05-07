@@ -110,11 +110,19 @@ if _TEXTUAL_IMPORT_ERROR is None:
         def on_mount(self) -> None:
             table = self.query_one("#power-table", DataTable)
             table.add_columns(*POWER_TABLE_COLUMNS)
-            self.set_interval(self.refresh_interval_s, self.action_refresh)
+            self.set_interval(self.refresh_interval_s, self.action_auto_refresh)
             self.action_refresh()
 
         def action_refresh(self) -> None:
             self._run_power_io("refresh", self.power_adapter.refresh, skip_if_busy=True)
+            self._read_dmm(skip_if_busy=True)
+
+        def action_auto_refresh(self) -> None:
+            self._run_power_io(
+                "measurement-refresh",
+                self.power_adapter.refresh_measurements,
+                skip_if_busy=True,
+            )
             self._read_dmm(skip_if_busy=True)
 
         def on_button_pressed(self, event: Button.Pressed) -> None:
