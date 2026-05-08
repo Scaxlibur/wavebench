@@ -80,7 +80,7 @@ It provides small, explicit CLI commands for LAN-connected lab instruments, and 
 
 ## Current release
 
-Current package version: `0.5.0`.
+Current package version: `0.6.0`.
 
 Release notes are published on the GitHub Releases page.
 
