@@ -95,6 +95,8 @@ backend = "lan"
 resource = "TCPIP::192.0.2.10::INSTR"
 timeout_ms = 10000
 opc_timeout_ms = 30000
+read_retry_attempts = 1
+read_retry_delay_ms = 200
 
 [scope]
 driver = "rtm2032"
@@ -120,6 +122,10 @@ save_npy = true
 save_json = true
 save_commands_log = true
 save_screenshot = false
+
+[tui]
+log_max_lines = 10000
+log_keep_lines_after_trim = 1000
 
 [quality]
 auto_recover_attempts = 2
@@ -159,6 +165,8 @@ backend = "lan"
 resource = "TCPIP::192.0.2.10::INSTR"
 timeout_ms = 10000
 opc_timeout_ms = 30000
+read_retry_attempts = 1
+read_retry_delay_ms = 200
 ```
 
 当前只支持：
@@ -174,6 +182,10 @@ backend = "lan"
 ```text
 TCPIP::<instrument-ip>::INSTR
 ```
+
+`read_retry_attempts` 是只读 query 失败后的额外重试次数，默认 1。写操作不会自动重试。
+
+`read_retry_delay_ms` 是两次只读 query 之间的等待时间，默认 200 ms。
 
 ## `[scope]`
 
@@ -253,6 +265,18 @@ CSV + NPY + metadata.json + commands.log
 ```
 
 截图第一阶段先关闭。`run plan` 的流程级输出不写在这里，它固定写入 `data/runs/<timestamp>_<label>/`，并引用采集包路径，避免复制大波形文件。
+
+## `[tui]`
+
+```toml
+[tui]
+log_max_lines = 10000
+log_keep_lines_after_trim = 1000
+```
+
+`log_max_lines` 是 TUI 持久调试日志的最大行数。
+
+`log_keep_lines_after_trim` 是日志超过最大行数后保留的最新行数。
 
 ## `[quality]`
 

@@ -4,6 +4,7 @@ import importlib
 import time
 import unittest
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 from wavebench.cli import build_parser
 from wavebench.config import (
@@ -247,6 +248,15 @@ class TuiPowerTests(unittest.TestCase):
         self.assertTrue(any("green" in str(style) for style in styles))
         self.assertTrue(any("blink" in str(style) for style in styles))
 
+    @unittest.skipIf(tui_app._TEXTUAL_IMPORT_ERROR is not None, "Textual extra is not installed")
+    def test_persistent_tui_log_trims_to_recent_lines(self):
+        with TemporaryDirectory() as tmp:
+            path = Path(tmp) / "tui.log"
+            for index in range(6):
+                tui_app._append_limited_log_line(path, f"line {index}", max_lines=5, keep_lines=2)
+
+            self.assertEqual(path.read_text(encoding="utf-8").splitlines(), ["line 4", "line 5"])
+
     def test_channel_state_formats_protection_status(self):
         state = channel_state_from_status(
             make_status(channel=1),
@@ -377,6 +387,114 @@ class TuiPowerTests(unittest.TestCase):
         self.assertEqual(state.channels[0].ovp_threshold, "5.5 V")
         self.assertEqual(state.channels[0].ocp_threshold, "0.4 A")
         self.assertIn("保护设定完成 / Protection set complete", "\n".join(state.log_lines))
+
+    def test_service_adapter_reuses_persistent_power_session(self):
+        class FakePersistentPower:
+            def __init__(self):
+                self.events: list[str] = []
+                self.closed = False
+
+            def idn(self):
+                self.events.append("idn")
+                return "RIGOL,DP832A,SN,FW"
+
+            def get_status(self, channel: int):
+                self.events.append(f"status:{channel}")
+                return make_status(channel=channel, measured_voltage=3.31, measured_current=0.01)
+
+            def get_protection_status(self, channel: int):
+                self.events.append(f"protection:{channel}")
+                return make_protection(channel=channel)
+
+            def set_voltage_current_limit(
+                self,
+                channel: int,
+                voltage_v: float,
+                current_limit_a: float,
+                *,
+                check_errors: bool = True,
+                settle_ms_after_set: int = 0,
+            ):
+                self.events.append(f"set:{channel}:{voltage_v}:{current_limit_a}")
+                return make_status(channel=channel, voltage=voltage_v, current=current_limit_a)
+
+            def close(self):
+                self.closed = True
+
+        class PersistentService:
+            def __init__(self):
+                self.config = make_config()
+                self.logger = CommandLogger()
+                self.sessions: list[FakePersistentPower] = []
+
+            def open_session(self):
+                session = FakePersistentPower()
+                self.sessions.append(session)
+                return session
+
+            def _power_config(self):
+                return self.config.power
+
+            def _check_power_limits(self, *, voltage_v, current_limit_a):
+                return None
+
+        service = PersistentService()
+        adapter = PowerServicePanelAdapter(service=service, channels=(1,))  # type: ignore[arg-type]
+        adapter.refresh()
+        adapter.set_voltage_current_limit(channel=1, voltage_v=4.2, current_limit_a=0.3)
+
+        self.assertEqual(len(service.sessions), 1)
+        self.assertEqual(
+            service.sessions[0].events,
+            [
+                "idn",
+                "status:1",
+                "protection:1",
+                "set:1:4.2:0.3",
+                "status:1",
+                "protection:1",
+            ],
+        )
+        adapter.close()
+        self.assertTrue(service.sessions[0].closed)
+
+    def test_service_adapter_reconnects_after_persistent_power_session_error(self):
+        class FlakyPersistentPower:
+            def __init__(self, fail_status: bool):
+                self.fail_status = fail_status
+                self.closed = False
+
+            def idn(self):
+                return "RIGOL,DP832A,SN,FW"
+
+            def get_status(self, channel: int):
+                if self.fail_status:
+                    raise OSError("bad power session")
+                return make_status(channel=channel)
+
+            def get_protection_status(self, channel: int):
+                return make_protection(channel=channel)
+
+            def close(self):
+                self.closed = True
+
+        class PersistentService:
+            def __init__(self):
+                self.config = make_config()
+                self.logger = CommandLogger()
+                self.sessions = [FlakyPersistentPower(True), FlakyPersistentPower(False)]
+
+            def open_session(self):
+                return self.sessions.pop(0)
+
+        service = PersistentService()
+        adapter = PowerServicePanelAdapter(service=service, channels=(1,))  # type: ignore[arg-type]
+        with self.assertRaisesRegex(OSError, "bad power session"):
+            adapter.refresh()
+        self.assertIsNone(adapter._power_session)
+
+        state = adapter.refresh()
+        self.assertEqual(state.channels[0].channel, 1)
 
     @unittest.skipIf(tui_app._TEXTUAL_IMPORT_ERROR is not None, "Textual extra is not installed")
     def test_textual_app_builds_against_fake_adapter(self):

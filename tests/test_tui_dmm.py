@@ -217,6 +217,88 @@ class TuiDmmTests(unittest.TestCase):
             adapter.set_function("acv")
         self.assertEqual(service.events, ["set:acv", "sleep:0.5", "read:acv"])
 
+    def test_service_adapter_reuses_persistent_dmm_session(self):
+        class FakePersistentDmm:
+            def __init__(self):
+                self.events: list[str] = []
+                self.closed = False
+
+            def idn(self):
+                self.events.append("idn")
+                return "RIGOL,DM3058,SN,FW"
+
+            def apply_function(self, function: str):
+                self.events.append(f"apply:{function}")
+                return function
+
+            def read(self, function: str = "dcv"):
+                self.events.append(f"read:{function}")
+                return DmmReading(function=function, value=1.0, unit="V", raw="1.0")
+
+            def close(self):
+                self.closed = True
+
+        class PersistentService:
+            logger = type("Logger", (), {"entries": []})()
+
+            def __init__(self):
+                self.config = make_config()
+                self.sessions: list[FakePersistentDmm] = []
+
+            def open_session(self):
+                session = FakePersistentDmm()
+                self.sessions.append(session)
+                return session
+
+        service = PersistentService()
+        adapter = DmmServicePanelAdapter(service=service)  # type: ignore[arg-type]
+        adapter.read()
+        adapter.set_function("acv")
+
+        self.assertEqual(len(service.sessions), 1)
+        self.assertEqual(
+            service.sessions[0].events,
+            ["idn", "read:dcv", "apply:acv", "read:acv"],
+        )
+        adapter.close()
+        self.assertTrue(service.sessions[0].closed)
+
+    def test_service_adapter_reconnects_after_persistent_session_error(self):
+        class FlakyPersistentDmm:
+            def __init__(self, fail_read: bool):
+                self.fail_read = fail_read
+                self.closed = False
+
+            def idn(self):
+                return "RIGOL,DM3058,SN,FW"
+
+            def read(self, function: str = "dcv"):
+                if self.fail_read:
+                    raise OSError("bad session")
+                return DmmReading(function=function, value=2.0, unit="V", raw="2.0")
+
+            def close(self):
+                self.closed = True
+
+        class PersistentService:
+            logger = type("Logger", (), {"entries": []})()
+
+            def __init__(self):
+                self.config = make_config()
+                self.sessions = [FlakyPersistentDmm(True), FlakyPersistentDmm(False)]
+
+            def open_session(self):
+                return self.sessions.pop(0)
+
+        service = PersistentService()
+        adapter = DmmServicePanelAdapter(service=service)  # type: ignore[arg-type]
+        with self.assertRaisesRegex(OSError, "bad session"):
+            adapter.read()
+        self.assertTrue(adapter._dmm_session is None)
+
+        state = adapter.read()
+        self.assertEqual(state.value, "2")
+
     def test_power_resource_override_preserves_dmm_config(self):
         config = make_config().with_power_resource("TCPIP::new-power::INSTR")
         self.assertIsNotNone(config.dmm)
@@ -232,7 +314,7 @@ class TuiDmmTests(unittest.TestCase):
 
 @unittest.skipIf(tui_app._TEXTUAL_IMPORT_ERROR is not None, "Textual extra is not installed")
 class TuiDmmBusyBehaviorTests(unittest.IsolatedAsyncioTestCase):
-    async def test_read_refresh_does_not_disable_apply_button(self):
+    async def test_read_refresh_disables_function_buttons(self):
         class SlowReadAdapter(FakeDmmPanelAdapter):
             def read(self, function: str | None = None):  # type: ignore[override]
                 time.sleep(0.2)
@@ -249,7 +331,7 @@ class TuiDmmBusyBehaviorTests(unittest.IsolatedAsyncioTestCase):
             app._read_dmm()
             await pilot.pause(0.02)
             self.assertTrue(app.query_one("#dmm-read", Button).disabled)
-            self.assertFalse(app.query_one("#dmm-func-acv", Button).disabled)
+            self.assertTrue(app.query_one("#dmm-func-acv", Button).disabled)
 
     async def test_apply_reentry_is_blocked(self):
         class SlowApplyAdapter(FakeDmmPanelAdapter):

@@ -37,6 +37,8 @@ class ConnectionConfig:
     resource: str
     timeout_ms: int
     opc_timeout_ms: int
+    read_retry_attempts: int = 1
+    read_retry_delay_ms: int = 200
 
 @dataclass(frozen=True)
 class ScopeConfig:
@@ -120,6 +122,11 @@ class SafetyLimitsConfig:
     max_power_voltage_v: float | None = None
     max_power_current_limit_a: float | None = None
 
+@dataclass(frozen=True)
+class TuiConfig:
+    log_max_lines: int = 10_000
+    log_keep_lines_after_trim: int = 1_000
+
 
 def _optional_positive_float(raw: dict, key: str) -> float | None:
     if key not in raw:
@@ -142,6 +149,7 @@ class WaveBenchConfig:
     dmm: DmmConfig | None = None
     quality: QualityConfig = QualityConfig()
     safety_limits: SafetyLimitsConfig = SafetyLimitsConfig()
+    tui: TuiConfig = TuiConfig()
 
     def with_connection_timeout_ms(self, timeout_ms: int) -> "WaveBenchConfig":
         if timeout_ms <= 0:
@@ -152,6 +160,8 @@ class WaveBenchConfig:
                 resource=self.connection.resource,
                 timeout_ms=timeout_ms,
                 opc_timeout_ms=self.connection.opc_timeout_ms,
+                read_retry_attempts=self.connection.read_retry_attempts,
+                read_retry_delay_ms=self.connection.read_retry_delay_ms,
             ),
             scope=self.scope,
             autoscale=self.autoscale,
@@ -163,6 +173,7 @@ class WaveBenchConfig:
             dmm=self.dmm,
             quality=self.quality,
             safety_limits=self.safety_limits,
+            tui=self.tui,
         )
 
     def with_resource(self, resource: str) -> "WaveBenchConfig":
@@ -172,6 +183,8 @@ class WaveBenchConfig:
                 resource=resource,
                 timeout_ms=self.connection.timeout_ms,
                 opc_timeout_ms=self.connection.opc_timeout_ms,
+                read_retry_attempts=self.connection.read_retry_attempts,
+                read_retry_delay_ms=self.connection.read_retry_delay_ms,
             ),
             scope=self.scope,
             autoscale=self.autoscale,
@@ -183,6 +196,7 @@ class WaveBenchConfig:
             dmm=self.dmm,
             quality=self.quality,
             safety_limits=self.safety_limits,
+            tui=self.tui,
         )
 
     def with_output_overrides(
@@ -208,6 +222,7 @@ class WaveBenchConfig:
             dmm=self.dmm,
             quality=self.quality,
             safety_limits=self.safety_limits,
+            tui=self.tui,
         )
 
     def with_waveform_overrides(
@@ -255,6 +270,7 @@ class WaveBenchConfig:
             dmm=self.dmm,
             quality=self.quality,
             safety_limits=self.safety_limits,
+            tui=self.tui,
         )
 
     def with_source_resource(self, resource: str) -> "WaveBenchConfig":
@@ -285,6 +301,7 @@ class WaveBenchConfig:
             dmm=self.dmm,
             quality=self.quality,
             safety_limits=self.safety_limits,
+            tui=self.tui,
         )
 
     def with_power_resource(self, resource: str) -> "WaveBenchConfig":
@@ -315,6 +332,7 @@ class WaveBenchConfig:
             dmm=self.dmm,
             quality=self.quality,
             safety_limits=self.safety_limits,
+            tui=self.tui,
         )
 
     def with_dmm_resource(self, resource: str) -> "WaveBenchConfig":
@@ -354,6 +372,7 @@ class WaveBenchConfig:
             ),
             quality=self.quality,
             safety_limits=self.safety_limits,
+            tui=self.tui,
         )
 
 def load_config(path: str | Path = "wavebench.toml") -> WaveBenchConfig:
@@ -375,6 +394,7 @@ def load_config(path: str | Path = "wavebench.toml") -> WaveBenchConfig:
         o = raw.get("output", {})
         q = raw.get("quality", {})
         sl = raw.get("safety_limits", {})
+        tui_raw = raw.get("tui", {})
         src = raw.get("source")
         source = None
         if src is not None:
@@ -420,6 +440,8 @@ def load_config(path: str | Path = "wavebench.toml") -> WaveBenchConfig:
                 resource=str(c["resource"]),
                 timeout_ms=int(c.get("timeout_ms", 10000)),
                 opc_timeout_ms=int(c.get("opc_timeout_ms", 30000)),
+                read_retry_attempts=int(c.get("read_retry_attempts", 1)),
+                read_retry_delay_ms=int(c.get("read_retry_delay_ms", 200)),
             ),
             scope=ScopeConfig(
                 driver=str(s.get("driver", "rtm2032")),
@@ -474,6 +496,10 @@ def load_config(path: str | Path = "wavebench.toml") -> WaveBenchConfig:
                 max_power_voltage_v=_optional_positive_float(sl, "max_power_voltage_v"),
                 max_power_current_limit_a=_optional_positive_float(sl, "max_power_current_limit_a"),
             ),
+            tui=TuiConfig(
+                log_max_lines=int(tui_raw.get("log_max_lines", 10_000)),
+                log_keep_lines_after_trim=int(tui_raw.get("log_keep_lines_after_trim", 1_000)),
+            ),
         )
     except KeyError as exc:
         raise ConfigError(f"missing required config key: {exc}") from exc
@@ -482,6 +508,10 @@ def load_config(path: str | Path = "wavebench.toml") -> WaveBenchConfig:
 
     if config.connection.backend.lower() != "lan":
         raise ConfigError("MVP-1 only supports LAN VISA resources")
+    if config.connection.read_retry_attempts < 0:
+        raise ConfigError("connection.read_retry_attempts must be >= 0")
+    if config.connection.read_retry_delay_ms < 0:
+        raise ConfigError("connection.read_retry_delay_ms must be >= 0")
     if config.scope.driver.lower() != "rtm2032":
         raise ConfigError("MVP-1 only supports driver = 'rtm2032'")
     if config.scope.default_channel < 1:
@@ -512,6 +542,12 @@ def load_config(path: str | Path = "wavebench.toml") -> WaveBenchConfig:
         raise ConfigError("quality.voltage_mean_consistency_v must be >= 0")
     if config.quality.duty_consistency <= 0:
         raise ConfigError("quality.duty_consistency must be > 0")
+    if config.tui.log_max_lines <= 0:
+        raise ConfigError("tui.log_max_lines must be > 0")
+    if config.tui.log_keep_lines_after_trim < 0:
+        raise ConfigError("tui.log_keep_lines_after_trim must be >= 0")
+    if config.tui.log_keep_lines_after_trim > config.tui.log_max_lines:
+        raise ConfigError("tui.log_keep_lines_after_trim must be <= tui.log_max_lines")
     if config.source is not None:
         if config.source.driver.lower() != "dg4202":
             raise ConfigError("source.driver must be 'dg4202'")

@@ -29,6 +29,8 @@ class SourceService:
             resource=source.resource,
             timeout_ms=self.config.connection.timeout_ms,
             opc_timeout_ms=self.config.connection.opc_timeout_ms,
+            read_retry_attempts=self.config.connection.read_retry_attempts,
+            read_retry_delay_ms=self.config.connection.read_retry_delay_ms,
         )
         transport = PyVisaTransport.open(connection, logger=self.logger)
         return DG4202Source(transport=transport, check_errors_after_ops=source.check_errors)

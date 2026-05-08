@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import time
 from typing import Any
 
 from wavebench.config import ConnectionConfig
@@ -14,6 +15,8 @@ class PyVisaTransport:
     resource_manager: Any
     session: Any
     logger: CommandLogger
+    read_retry_attempts: int = 1
+    read_retry_delay_ms: int = 200
 
     @classmethod
     def open(cls, config: ConnectionConfig, logger: CommandLogger | None = None) -> "PyVisaTransport":
@@ -39,7 +42,14 @@ class PyVisaTransport:
                 pass
         except Exception as exc:
             raise ConnectionError(f"failed to open instrument {config.resource}: {exc}") from exc
-        return cls(resource=config.resource, resource_manager=resource_manager, session=session, logger=logger)
+        return cls(
+            resource=config.resource,
+            resource_manager=resource_manager,
+            session=session,
+            logger=logger,
+            read_retry_attempts=config.read_retry_attempts,
+            read_retry_delay_ms=config.read_retry_delay_ms,
+        )
 
     def write(self, command: str) -> None:
         self.logger.record("write", command)
@@ -60,7 +70,7 @@ class PyVisaTransport:
     def query(self, command: str) -> str:
         self.logger.record("query", command)
         try:
-            response = str(self.session.query(command)).strip()
+            response = str(self._read_with_retry("query", command, lambda: self.session.query(command))).strip()
             if response == "" and hasattr(self.session, "read"):
                 for _ in range(2):
                     response = str(self.session.read()).strip()
@@ -76,11 +86,21 @@ class PyVisaTransport:
         try:
             if hasattr(self.session, "query_binary_values"):
                 try:
-                    values = list(self.session.query_binary_values(command, datatype="f"))
+                    values = list(
+                        self._read_with_retry(
+                            "query",
+                            command,
+                            lambda: self.session.query_binary_values(command, datatype="f"),
+                        )
+                    )
                 except Exception:
-                    values = self._parse_ascii_float_list(self.session.query(command))
+                    values = self._parse_ascii_float_list(
+                        self._read_with_retry("query", command, lambda: self.session.query(command))
+                    )
             else:
-                values = self._parse_ascii_float_list(self.session.query(command))
+                values = self._parse_ascii_float_list(
+                    self._read_with_retry("query", command, lambda: self.session.query(command))
+                )
         except Exception as exc:
             raise self._instrument_io_error("query", command, exc) from exc
         self.logger.record("response", f"<float_list len={len(values)}>")
@@ -99,7 +119,13 @@ class PyVisaTransport:
         if not hasattr(self.session, "query_binary_values"):
             raise ConnectionError("pyvisa session does not support binary block queries")
         try:
-            data = bytes(self.session.query_binary_values(command, datatype="B", container=bytes))
+            data = bytes(
+                self._read_with_retry(
+                    "query_binary",
+                    command,
+                    lambda: self.session.query_binary_values(command, datatype="B", container=bytes),
+                )
+            )
         except Exception as exc:
             raise self._instrument_io_error("query_binary", command, exc) from exc
         self.logger.record("response", f"<bin_block len={len(data)}>")
@@ -108,11 +134,27 @@ class PyVisaTransport:
     def query_opc(self) -> str:
         self.logger.record("query", "*OPC?")
         try:
-            response = str(self.session.query("*OPC?")).strip()
+            response = str(self._read_with_retry("query", "*OPC?", lambda: self.session.query("*OPC?"))).strip()
         except Exception as exc:
             raise self._instrument_io_error("query", "*OPC?", exc) from exc
         self.logger.record("response", response)
         return response
+
+    def _read_with_retry(self, operation: str, command: str, read_once: Any) -> Any:
+        attempts = self.read_retry_attempts + 1
+        last_exc: Exception | None = None
+        for attempt in range(attempts):
+            try:
+                return read_once()
+            except Exception as exc:
+                last_exc = exc
+                if attempt >= attempts - 1:
+                    break
+                if self.read_retry_delay_ms > 0:
+                    time.sleep(self.read_retry_delay_ms / 1000.0)
+                self.logger.record("retry", f"{operation} {command} attempt {attempt + 2}/{attempts}")
+        assert last_exc is not None
+        raise last_exc
 
     def _instrument_io_error(self, operation: str, command: str, exc: Exception) -> InstrumentError:
         return InstrumentError(

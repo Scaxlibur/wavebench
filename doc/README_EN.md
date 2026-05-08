@@ -59,6 +59,7 @@ It provides small, explicit CLI commands for LAN-connected lab instruments, and 
 - `tui --fake` uses fake power, DMM, and source adapters without connecting to real instruments.
 - `tui --refresh-interval 5` sets the automatic refresh interval; the default is 5 seconds.
 - `tui --log-file <path>` writes the TUI debug log to a specific file; the default is `data/tui/wavebench-tui.log`.
+- TUI persistent log limits are configurable in `[tui]`; by default it trims to the newest 1000 lines after exceeding 10000 lines.
 - The power panel can view three-channel status, set voltage/current limit, toggle output, and view or set OVP/OCP.
 - The DMM panel provides common function buttons and manual reads.
 - The source panel can view status, set function/frequency/amplitude, and toggle output.

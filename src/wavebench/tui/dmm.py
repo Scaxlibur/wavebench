@@ -6,7 +6,7 @@ import time
 from typing import Protocol
 
 from wavebench.config import WaveBenchConfig, load_config
-from wavebench.drivers.dm3000 import DmmReading, normalize_dmm_function
+from wavebench.drivers.dm3000 import DM3000Dmm, DmmReading, normalize_dmm_function
 from wavebench.logging import CommandLogger
 from wavebench.services.dmm_service import DmmService
 from wavebench.tui.state import DmmPanelState, dmm_state_from_reading
@@ -28,6 +28,7 @@ class DmmServicePanelAdapter:
     service: DmmService
     _instrument_id: str | None = None
     _active_function: str = "dcv"
+    _dmm_session: DM3000Dmm | None = None
 
     @classmethod
     def from_config(
@@ -39,16 +40,27 @@ class DmmServicePanelAdapter:
         return cls(service=DmmService(config=config, logger=CommandLogger()))
 
     def function_status(self) -> str:
-        self._active_function = self.service.function_status()
+        session = self._persistent_session()
+        if session is None:
+            self._active_function = self.service.function_status()
+            return self._active_function
+        self._active_function = self._with_session(lambda dmm: dmm.function_status())
         return self._active_function
 
     def read(self, function: str | None = None) -> DmmPanelState:
         if self._instrument_id is None:
-            self._instrument_id = self.service.idn()
+            self._instrument_id = self._idn()
         normalized_function = self._active_function if function is None else normalize_dmm_function(function)
         normalized_function = normalized_function or "dcv"
         self._active_function = normalized_function
-        reading = self.service.read(function=normalized_function)
+        session = self._persistent_session()
+        if session is None:
+            reading = self.service.read(function=normalized_function)
+        else:
+            settle_s = self.service.config.dmm.settle_ms_before_read / 1000.0
+            if settle_s > 0:
+                time.sleep(settle_s)
+            reading = self._with_session(lambda dmm: dmm.read(function=normalized_function))
         return build_dmm_panel_state(
             config=self.service.config,
             instrument_id=self._instrument_id,
@@ -58,22 +70,61 @@ class DmmServicePanelAdapter:
 
     def set_function(self, function: str) -> DmmPanelState:
         if self._instrument_id is None:
-            self._instrument_id = self.service.idn()
+            self._instrument_id = self._idn()
         requested_function = normalize_dmm_function(function) or "dcv"
         if requested_function == self._active_function:
             return self.read(function=requested_function)
-        applied_function = self.service.set_function(function=function)
+        session = self._persistent_session()
+        if session is None:
+            applied_function = self.service.set_function(function=function)
+        else:
+            applied_function = self._with_session(lambda dmm: dmm.apply_function(function=function))
         self._active_function = applied_function
         settle_s = self.service.config.dmm.settle_ms_after_function_change / 1000.0
         if settle_s > 0:
             time.sleep(settle_s)
-        reading = self.service.read(function=applied_function)
+        if session is None:
+            reading = self.service.read(function=applied_function)
+        else:
+            reading = self._with_session(lambda dmm: dmm.read(function=applied_function))
         return build_dmm_panel_state(
             config=self.service.config,
             instrument_id=self._instrument_id,
             reading=reading,
             log_lines=_logger_lines(self.service.logger),
         )
+
+    def close(self) -> None:
+        self._close_session()
+
+    def _idn(self) -> str:
+        session = self._persistent_session()
+        if session is None:
+            return self.service.idn()
+        return self._with_session(lambda dmm: dmm.idn())
+
+    def _persistent_session(self) -> DM3000Dmm | None:
+        open_session = getattr(self.service, "open_session", None)
+        if open_session is None:
+            return None
+        if self._dmm_session is None:
+            self._dmm_session = open_session()
+        return self._dmm_session
+
+    def _with_session(self, operation):
+        try:
+            return operation(self._persistent_session())
+        except Exception:
+            self._close_session()
+            raise
+
+    def _close_session(self) -> None:
+        if self._dmm_session is None:
+            return
+        try:
+            self._dmm_session.close()
+        finally:
+            self._dmm_session = None
 
 
 @dataclass

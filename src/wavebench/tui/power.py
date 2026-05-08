@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Protocol
 
 from wavebench.config import WaveBenchConfig, load_config
-from wavebench.drivers.dp800 import PowerMeasurement, PowerProtectionStatus, PowerStatus
+from wavebench.drivers.dp800 import DP800Power, PowerMeasurement, PowerProtectionStatus, PowerStatus
 from wavebench.errors import WaveBenchError
 from wavebench.logging import CommandLogger
 from wavebench.services.power_service import PowerService
@@ -51,6 +51,7 @@ class PowerServicePanelAdapter:
     _protections: dict[int, PowerProtectionStatus] = field(default_factory=dict)
     _ui_log_lines: list[str] = field(default_factory=list)
     _needs_full_refresh: bool = True
+    _power_session: DP800Power | None = None
 
     @classmethod
     def from_config(
@@ -63,9 +64,9 @@ class PowerServicePanelAdapter:
 
     def refresh(self) -> PowerPanelState:
         if self._instrument_id is None:
-            self._instrument_id = self.service.idn()
-        statuses = [self.service.status(channel=channel) for channel in self.channels]
-        protections = [self.service.protection_status(channel=channel) for channel in self.channels]
+            self._instrument_id = self._idn()
+        statuses = [self._status(channel) for channel in self.channels]
+        protections = [self._protection_status(channel) for channel in self.channels]
         self._statuses = {status.channel: status for status in statuses}
         self._protections = {protection.channel: protection for protection in protections}
         self._needs_full_refresh = False
@@ -76,9 +77,10 @@ class PowerServicePanelAdapter:
             return self.refresh()
         try:
             for channel in self.channels:
-                self._merge_status(self.service.status(channel=channel))
-                self._merge_measurement(self.service.measurement(channel=channel))
-                self._protections[channel] = self.service.protection_status(channel=channel)
+                self._merge_status(self._status(channel))
+                if self._power_session is None:
+                    self._merge_measurement(self.service.measurement(channel=channel))
+                self._protections[channel] = self._protection_status(channel)
         except Exception as exc:
             self._needs_full_refresh = True
             raise WaveBenchError(
@@ -90,7 +92,7 @@ class PowerServicePanelAdapter:
     def refresh_protection(self) -> PowerPanelState:
         if self._needs_full_refresh or not self._has_full_cache():
             return self.refresh()
-        protections = [self.service.protection_status(channel=channel) for channel in self.channels]
+        protections = [self._protection_status(channel) for channel in self.channels]
         self._protections = {protection.channel: protection for protection in protections}
         return self._build_state(statuses=[self._statuses[channel] for channel in self.channels])
 
@@ -104,19 +106,55 @@ class PowerServicePanelAdapter:
         )
 
     def set_output(self, channel: int, enabled: bool) -> PowerPanelState:
-        self._merge_status(self.service.set_output(channel=channel, enabled=enabled))
+        session = self._persistent_session()
+        if session is None:
+            self._merge_status(self.service.set_output(channel=channel, enabled=enabled))
+        else:
+            power_cfg = self.service._power_config()
+            if enabled:
+                status = self._with_session(lambda power: power.get_status(channel))
+                self.service._check_power_limits(
+                    voltage_v=status.set_voltage_v,
+                    current_limit_a=status.set_current_a,
+                )
+            self._merge_status(
+                self._with_session(
+                    lambda power: power.set_output(
+                        channel,
+                        enabled,
+                        check_errors=power_cfg.check_errors,
+                        settle_ms_after_output=power_cfg.settle_ms_after_output,
+                    )
+                )
+            )
         return self.refresh_measurements()
 
     def set_voltage_current_limit(
         self, channel: int, voltage_v: float, current_limit_a: float
     ) -> PowerPanelState:
-        self._merge_status(
-            self.service.set_voltage_current_limit(
-                channel=channel,
-                voltage_v=voltage_v,
-                current_limit_a=current_limit_a,
+        session = self._persistent_session()
+        if session is None:
+            self._merge_status(
+                self.service.set_voltage_current_limit(
+                    channel=channel,
+                    voltage_v=voltage_v,
+                    current_limit_a=current_limit_a,
+                )
             )
-        )
+        else:
+            power_cfg = self.service._power_config()
+            self.service._check_power_limits(voltage_v=voltage_v, current_limit_a=current_limit_a)
+            self._merge_status(
+                self._with_session(
+                    lambda power: power.set_voltage_current_limit(
+                        channel,
+                        voltage_v,
+                        current_limit_a,
+                        check_errors=power_cfg.check_errors,
+                        settle_ms_after_set=power_cfg.settle_ms_after_set,
+                    )
+                )
+            )
         return self.refresh_measurements()
 
     def set_protection(
@@ -128,16 +166,93 @@ class PowerServicePanelAdapter:
         ocp_threshold_a: float | None = None,
         ocp_enabled: bool | None = None,
     ) -> PowerPanelState:
-        self.service.set_protection(
-            channel=channel,
-            ovp_threshold_v=ovp_threshold_v,
-            ovp_enabled=ovp_enabled,
-            ocp_threshold_a=ocp_threshold_a,
-            ocp_enabled=ocp_enabled,
-        )
+        session = self._persistent_session()
+        if session is None:
+            self.service.set_protection(
+                channel=channel,
+                ovp_threshold_v=ovp_threshold_v,
+                ovp_enabled=ovp_enabled,
+                ocp_threshold_a=ocp_threshold_a,
+                ocp_enabled=ocp_enabled,
+            )
+        else:
+            power_cfg = self.service._power_config()
+            if (
+                ovp_threshold_v is None
+                and ovp_enabled is None
+                and ocp_threshold_a is None
+                and ocp_enabled is None
+            ):
+                raise WaveBenchError("no protection change requested / 未请求保护设置变更")
+            self.service._check_power_limits(voltage_v=ovp_threshold_v, current_limit_a=ocp_threshold_a)
+            setpoints = self._with_session(lambda power: power.get_status(channel))
+            protection = self._with_session(lambda power: power.get_protection_status(channel))
+            self.service._check_protection_relationship(
+                set_voltage_v=setpoints.set_voltage_v,
+                set_current_a=setpoints.set_current_a,
+                ovp_threshold_v=ovp_threshold_v if ovp_threshold_v is not None else protection.ovp_threshold_v,
+                ocp_threshold_a=ocp_threshold_a if ocp_threshold_a is not None else protection.ocp_threshold_a,
+            )
+            self._with_session(
+                lambda power: power.set_protection(
+                    channel,
+                    ovp_threshold_v=ovp_threshold_v,
+                    ovp_enabled=ovp_enabled,
+                    ocp_threshold_a=ocp_threshold_a,
+                    ocp_enabled=ocp_enabled,
+                    check_errors=power_cfg.check_errors,
+                )
+            )
         self._ui_log_lines.append(f"CH{channel} 保护设定完成 / Protection set complete")
         self.refresh()
         return self.refresh_measurements()
+
+    def close(self) -> None:
+        self._close_session()
+
+    def _idn(self) -> str:
+        session = self._persistent_session()
+        if session is None:
+            return self.service.idn()
+        return self._with_session(lambda power: power.idn())
+
+    def _status(self, channel: int) -> PowerStatus:
+        session = self._persistent_session()
+        if session is None:
+            return self.service.status(channel=channel)
+        return self._with_session(lambda power: power.get_status(channel))
+
+    def _protection_status(self, channel: int) -> PowerProtectionStatus:
+        session = self._persistent_session()
+        if session is None:
+            return self.service.protection_status(channel=channel)
+        return self._with_session(lambda power: power.get_protection_status(channel))
+
+    def _persistent_session(self) -> DP800Power | None:
+        open_session = getattr(self.service, "open_session", None)
+        if open_session is None:
+            return None
+        if self._power_session is None:
+            self._power_session = open_session()
+        return self._power_session
+
+    def _with_session(self, operation):
+        session = self._persistent_session()
+        if session is None:
+            raise WaveBenchError("power session is not available / 电源会话不可用")
+        try:
+            return operation(session)
+        except Exception:
+            self._close_session()
+            raise
+
+    def _close_session(self) -> None:
+        if self._power_session is None:
+            return
+        try:
+            self._power_session.close()
+        finally:
+            self._power_session = None
 
     def _has_full_cache(self) -> bool:
         return all(channel in self._statuses for channel in self.channels)

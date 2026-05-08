@@ -6,6 +6,7 @@ from datetime import datetime
 from pathlib import Path
 from threading import Lock, Thread
 
+from wavebench.config import load_config
 from wavebench.errors import ConfigError, WaveBenchError
 from wavebench.tui.dmm import DmmPanelAdapter, DmmServicePanelAdapter, FakeDmmPanelAdapter
 from wavebench.tui.power import FakePowerPanelAdapter, PowerPanelAdapter, PowerServicePanelAdapter
@@ -32,6 +33,8 @@ else:  # pragma: no cover - import branch depends on optional extra
 
 if _TEXTUAL_IMPORT_ERROR is None:
     DEFAULT_TUI_LOG_PATH = Path("data/tui/wavebench-tui.log")
+    TUI_LOG_MAX_LINES = 10_000
+    TUI_LOG_KEEP_LINES_AFTER_TRIM = 1_000
     POWER_CHANNEL_STYLES = {
         1: "white on #1f2a44",
         2: "white on #1f3a2e",
@@ -77,6 +80,22 @@ if _TEXTUAL_IMPORT_ERROR is None:
         text.append("  原始 / Raw: ", style="dim")
         text.append(state.raw_reading, style="dim")
         return text
+
+    def _append_limited_log_line(
+        path: Path,
+        line: str,
+        *,
+        max_lines: int = TUI_LOG_MAX_LINES,
+        keep_lines: int = TUI_LOG_KEEP_LINES_AFTER_TRIM,
+    ) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as handle:
+            handle.write(f"{line}\n")
+        lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
+        if len(lines) <= max_lines:
+            return
+        keep_count = min(max(keep_lines, 0), max_lines)
+        path.write_text("".join(lines[-keep_count:]), encoding="utf-8")
 
     class WaveBenchTuiApp(App):
         CSS = """
@@ -158,6 +177,8 @@ if _TEXTUAL_IMPORT_ERROR is None:
             source_adapter: SourcePanelAdapter,
             refresh_interval_s: float = 5.0,
             log_path: str | Path | None = None,
+            log_max_lines: int = TUI_LOG_MAX_LINES,
+            log_keep_lines_after_trim: int = TUI_LOG_KEEP_LINES_AFTER_TRIM,
         ):
             super().__init__()
             self.power_adapter = power_adapter
@@ -165,6 +186,8 @@ if _TEXTUAL_IMPORT_ERROR is None:
             self.source_adapter = source_adapter
             self.refresh_interval_s = refresh_interval_s
             self.log_path = Path(log_path) if log_path else None
+            self.log_max_lines = log_max_lines
+            self.log_keep_lines_after_trim = log_keep_lines_after_trim
             self._power_adapter_lock = Lock()
             self._power_read_in_flight = False
             self._pending_power_read_kind: str | None = None
@@ -250,6 +273,7 @@ if _TEXTUAL_IMPORT_ERROR is None:
             table.add_columns(*POWER_TABLE_COLUMNS)
             source_table = self.query_one("#source-table", DataTable)
             source_table.add_columns(*SOURCE_TABLE_COLUMNS)
+            self._set_source_write_controls_enabled(False)
             self._append_persistent_log_line("TUI session started / TUI 会话开始")
             self._refresh_timer = self.set_interval(self.refresh_interval_s, self.action_auto_refresh)
             self.action_refresh()
@@ -266,12 +290,20 @@ if _TEXTUAL_IMPORT_ERROR is None:
                 return
             self._run_power_read_io("measurement-refresh", skip_if_busy=True)
             self._read_dmm(skip_if_busy=True)
+            if self._last_source_state is None:
+                self._refresh_source(skip_if_busy=True)
 
         async def action_quit(self) -> None:
             self._shutting_down = True
             if self._refresh_timer is not None:
                 self._refresh_timer.stop()
             self.workers.cancel_all()
+            close_power = getattr(self.power_adapter, "close", None)
+            if close_power is not None:
+                close_power()
+            close_dmm = getattr(self.dmm_adapter, "close", None)
+            if close_dmm is not None:
+                close_dmm()
             self._append_persistent_log_line("TUI session stopping / TUI 会话停止")
             self.exit()
 
@@ -434,6 +466,7 @@ if _TEXTUAL_IMPORT_ERROR is None:
                 return
             self._dmm_read_in_flight = True
             self.query_one("#dmm-read", Button).disabled = True
+            self._set_dmm_function_controls_enabled(False)
             self.run_worker(
                 self._run_daemon_operation(self._wrap_dmm_operation(operation)),
                 name=name,
@@ -449,11 +482,12 @@ if _TEXTUAL_IMPORT_ERROR is None:
             *,
             skip_if_busy: bool = False,
         ) -> None:
-            if self._dmm_write_in_flight:
+            if self._dmm_write_in_flight or self._dmm_read_in_flight:
                 if not skip_if_busy:
-                    self._log("忙碌 / Busy: DMM function apply is still running")
+                    self._log("忙碌 / Busy: previous DMM operation is still running")
                 return
             self._dmm_write_in_flight = True
+            self.query_one("#dmm-read", Button).disabled = True
             self._set_dmm_function_controls_enabled(False)
             self.run_worker(
                 self._run_daemon_operation(self._wrap_dmm_operation(operation)),
@@ -558,6 +592,7 @@ if _TEXTUAL_IMPORT_ERROR is None:
             elif worker.group == "dmm-read":
                 self._dmm_read_in_flight = False
                 self.query_one("#dmm-read", Button).disabled = False
+                self._set_dmm_function_controls_enabled(True)
                 if event.state == WorkerState.SUCCESS:
                     self._render_dmm_state(worker.result)
                 elif event.state == WorkerState.ERROR:
@@ -567,6 +602,7 @@ if _TEXTUAL_IMPORT_ERROR is None:
                     self._log("万用表已取消 / DMM cancelled")
             elif worker.group == "dmm-write":
                 self._dmm_write_in_flight = False
+                self.query_one("#dmm-read", Button).disabled = False
                 self._set_dmm_function_controls_enabled(True)
                 if event.state == WorkerState.SUCCESS:
                     self._render_dmm_state(worker.result)
@@ -587,7 +623,7 @@ if _TEXTUAL_IMPORT_ERROR is None:
                     self._log("信号源已取消 / Source cancelled")
             elif worker.group == "source-write":
                 self._source_write_in_flight = False
-                self._set_source_write_controls_enabled(True)
+                self._set_source_write_controls_enabled(self._last_source_state is not None)
                 if event.state == WorkerState.SUCCESS:
                     self._render_source_state(worker.result)
                 elif event.state == WorkerState.ERROR:
@@ -802,6 +838,7 @@ if _TEXTUAL_IMPORT_ERROR is None:
                 self.query_one("#source-vpp", Input).value = state.amplitude_vpp
             self._source_log_lines = state.log_lines
             self._append_persistent_log_lines(state.log_lines)
+            self._set_source_write_controls_enabled(True)
             self._render_log()
 
         def _render_log(self) -> None:
@@ -850,9 +887,12 @@ if _TEXTUAL_IMPORT_ERROR is None:
             if self.log_path is None:
                 return
             timestamp = datetime.now().isoformat(timespec="seconds")
-            self.log_path.parent.mkdir(parents=True, exist_ok=True)
-            with self.log_path.open("a", encoding="utf-8") as handle:
-                handle.write(f"{timestamp} {line}\n")
+            _append_limited_log_line(
+                self.log_path,
+                f"{timestamp} {line}",
+                max_lines=self.log_max_lines,
+                keep_lines=self.log_keep_lines_after_trim,
+            )
 
 
 def build_app(
@@ -871,11 +911,16 @@ def build_app(
     power_adapter: PowerPanelAdapter
     dmm_adapter: DmmPanelAdapter
     source_adapter: SourcePanelAdapter
+    log_max_lines = TUI_LOG_MAX_LINES
+    log_keep_lines_after_trim = TUI_LOG_KEEP_LINES_AFTER_TRIM
     if fake:
         power_adapter = FakePowerPanelAdapter()
         dmm_adapter = FakeDmmPanelAdapter()
         source_adapter = FakeSourcePanelAdapter()
     else:
+        config = load_config(config_path)
+        log_max_lines = config.tui.log_max_lines
+        log_keep_lines_after_trim = config.tui.log_keep_lines_after_trim
         power_adapter = PowerServicePanelAdapter.from_config(config_path=config_path, resource=resource)
         dmm_adapter = DmmServicePanelAdapter.from_config(config_path=config_path)
         source_adapter = SourceServicePanelAdapter.from_config(config_path=config_path)
@@ -885,6 +930,8 @@ def build_app(
         source_adapter=source_adapter,
         refresh_interval_s=refresh_interval_s,
         log_path=log_path,
+        log_max_lines=log_max_lines,
+        log_keep_lines_after_trim=log_keep_lines_after_trim,
     )
 
 

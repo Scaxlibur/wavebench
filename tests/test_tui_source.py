@@ -187,6 +187,34 @@ class TuiSourceBusyBehaviorTests(unittest.IsolatedAsyncioTestCase):
             await pilot.pause(0.25)
             self.assertEqual(source.refresh_calls, 1)
 
+    async def test_source_write_controls_wait_until_initial_state_loads(self):
+        class FlakyInitialSourceAdapter(FakeSourcePanelAdapter):
+            def __init__(self):
+                super().__init__()
+                self.refresh_calls = 0
+
+            def refresh(self):  # type: ignore[override]
+                self.refresh_calls += 1
+                if self.refresh_calls == 1:
+                    raise RuntimeError("transient source startup error")
+                return super().refresh()
+
+        source = FlakyInitialSourceAdapter()
+        app = tui_app.WaveBenchTuiApp(
+            power_adapter=tui_app.FakePowerPanelAdapter(),
+            dmm_adapter=tui_app.FakeDmmPanelAdapter(),
+            source_adapter=source,
+            refresh_interval_s=60.0,
+        )
+        async with app.run_test() as pilot:
+            await pilot.pause(0.25)
+            self.assertIsNone(app._last_source_state)
+            self.assertTrue(app.query_one("#source-set-freq", Button).disabled)
+            app.action_auto_refresh()
+            await pilot.pause(0.25)
+            self.assertIsNotNone(app._last_source_state)
+            self.assertFalse(app.query_one("#source-set-freq", Button).disabled)
+
     async def test_source_write_reentry_is_blocked(self):
         class SlowSourceAdapter(FakeSourcePanelAdapter):
             def __init__(self):

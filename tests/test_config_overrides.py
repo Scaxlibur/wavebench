@@ -231,6 +231,70 @@ auto_recover_attempts = -1
                 load_config(path)
 
 
+class RuntimeRobustnessConfigTests(unittest.TestCase):
+    def test_loads_connection_retry_and_tui_log_limits(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "wavebench.toml"
+            path.write_text("""
+[connection]
+backend = "lan"
+resource = "TCPIP::127.0.0.1::INSTR"
+timeout_ms = 1000
+opc_timeout_ms = 1000
+read_retry_attempts = 2
+read_retry_delay_ms = 250
+
+[scope]
+driver = "rtm2032"
+default_channel = 1
+reset_before_run = false
+check_errors = true
+
+[autoscale]
+wait_opc = true
+check_errors = true
+
+[waveform]
+format = "real"
+byte_order = "lsbf"
+points = "def"
+
+[output]
+directory = "data/raw"
+package_naming = "timestamp_label"
+save_csv = true
+save_npy = true
+save_json = true
+save_commands_log = true
+save_screenshot = false
+
+[tui]
+log_max_lines = 1234
+log_keep_lines_after_trim = 123
+""", encoding="utf-8")
+            config = load_config(path)
+            self.assertEqual(config.connection.read_retry_attempts, 2)
+            self.assertEqual(config.connection.read_retry_delay_ms, 250)
+            self.assertEqual(config.tui.log_max_lines, 1234)
+            self.assertEqual(config.tui.log_keep_lines_after_trim, 123)
+
+    def test_rejects_invalid_tui_log_limits(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "wavebench.toml"
+            path.write_text("""
+[connection]
+resource = "TCPIP::127.0.0.1::INSTR"
+
+[scope]
+
+[tui]
+log_max_lines = 100
+log_keep_lines_after_trim = 101
+""", encoding="utf-8")
+            with self.assertRaisesRegex(Exception, "log_keep_lines_after_trim"):
+                load_config(path)
+
+
 class SourceConfigTests(unittest.TestCase):
     def test_loads_source_settle_delay(self):
         with tempfile.TemporaryDirectory() as tmp:

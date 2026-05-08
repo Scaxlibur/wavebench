@@ -26,9 +26,14 @@ class PowerService:
             resource=power.resource,
             timeout_ms=self.config.connection.timeout_ms,
             opc_timeout_ms=self.config.connection.opc_timeout_ms,
+            read_retry_attempts=self.config.connection.read_retry_attempts,
+            read_retry_delay_ms=self.config.connection.read_retry_delay_ms,
         )
         transport = PyVisaTransport.open(connection, logger=self.logger)
         return DP800Power(transport=transport, check_errors_after_ops=power.check_errors)
+
+    def open_session(self) -> DP800Power:
+        return self._open_power()
 
     def idn(self) -> str:
         power = self._open_power()

@@ -113,12 +113,16 @@ class DM3000Dmm:
         return normalized
 
     def set_function(self, function: str) -> str:
+        self.apply_function(function)
+        return self.function_status()
+
+    def apply_function(self, function: str) -> str:
         key = normalize_dmm_function(function)
         if key not in DMM_FUNCTION_SET_COMMANDS:
             supported = ", ".join(sorted(DMM_FUNCTION_SET_COMMANDS))
             raise DataError(f"unsupported DMM function {function!r}; supported: {supported}")
         self.transport.write(DMM_FUNCTION_SET_COMMANDS[key])
-        return self.function_status()
+        return key
 
     def read(self, function: str = "dcv") -> DmmReading:
         key = normalize_dmm_function(function)

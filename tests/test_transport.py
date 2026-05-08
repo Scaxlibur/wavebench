@@ -44,8 +44,26 @@ class FailingQuerySession(FakePyVisaSession):
         raise TimeoutError("simulated timeout")
 
 
+class FlakyQuerySession(FakePyVisaSession):
+    def __init__(self):
+        super().__init__()
+        self.failures_remaining = 1
+
+    def query(self, command: str) -> str:
+        self.queries.append(command)
+        if self.failures_remaining:
+            self.failures_remaining -= 1
+            raise TimeoutError("transient timeout")
+        return "OK"
+
+
 class FailingWriteSession(FakePyVisaSession):
+    def __init__(self):
+        super().__init__()
+        self.writes = []
+
     def write(self, command: str) -> None:
+        self.writes.append(command)
         raise OSError("simulated write failure")
 
 
@@ -79,11 +97,27 @@ class PyVisaTransportTests(unittest.TestCase):
         with self.assertRaisesRegex(InstrumentError, "pyvisa query failed"):
             transport.query("OUTP?")
 
+    def test_query_retries_transient_read_failures(self):
+        session = FlakyQuerySession()
+        transport = PyVisaTransport(
+            "TCPIP::x::INSTR",
+            FakeResourceManager(),
+            session,
+            CommandLogger(),
+            read_retry_attempts=1,
+            read_retry_delay_ms=0,
+        )
+
+        self.assertEqual(transport.query("OUTP?"), "OK")
+        self.assertEqual(session.queries, ["OUTP?", "OUTP?"])
+
     def test_write_failure_is_wrapped_as_instrument_error(self):
-        transport = PyVisaTransport("TCPIP::x::INSTR", FakeResourceManager(), FailingWriteSession(), CommandLogger())
+        session = FailingWriteSession()
+        transport = PyVisaTransport("TCPIP::x::INSTR", FakeResourceManager(), session, CommandLogger())
 
         with self.assertRaisesRegex(InstrumentError, "pyvisa write failed"):
             transport.write("VOLT 1")
+        self.assertEqual(session.writes, ["VOLT 1"])
 
 
 if __name__ == "__main__":

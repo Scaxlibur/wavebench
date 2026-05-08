@@ -35,6 +35,7 @@ python -m wavebench tui --fake
 - `--log-file <path>`
   - 指定 TUI 调试日志文件
   - 默认路径为 `data/tui/wavebench-tui.log`
+  - 日志行数限制由 `[tui].log_max_lines` 和 `[tui].log_keep_lines_after_trim` 配置
 
 ## 常用启动方式
 

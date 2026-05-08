@@ -33,12 +33,17 @@ class DmmService:
                     resource=dmm.resource or "",
                     timeout_ms=dmm.timeout_ms,
                     opc_timeout_ms=dmm.timeout_ms,
+                    read_retry_attempts=self.config.connection.read_retry_attempts,
+                    read_retry_delay_ms=self.config.connection.read_retry_delay_ms,
                 ),
                 logger=self.logger,
             )
         else:
             raise ConfigError("dmm.backend must be one of: serial, lan, visa, pyvisa")
         return DM3000Dmm(transport=transport)
+
+    def open_session(self) -> DM3000Dmm:
+        return self._open_dmm()
 
     def idn(self) -> str:
         dmm = self._open_dmm()

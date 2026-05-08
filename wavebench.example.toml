@@ -16,6 +16,13 @@ timeout_ms = 10000
 # Timeout for long operations such as AUToscale and SINGle + *OPC?.
 opc_timeout_ms = 30000
 
+# Number of extra retries for read/query operations after a transient PyVISA failure.
+# Write operations are not retried automatically.
+read_retry_attempts = 1
+
+# Delay between read/query retries in milliseconds.
+read_retry_delay_ms = 200
+
 [scope]
 # Device driver name. MVP-1 only supports "rtm2032".
 driver = "rtm2032"
@@ -74,6 +81,14 @@ save_commands_log = true
 
 # Screenshot export is reserved for later; disabled in MVP-1 by default.
 save_screenshot = false
+
+
+[tui]
+# Maximum number of lines kept in the persistent TUI debug log before trimming.
+log_max_lines = 10000
+
+# When the TUI debug log exceeds log_max_lines, keep only this many newest lines.
+log_keep_lines_after_trim = 1000
 
 
 [quality]
