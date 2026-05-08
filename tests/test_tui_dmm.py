@@ -154,7 +154,7 @@ class TuiDmmBusyBehaviorTests(unittest.IsolatedAsyncioTestCase):
             app._read_dmm()
             await pilot.pause(0.02)
             self.assertTrue(app.query_one("#dmm-read", Button).disabled)
-            self.assertFalse(app.query_one("#dmm-apply", Button).disabled)
+            self.assertFalse(app.query_one("#dmm-func-acv", Button).disabled)
 
     async def test_apply_reentry_is_blocked(self):
         class SlowApplyAdapter(FakeDmmPanelAdapter):
@@ -176,13 +176,35 @@ class TuiDmmBusyBehaviorTests(unittest.IsolatedAsyncioTestCase):
         )
         async with app.run_test() as pilot:
             await pilot.pause(0.25)
-            app.query_one("#dmm-function").value = "acv"
-            app._set_dmm_function()
-            app._set_dmm_function()
+            app._set_dmm_function("acv")
+            app._set_dmm_function("acv")
             await pilot.pause(0.5)
             self.assertEqual(adapter.apply_calls, ["acv"])
-            self.assertFalse(app.query_one("#dmm-apply", Button).disabled)
-            self.assertEqual(app.query_one("#dmm-function").value, "acv")
+            self.assertFalse(app.query_one("#dmm-func-acv", Button).disabled)
+
+    async def test_function_button_applies_function(self):
+        class RecordingAdapter(FakeDmmPanelAdapter):
+            def __init__(self):
+                super().__init__()
+                self.apply_calls: list[str] = []
+
+            def set_function(self, function: str):  # type: ignore[override]
+                self.apply_calls.append(function)
+                return super().set_function(function)
+
+        adapter = RecordingAdapter()
+        app = tui_app.WaveBenchTuiApp(
+            power_adapter=tui_app.FakePowerPanelAdapter(),
+            dmm_adapter=adapter,
+            source_adapter=FakeSourcePanelAdapter(),
+            refresh_interval_s=60.0,
+        )
+        async with app.run_test() as pilot:
+            await pilot.pause(0.25)
+            self.assertIsInstance(app.query_one("#dmm-func-acv"), Button)
+            app._set_dmm_function("acv")
+            await pilot.pause(0.25)
+            self.assertEqual(adapter.apply_calls, ["acv"])
 
 
 if __name__ == "__main__":

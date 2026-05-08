@@ -28,6 +28,19 @@ else:  # pragma: no cover - import branch depends on optional extra
 
 
 if _TEXTUAL_IMPORT_ERROR is None:
+    DMM_FUNCTION_BUTTONS = (
+        ("dcv", "DCV"),
+        ("acv", "ACV"),
+        ("dci", "DCI"),
+        ("aci", "ACI"),
+        ("res", "RES"),
+        ("fres", "FRES"),
+        ("freq", "FREQ"),
+        ("period", "PERIOD"),
+        ("continuity", "CONT"),
+        ("diode", "DIODE"),
+        ("cap", "CAP"),
+    )
 
     class WaveBenchTuiApp(App):
         CSS = """
@@ -60,17 +73,18 @@ if _TEXTUAL_IMPORT_ERROR is None:
 
         #dmm-panel {
             height: auto;
-            min-height: 11;
+            min-height: 14;
             padding: 0 1;
             border: solid $primary;
         }
 
-        #dmm-controls {
-            height: 3;
-        }
-
         #dmm-readout {
             height: 2;
+        }
+
+        .dmm-function-row {
+            height: 3;
+            padding: 0 1;
         }
 
         #source-panel {
@@ -161,10 +175,14 @@ if _TEXTUAL_IMPORT_ERROR is None:
                 with Vertical(id="dmm-panel"):
                     yield Static("万用表 / DMM", id="dmm-status")
                     yield Static("读数 / Reading: 未知 / N/A", id="dmm-readout")
-                    with Horizontal(id="dmm-controls", classes="control-row"):
-                        yield Input(value="dcv", placeholder="功能 / Function", id="dmm-function")
+                    yield Static("功能按键 / Function Buttons", id="dmm-function-label")
+                    with Horizontal(id="dmm-functions-main", classes="dmm-function-row"):
+                        for function, label in DMM_FUNCTION_BUTTONS[:6]:
+                            yield Button(label, id=f"dmm-func-{function}")
+                    with Horizontal(id="dmm-functions-extra", classes="dmm-function-row"):
+                        for function, label in DMM_FUNCTION_BUTTONS[6:]:
+                            yield Button(label, id=f"dmm-func-{function}")
                     with Horizontal(id="dmm-actions", classes="button-row"):
-                        yield Button("应用功能 / Apply Func", id="dmm-apply", variant="success")
                         yield Button("读取 / Read", id="dmm-read", variant="primary")
                 with Vertical(id="source-panel"):
                     yield Static("信号源 / Source", id="source-status")
@@ -217,8 +235,8 @@ if _TEXTUAL_IMPORT_ERROR is None:
                     self._set_limits()
                 elif button_id == "set-protection":
                     self._set_protection()
-                elif button_id == "dmm-apply":
-                    self._set_dmm_function()
+                elif button_id.startswith("dmm-func-"):
+                    self._set_dmm_function(button_id.removeprefix("dmm-func-"))
                 elif button_id == "dmm-read":
                     self._read_dmm()
                 elif button_id == "source-refresh":
@@ -356,7 +374,7 @@ if _TEXTUAL_IMPORT_ERROR is None:
                     self._log("忙碌 / Busy: DMM function apply is still running")
                 return
             self._dmm_write_in_flight = True
-            self.query_one("#dmm-apply", Button).disabled = True
+            self._set_dmm_function_controls_enabled(False)
             self.run_worker(
                 self._wrap_dmm_operation(operation),
                 name=name,
@@ -472,7 +490,7 @@ if _TEXTUAL_IMPORT_ERROR is None:
                     self._log("万用表已取消 / DMM cancelled")
             elif worker.group == "dmm-write":
                 self._dmm_write_in_flight = False
-                self.query_one("#dmm-apply", Button).disabled = False
+                self._set_dmm_function_controls_enabled(True)
                 if event.state == WorkerState.SUCCESS:
                     self._render_dmm_state(worker.result)
                 elif event.state == WorkerState.ERROR:
@@ -572,8 +590,7 @@ if _TEXTUAL_IMPORT_ERROR is None:
                 return False
             raise ConfigError("state must be on/off or empty / 状态必须为 on/off 或留空")
 
-        def _set_dmm_function(self) -> None:
-            function = self.query_one("#dmm-function", Input).value.strip() or "dcv"
+        def _set_dmm_function(self, function: str) -> None:
             self._run_dmm_write_io(
                 "dmm-set-function",
                 lambda: self.dmm_adapter.set_function(function=function),
@@ -670,7 +687,6 @@ if _TEXTUAL_IMPORT_ERROR is None:
                 f"读数 / Reading: {state.value} {state.unit} | "
                 f"原始 / Raw: {state.raw_reading}"
             )
-            self.query_one("#dmm-function", Input).value = state.function
             self._dmm_log_lines = state.log_lines
             self._render_log()
 
@@ -716,6 +732,10 @@ if _TEXTUAL_IMPORT_ERROR is None:
             if channel in {1, 2, 3}:
                 self.query_one(f"#toggle-{channel}", Button).disabled = not enabled
             self.query_one(f"#{button_id}", Button).disabled = not enabled
+
+        def _set_dmm_function_controls_enabled(self, enabled: bool) -> None:
+            for function, _label in DMM_FUNCTION_BUTTONS:
+                self.query_one(f"#dmm-func-{function}", Button).disabled = not enabled
 
         def _set_source_read_controls_enabled(self, enabled: bool) -> None:
             self.query_one("#source-refresh", Button).disabled = not enabled

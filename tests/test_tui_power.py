@@ -359,7 +359,6 @@ class TuiPowerBusyBehaviorTests(unittest.IsolatedAsyncioTestCase):
                 "#set-channel",
                 "#set-voltage",
                 "#set-current",
-                "#dmm-function",
                 "#source-function",
                 "#source-frequency",
                 "#source-vpp",
@@ -367,8 +366,10 @@ class TuiPowerBusyBehaviorTests(unittest.IsolatedAsyncioTestCase):
                 self.assertIsInstance(app.query_one(selector), Input)
             for selector in (
                 "#set-limits",
-                "#dmm-apply",
                 "#dmm-read",
+                "#dmm-func-dcv",
+                "#dmm-func-acv",
+                "#dmm-func-res",
                 "#source-apply-func",
                 "#source-set-freq",
                 "#source-set-vpp",
