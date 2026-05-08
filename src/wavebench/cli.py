@@ -58,6 +58,11 @@ def build_parser() -> argparse.ArgumentParser:
         default=5.0,
         help="Refresh interval in seconds / 刷新间隔（秒）",
     )
+    tui_parser.add_argument(
+        "--log-file",
+        default="data/tui/wavebench-tui.log",
+        help="Persist TUI debug log to this file / TUI 调试日志文件",
+    )
 
     run_sub = run_parser.add_subparsers(dest="command", required=True)
     run_check = run_sub.add_parser(
@@ -628,6 +633,7 @@ def main(argv: list[str] | None = None) -> int:
                 resource=args.resource,
                 fake=args.fake,
                 refresh_interval_s=args.refresh_interval,
+                log_path=args.log_file,
             )
         if args.domain == "capture":
             if args.command == "inspect":

@@ -202,12 +202,16 @@ class TuiPowerTests(unittest.TestCase):
     def test_cli_default_refresh_interval_is_conservative(self):
         args = build_parser().parse_args(["tui", "--fake"])
         self.assertEqual(args.refresh_interval, 5.0)
+        self.assertEqual(args.log_file, "data/tui/wavebench-tui.log")
 
     def test_cli_accepts_tui_fake_without_launching(self):
-        args = build_parser().parse_args(["tui", "--fake", "--refresh-interval", "0.5"])
+        args = build_parser().parse_args(
+            ["tui", "--fake", "--refresh-interval", "0.5", "--log-file", "tmp/tui.log"]
+        )
         self.assertEqual(args.domain, "tui")
         self.assertTrue(args.fake)
         self.assertEqual(args.refresh_interval, 0.5)
+        self.assertEqual(args.log_file, "tmp/tui.log")
 
     def test_channel_state_formats_bilingual_output(self):
         status = PowerStatus(
@@ -356,6 +360,28 @@ class TuiPowerTests(unittest.TestCase):
 
 @unittest.skipIf(tui_app._TEXTUAL_IMPORT_ERROR is not None, "Textual extra is not installed")
 class TuiPowerBusyBehaviorTests(unittest.IsolatedAsyncioTestCase):
+    async def test_tui_persists_debug_log(self):
+        from tempfile import TemporaryDirectory
+
+        with TemporaryDirectory() as temp_dir:
+            log_path = Path(temp_dir) / "tui.log"
+            app = tui_app.build_app(fake=True, refresh_interval_s=60.0, log_path=log_path)
+            async with app.run_test() as pilot:
+                await pilot.pause(0.25)
+                app._log("测试日志 / Test log")
+                await pilot.pause(0.05)
+            text = log_path.read_text(encoding="utf-8")
+            self.assertIn("TUI session started / TUI 会话开始", text)
+            self.assertIn("测试日志 / Test log", text)
+
+    async def test_quit_stops_refresh_timer_and_cancels_workers(self):
+        app = tui_app.build_app(fake=True, refresh_interval_s=60.0)
+        async with app.run_test() as pilot:
+            await pilot.pause(0.25)
+            self.assertIsNotNone(app._refresh_timer)
+            await app.action_quit()
+            self.assertTrue(app._shutting_down)
+
     async def test_layout_keeps_user_input_controls_in_scroll_area(self):
         app = tui_app.build_app(fake=True, refresh_interval_s=60.0)
         async with app.run_test() as pilot:

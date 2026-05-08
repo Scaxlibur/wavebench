@@ -15,7 +15,7 @@ from wavebench.config import (
     WaveformConfig,
 )
 from wavebench.drivers.dm3000 import DmmReading
-from wavebench.tui.dmm import FakeDmmPanelAdapter, build_dmm_panel_state
+from wavebench.tui.dmm import DmmServicePanelAdapter, FakeDmmPanelAdapter, build_dmm_panel_state
 from wavebench.tui.source import FakeSourcePanelAdapter
 from wavebench.tui.state import dmm_config_status, dmm_state_from_reading
 
@@ -121,6 +121,30 @@ class TuiDmmTests(unittest.TestCase):
         self.assertEqual(state.function, "acv")
         self.assertEqual(adapter.function_status(), "acv")
         self.assertTrue(any("Function set fake DMM acv" in line for line in state.log_lines))
+
+    def test_service_adapter_read_uses_cached_function_without_status_query(self):
+        class NoStatusService:
+            config = make_config()
+            logger = type("Logger", (), {"entries": []})()
+
+            def __init__(self):
+                self.read_calls: list[str] = []
+
+            def idn(self):
+                return "RIGOL,DM3058,SN,FW"
+
+            def function_status(self):
+                raise AssertionError("read refresh must not query :FUNCtion?")
+
+            def read(self, function: str = "dcv"):
+                self.read_calls.append(function)
+                return DmmReading(function=function, value=1.0, unit="V", raw="1.0")
+
+        service = NoStatusService()
+        adapter = DmmServicePanelAdapter(service=service)  # type: ignore[arg-type]
+        state = adapter.read()
+        self.assertEqual(state.function, "dcv")
+        self.assertEqual(service.read_calls, ["dcv"])
 
     def test_power_resource_override_preserves_dmm_config(self):
         config = make_config().with_power_resource("TCPIP::new-power::INSTR")

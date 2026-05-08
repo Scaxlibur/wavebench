@@ -65,12 +65,17 @@ DMM_FUNCTION_QUERY_MAP = {
     "DCI": "dci",
     "ACI": "aci",
     "RESISTANCE": "res",
+    "2WR": "res",
     "FRESISTANCE": "fres",
+    "4WR": "fres",
     "FREQUENCY": "freq",
+    "FREQ": "freq",
     "PERIOD": "period",
     "CONTINUITY": "continuity",
+    "CONT": "continuity",
     "DIODE": "diode",
     "CAPACITANCE": "cap",
+    "CAP": "cap",
 }
 
 

@@ -76,6 +76,20 @@ class DM3000DriverTests(unittest.TestCase):
         self.assertEqual(status, "res")
         self.assertEqual(transport.commands, [":FUNCtion?"])
 
+    def test_function_status_accepts_dm3058_abbreviations(self):
+        cases = {
+            "CONT": "continuity",
+            "FREQ": "freq",
+            "CAP": "cap",
+            "2WR": "res",
+            "4WR": "fres",
+        }
+        for raw, expected in cases.items():
+            with self.subTest(raw=raw):
+                transport = FakeTransport()
+                transport.function_status = raw
+                self.assertEqual(DM3000Dmm(transport).function_status(), expected)
+
     def test_set_function_writes_and_returns_normalized_status(self):
         transport = FakeTransport()
         dmm = DM3000Dmm(transport)

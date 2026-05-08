@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Protocol
 
 from wavebench.config import WaveBenchConfig, load_config
-from wavebench.drivers.dm3000 import DmmReading
+from wavebench.drivers.dm3000 import DmmReading, normalize_dmm_function
 from wavebench.logging import CommandLogger
 from wavebench.services.dmm_service import DmmService
 from wavebench.tui.state import DmmPanelState, dmm_state_from_reading
@@ -26,6 +26,7 @@ class DmmPanelAdapter(Protocol):
 class DmmServicePanelAdapter:
     service: DmmService
     _instrument_id: str | None = None
+    _active_function: str = "dcv"
 
     @classmethod
     def from_config(
@@ -37,15 +38,15 @@ class DmmServicePanelAdapter:
         return cls(service=DmmService(config=config, logger=CommandLogger()))
 
     def function_status(self) -> str:
-        return self.service.function_status()
+        self._active_function = self.service.function_status()
+        return self._active_function
 
     def read(self, function: str | None = None) -> DmmPanelState:
         if self._instrument_id is None:
             self._instrument_id = self.service.idn()
-        active_function = self.service.function_status() if function is None else function
-        normalized_function = active_function.strip().lower()
-        if not normalized_function:
-            normalized_function = "dcv"
+        normalized_function = self._active_function if function is None else normalize_dmm_function(function)
+        normalized_function = normalized_function or "dcv"
+        self._active_function = normalized_function
         reading = self.service.read(function=normalized_function)
         return build_dmm_panel_state(
             config=self.service.config,
@@ -58,6 +59,7 @@ class DmmServicePanelAdapter:
         if self._instrument_id is None:
             self._instrument_id = self.service.idn()
         applied_function = self.service.set_function(function=function)
+        self._active_function = applied_function
         reading = self.service.read(function=applied_function)
         return build_dmm_panel_state(
             config=self.service.config,

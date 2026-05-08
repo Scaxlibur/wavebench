@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Callable
+from datetime import datetime
 from pathlib import Path
-from threading import Lock
+from threading import Lock, Thread
 
 from wavebench.errors import ConfigError, WaveBenchError
 from wavebench.tui.dmm import DmmPanelAdapter, DmmServicePanelAdapter, FakeDmmPanelAdapter
@@ -28,6 +30,8 @@ else:  # pragma: no cover - import branch depends on optional extra
 
 
 if _TEXTUAL_IMPORT_ERROR is None:
+    DEFAULT_TUI_LOG_PATH = Path("data/tui/wavebench-tui.log")
+
     DMM_FUNCTION_BUTTONS = (
         ("dcv", "直流电压 / DCV"),
         ("acv", "交流电压 / ACV"),
@@ -121,12 +125,14 @@ if _TEXTUAL_IMPORT_ERROR is None:
             dmm_adapter: DmmPanelAdapter,
             source_adapter: SourcePanelAdapter,
             refresh_interval_s: float = 5.0,
+            log_path: str | Path | None = None,
         ):
             super().__init__()
             self.power_adapter = power_adapter
             self.dmm_adapter = dmm_adapter
             self.source_adapter = source_adapter
             self.refresh_interval_s = refresh_interval_s
+            self.log_path = Path(log_path) if log_path else None
             self._power_adapter_lock = Lock()
             self._power_read_in_flight = False
             self._pending_power_read_kind: str | None = None
@@ -144,6 +150,9 @@ if _TEXTUAL_IMPORT_ERROR is None:
             self._power_log_lines: tuple[str, ...] = ()
             self._dmm_log_lines: tuple[str, ...] = ()
             self._source_log_lines: tuple[str, ...] = ()
+            self._persisted_log_lines: set[str] = set()
+            self._refresh_timer = None
+            self._shutting_down = False
 
         def compose(self) -> ComposeResult:
             yield Header(show_clock=True)
@@ -209,17 +218,59 @@ if _TEXTUAL_IMPORT_ERROR is None:
             table.add_columns(*POWER_TABLE_COLUMNS)
             source_table = self.query_one("#source-table", DataTable)
             source_table.add_columns(*SOURCE_TABLE_COLUMNS)
-            self.set_interval(self.refresh_interval_s, self.action_auto_refresh)
+            self._append_persistent_log_line("TUI session started / TUI 会话开始")
+            self._refresh_timer = self.set_interval(self.refresh_interval_s, self.action_auto_refresh)
             self.action_refresh()
 
         def action_refresh(self) -> None:
+            if self._shutting_down:
+                return
             self._run_power_read_io("refresh", skip_if_busy=True)
             self._read_dmm(skip_if_busy=True)
             self._refresh_source(skip_if_busy=True)
 
         def action_auto_refresh(self) -> None:
+            if self._shutting_down:
+                return
             self._run_power_read_io("measurement-refresh", skip_if_busy=True)
             self._read_dmm(skip_if_busy=True)
+
+        async def action_quit(self) -> None:
+            self._shutting_down = True
+            if self._refresh_timer is not None:
+                self._refresh_timer.stop()
+            self.workers.cancel_all()
+            self._append_persistent_log_line("TUI session stopping / TUI 会话停止")
+            self.exit()
+
+        async def _run_daemon_operation(self, operation: Callable[[], object]) -> object:
+            loop = asyncio.get_running_loop()
+            future = loop.create_future()
+
+            def finish_success(result: object) -> None:
+                if not future.done():
+                    future.set_result(result)
+
+            def finish_error(error: BaseException) -> None:
+                if not future.done():
+                    future.set_exception(error)
+
+            def runner() -> None:
+                try:
+                    result = operation()
+                except BaseException as exc:
+                    try:
+                        loop.call_soon_threadsafe(finish_error, exc)
+                    except RuntimeError:
+                        pass
+                else:
+                    try:
+                        loop.call_soon_threadsafe(finish_success, result)
+                    except RuntimeError:
+                        pass
+
+            Thread(target=runner, name="wavebench-tui-io", daemon=True).start()
+            return await future
 
         def on_button_pressed(self, event: Button.Pressed) -> None:
             button_id = event.button.id or ""
@@ -262,10 +313,9 @@ if _TEXTUAL_IMPORT_ERROR is None:
             self._power_read_in_flight = True
             self._set_power_read_controls_enabled(False)
             worker = self.run_worker(
-                self._wrap_power_operation(operation),
+                self._run_daemon_operation(self._wrap_power_operation(operation)),
                 name=read_kind,
                 group="power-read",
-                thread=True,
                 exclusive=True,
                 exit_on_error=False,
             )
@@ -285,10 +335,9 @@ if _TEXTUAL_IMPORT_ERROR is None:
             self._power_write_channels_in_flight.add(channel)
             self._set_power_write_controls_enabled(channel=channel, button_id=button_id, enabled=False)
             worker = self.run_worker(
-                self._wrap_power_operation(operation),
+                self._run_daemon_operation(self._wrap_power_operation(operation)),
                 name=name,
                 group=f"power-write-ch{channel}",
-                thread=True,
                 exclusive=True,
                 exit_on_error=False,
             )
@@ -354,10 +403,9 @@ if _TEXTUAL_IMPORT_ERROR is None:
             self._dmm_read_in_flight = True
             self.query_one("#dmm-read", Button).disabled = True
             self.run_worker(
-                self._wrap_dmm_operation(operation),
+                self._run_daemon_operation(self._wrap_dmm_operation(operation)),
                 name=name,
                 group="dmm-read",
-                thread=True,
                 exclusive=True,
                 exit_on_error=False,
             )
@@ -376,10 +424,9 @@ if _TEXTUAL_IMPORT_ERROR is None:
             self._dmm_write_in_flight = True
             self._set_dmm_function_controls_enabled(False)
             self.run_worker(
-                self._wrap_dmm_operation(operation),
+                self._run_daemon_operation(self._wrap_dmm_operation(operation)),
                 name=name,
                 group="dmm-write",
-                thread=True,
                 exclusive=True,
                 exit_on_error=False,
             )
@@ -408,10 +455,9 @@ if _TEXTUAL_IMPORT_ERROR is None:
             self._source_read_in_flight = True
             self._set_source_read_controls_enabled(False)
             self.run_worker(
-                self._wrap_source_operation(operation),
+                self._run_daemon_operation(self._wrap_source_operation(operation)),
                 name=name,
                 group="source-read",
-                thread=True,
                 exclusive=True,
                 exit_on_error=False,
             )
@@ -430,10 +476,9 @@ if _TEXTUAL_IMPORT_ERROR is None:
             self._source_write_in_flight = True
             self._set_source_write_controls_enabled(False)
             self.run_worker(
-                self._wrap_source_operation(operation),
+                self._run_daemon_operation(self._wrap_source_operation(operation)),
                 name=name,
                 group="source-write",
-                thread=True,
                 exclusive=True,
                 exit_on_error=False,
             )
@@ -674,6 +719,7 @@ if _TEXTUAL_IMPORT_ERROR is None:
                     key=f"{channel.channel}-state",
                 )
             self._power_log_lines = state.log_lines
+            self._append_persistent_log_lines(state.log_lines)
             self._render_log()
 
         def _render_dmm_state(self, state: DmmPanelState) -> None:
@@ -692,6 +738,7 @@ if _TEXTUAL_IMPORT_ERROR is None:
                 f"原始 / Raw: {state.raw_reading}"
             )
             self._dmm_log_lines = state.log_lines
+            self._append_persistent_log_lines(state.log_lines)
             self._render_log()
 
         def _render_source_state(self, state: SourcePanelState) -> None:
@@ -720,6 +767,7 @@ if _TEXTUAL_IMPORT_ERROR is None:
             if state.amplitude_vpp != "未知 / N/A" and not state.amplitude_vpp.startswith("非VPP /"):
                 self.query_one("#source-vpp", Input).value = state.amplitude_vpp
             self._source_log_lines = state.log_lines
+            self._append_persistent_log_lines(state.log_lines)
             self._render_log()
 
         def _render_log(self) -> None:
@@ -754,7 +802,23 @@ if _TEXTUAL_IMPORT_ERROR is None:
                 self.query_one(f"#{widget_id}", Button).disabled = not enabled
 
         def _log(self, line: str) -> None:
+            self._append_persistent_log_line(line)
             self.query_one("#log", RichLog).write(line)
+
+        def _append_persistent_log_lines(self, lines: tuple[str, ...]) -> None:
+            for line in lines:
+                if line in self._persisted_log_lines:
+                    continue
+                self._persisted_log_lines.add(line)
+                self._append_persistent_log_line(line)
+
+        def _append_persistent_log_line(self, line: str) -> None:
+            if self.log_path is None:
+                return
+            timestamp = datetime.now().isoformat(timespec="seconds")
+            self.log_path.parent.mkdir(parents=True, exist_ok=True)
+            with self.log_path.open("a", encoding="utf-8") as handle:
+                handle.write(f"{timestamp} {line}\n")
 
 
 def build_app(
@@ -763,6 +827,7 @@ def build_app(
     resource: str | None = None,
     fake: bool = False,
     refresh_interval_s: float = 5.0,
+    log_path: str | Path | None = None,
 ) -> object:
     if _TEXTUAL_IMPORT_ERROR is not None:
         raise ConfigError(
@@ -785,6 +850,7 @@ def build_app(
         dmm_adapter=dmm_adapter,
         source_adapter=source_adapter,
         refresh_interval_s=refresh_interval_s,
+        log_path=log_path,
     )
 
 
@@ -794,12 +860,14 @@ def run(
     resource: str | None = None,
     fake: bool = False,
     refresh_interval_s: float = 5.0,
+    log_path: str | Path | None = DEFAULT_TUI_LOG_PATH if _TEXTUAL_IMPORT_ERROR is None else None,
 ) -> int:
     app = build_app(
         config_path=config_path,
         resource=resource,
         fake=fake,
         refresh_interval_s=refresh_interval_s,
+        log_path=log_path,
     )
     app.run()
     return 0
