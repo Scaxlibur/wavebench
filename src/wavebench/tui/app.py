@@ -18,7 +18,7 @@ from wavebench.tui.state import (
 
 try:
     from textual.app import App, ComposeResult
-    from textual.containers import Horizontal, Vertical
+    from textual.containers import Horizontal, Vertical, VerticalScroll
     from textual.worker import Worker, WorkerState
     from textual.widgets import Button, DataTable, Footer, Header, Input, RichLog, Static
 except ModuleNotFoundError as exc:  # pragma: no cover - exercised by CLI smoke without extra
@@ -40,22 +40,27 @@ if _TEXTUAL_IMPORT_ERROR is None:
             padding: 0 1;
         }
 
+        #main-scroll {
+            height: 1fr;
+        }
+
         #power-table {
             height: 8;
         }
 
-        #power-controls {
+        .control-row {
             height: 3;
             padding: 0 1;
         }
 
-        #power-protection-controls {
+        .button-row {
             height: 3;
             padding: 0 1;
         }
 
         #dmm-panel {
-            height: 8;
+            height: auto;
+            min-height: 11;
             padding: 0 1;
             border: solid $primary;
         }
@@ -69,7 +74,8 @@ if _TEXTUAL_IMPORT_ERROR is None:
         }
 
         #source-panel {
-            height: 8;
+            height: auto;
+            min-height: 14;
             padding: 0 1;
             border: solid $primary;
         }
@@ -78,12 +84,14 @@ if _TEXTUAL_IMPORT_ERROR is None:
             height: 3;
         }
 
-        #source-controls {
+        .source-controls {
             height: 3;
+            padding: 0 1;
         }
 
         #log {
-            height: 1fr;
+            height: 10;
+            min-height: 6;
             border: solid $primary;
         }
         """
@@ -126,48 +134,56 @@ if _TEXTUAL_IMPORT_ERROR is None:
         def compose(self) -> ComposeResult:
             yield Header(show_clock=True)
             yield Static("WaveBench TUI - 实验台控制面板 / Bench Control Panel", id="status")
-            table = DataTable(id="power-table")
-            table.cursor_type = "row"
-            yield table
-            with Horizontal(id="power-controls"):
-                yield Button("刷新 / Refresh", id="refresh", variant="primary")
-                yield Button("CH1 开关 / Toggle", id="toggle-1")
-                yield Button("CH2 开关 / Toggle", id="toggle-2")
-                yield Button("CH3 开关 / Toggle", id="toggle-3")
-                yield Input(value="1", placeholder="通道 / CH", id="set-channel")
-                yield Input(placeholder="电压 V / Voltage", id="set-voltage")
-                yield Input(placeholder="限流 A / Current", id="set-current")
-                yield Button("设定 / Set", id="set-limits", variant="success")
-            with Horizontal(id="power-protection-controls"):
-                yield Button("保护刷新 / Prot Refresh", id="protection-refresh", variant="primary")
-                yield Input(value="1", placeholder="保护通道 / Prot CH", id="protection-channel")
-                yield Input(placeholder="OVP阈值 V / OVP V", id="ovp-threshold")
-                yield Input(placeholder="OVP on/off/空 / keep", id="ovp-state")
-                yield Input(placeholder="OCP阈值 A / OCP A", id="ocp-threshold")
-                yield Input(placeholder="OCP on/off/空 / keep", id="ocp-state")
-                yield Button("保护设定 / Set Prot", id="set-protection", variant="warning")
-            with Vertical(id="dmm-panel"):
-                yield Static("万用表 / DMM", id="dmm-status")
-                yield Static("读数 / Reading: 未知 / N/A", id="dmm-readout")
-                with Horizontal(id="dmm-controls"):
-                    yield Input(value="dcv", placeholder="功能 / Function", id="dmm-function")
-                    yield Button("应用功能 / Apply Func", id="dmm-apply", variant="success")
-                    yield Button("读取 / Read", id="dmm-read", variant="primary")
-            with Vertical(id="source-panel"):
-                yield Static("信号源 / Source", id="source-status")
-                source_table = DataTable(id="source-table")
-                source_table.cursor_type = "row"
-                yield source_table
-                with Horizontal(id="source-controls"):
-                    yield Button("刷新 / Refresh", id="source-refresh", variant="primary")
-                    yield Input(value="sin", placeholder="波形 / Function", id="source-function")
-                    yield Button("应用波形 / Apply Func", id="source-apply-func", variant="success")
-                    yield Input(placeholder="频率 Hz / Frequency", id="source-frequency")
-                    yield Button("设频 / Set Freq", id="source-set-freq", variant="success")
-                    yield Input(placeholder="幅度 Vpp / Vpp", id="source-vpp")
-                    yield Button("设幅 / Set Vpp", id="source-set-vpp", variant="success")
-                    yield Button("输出开关 / Toggle Out", id="source-toggle-output")
-            yield RichLog(id="log", highlight=True, markup=False)
+            with VerticalScroll(id="main-scroll"):
+                table = DataTable(id="power-table")
+                table.cursor_type = "row"
+                yield table
+                with Horizontal(id="power-actions", classes="control-row"):
+                    yield Button("刷新 / Refresh", id="refresh", variant="primary")
+                    yield Button("CH1 开关 / Toggle", id="toggle-1")
+                    yield Button("CH2 开关 / Toggle", id="toggle-2")
+                    yield Button("CH3 开关 / Toggle", id="toggle-3")
+                with Horizontal(id="power-controls", classes="control-row"):
+                    yield Input(value="1", placeholder="通道 / CH", id="set-channel")
+                    yield Input(placeholder="电压 V / Voltage", id="set-voltage")
+                    yield Input(placeholder="限流 A / Current", id="set-current")
+                with Horizontal(id="power-set-actions", classes="button-row"):
+                    yield Button("设定 / Set", id="set-limits", variant="success")
+                with Horizontal(id="power-protection-actions", classes="control-row"):
+                    yield Button("保护刷新 / Prot Refresh", id="protection-refresh", variant="primary")
+                    yield Input(value="1", placeholder="保护通道 / Prot CH", id="protection-channel")
+                    yield Button("保护设定 / Set Prot", id="set-protection", variant="warning")
+                with Horizontal(id="power-protection-controls", classes="control-row"):
+                    yield Input(placeholder="OVP阈值 V / OVP V", id="ovp-threshold")
+                    yield Input(placeholder="OVP on/off/空 / keep", id="ovp-state")
+                    yield Input(placeholder="OCP阈值 A / OCP A", id="ocp-threshold")
+                    yield Input(placeholder="OCP on/off/空 / keep", id="ocp-state")
+                with Vertical(id="dmm-panel"):
+                    yield Static("万用表 / DMM", id="dmm-status")
+                    yield Static("读数 / Reading: 未知 / N/A", id="dmm-readout")
+                    with Horizontal(id="dmm-controls", classes="control-row"):
+                        yield Input(value="dcv", placeholder="功能 / Function", id="dmm-function")
+                    with Horizontal(id="dmm-actions", classes="button-row"):
+                        yield Button("应用功能 / Apply Func", id="dmm-apply", variant="success")
+                        yield Button("读取 / Read", id="dmm-read", variant="primary")
+                with Vertical(id="source-panel"):
+                    yield Static("信号源 / Source", id="source-status")
+                    source_table = DataTable(id="source-table")
+                    source_table.cursor_type = "row"
+                    yield source_table
+                    with Horizontal(id="source-function-controls", classes="source-controls"):
+                        yield Button("刷新 / Refresh", id="source-refresh", variant="primary")
+                        yield Input(value="sin", placeholder="波形 / Function", id="source-function")
+                    with Horizontal(id="source-function-actions", classes="button-row"):
+                        yield Button("应用波形 / Apply Func", id="source-apply-func", variant="success")
+                        yield Button("输出开关 / Toggle Out", id="source-toggle-output")
+                    with Horizontal(id="source-controls", classes="source-controls"):
+                        yield Input(placeholder="频率 Hz / Frequency", id="source-frequency")
+                        yield Input(placeholder="幅度 Vpp / Vpp", id="source-vpp")
+                    with Horizontal(id="source-set-actions", classes="button-row"):
+                        yield Button("设频 / Set Freq", id="source-set-freq", variant="success")
+                        yield Button("设幅 / Set Vpp", id="source-set-vpp", variant="success")
+                yield RichLog(id="log", highlight=True, markup=False)
             yield Footer()
 
         def on_mount(self) -> None:
@@ -186,7 +202,6 @@ if _TEXTUAL_IMPORT_ERROR is None:
         def action_auto_refresh(self) -> None:
             self._run_power_read_io("measurement-refresh", skip_if_busy=True)
             self._read_dmm(skip_if_busy=True)
-            self._refresh_source(skip_if_busy=True)
 
         def on_button_pressed(self, event: Button.Pressed) -> None:
             button_id = event.button.id or ""

@@ -162,6 +162,31 @@ class TuiSourceTests(unittest.TestCase):
 
 @unittest.skipIf(tui_app._TEXTUAL_IMPORT_ERROR is not None, "Textual extra is not installed")
 class TuiSourceBusyBehaviorTests(unittest.IsolatedAsyncioTestCase):
+    async def test_auto_refresh_does_not_poll_source(self):
+        class CountingSourceAdapter(FakeSourcePanelAdapter):
+            def __init__(self):
+                super().__init__()
+                self.refresh_calls = 0
+
+            def refresh(self):  # type: ignore[override]
+                self.refresh_calls += 1
+                return super().refresh()
+
+        source = CountingSourceAdapter()
+        app = tui_app.WaveBenchTuiApp(
+            power_adapter=tui_app.FakePowerPanelAdapter(),
+            dmm_adapter=tui_app.FakeDmmPanelAdapter(),
+            source_adapter=source,
+            refresh_interval_s=60.0,
+        )
+        async with app.run_test() as pilot:
+            await pilot.pause(0.25)
+            self.assertEqual(source.refresh_calls, 1)
+            app.action_auto_refresh()
+            app.action_auto_refresh()
+            await pilot.pause(0.25)
+            self.assertEqual(source.refresh_calls, 1)
+
     async def test_source_write_reentry_is_blocked(self):
         class SlowSourceAdapter(FakeSourcePanelAdapter):
             def __init__(self):

@@ -26,7 +26,7 @@ from wavebench.tui.state import channel_state_from_status, format_output_state
 from wavebench.tui import app as tui_app
 
 if tui_app._TEXTUAL_IMPORT_ERROR is None:
-    from textual.widgets import Button
+    from textual.widgets import Button, Input
 
 
 def make_config() -> WaveBenchConfig:
@@ -350,6 +350,31 @@ class TuiPowerTests(unittest.TestCase):
 
 @unittest.skipIf(tui_app._TEXTUAL_IMPORT_ERROR is not None, "Textual extra is not installed")
 class TuiPowerBusyBehaviorTests(unittest.IsolatedAsyncioTestCase):
+    async def test_layout_keeps_user_input_controls_in_scroll_area(self):
+        app = tui_app.build_app(fake=True, refresh_interval_s=60.0)
+        async with app.run_test() as pilot:
+            await pilot.pause(0.25)
+            self.assertIsNotNone(app.query_one("#main-scroll"))
+            for selector in (
+                "#set-channel",
+                "#set-voltage",
+                "#set-current",
+                "#dmm-function",
+                "#source-function",
+                "#source-frequency",
+                "#source-vpp",
+            ):
+                self.assertIsInstance(app.query_one(selector), Input)
+            for selector in (
+                "#set-limits",
+                "#dmm-apply",
+                "#dmm-read",
+                "#source-apply-func",
+                "#source-set-freq",
+                "#source-set-vpp",
+            ):
+                self.assertIsInstance(app.query_one(selector), Button)
+
     async def test_measurement_refresh_does_not_disable_write_controls(self):
         class SlowReadAdapter(FakePowerPanelAdapter):
             def refresh_measurements(self):  # type: ignore[override]
