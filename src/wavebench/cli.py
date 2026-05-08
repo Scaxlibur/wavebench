@@ -50,7 +50,7 @@ def build_parser() -> argparse.ArgumentParser:
     tui_parser.add_argument(
         "--fake",
         action="store_true",
-        help="Use fake power and DMM snapshots / 使用模拟电源和万用表快照",
+        help="Use fake power, DMM, and source snapshots / 使用模拟电源、万用表和信号源快照",
     )
     tui_parser.add_argument(
         "--refresh-interval",

@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from wavebench.config import WaveBenchConfig
+from wavebench.drivers.dg4202 import SourceStatus
 from wavebench.drivers.dm3000 import DmmReading
 from wavebench.drivers.dp800 import PowerProtectionStatus, PowerStatus
 
@@ -46,6 +47,21 @@ class DmmPanelState:
     log_lines: tuple[str, ...] = ()
 
 
+@dataclass(frozen=True)
+class SourcePanelState:
+    config_status: str
+    connection_status: str
+    instrument_status: str
+    channel: int
+    output_raw: str
+    output: str
+    function: str
+    frequency_hz: str
+    amplitude_vpp: str
+    offset_v: str
+    log_lines: tuple[str, ...] = ()
+
+
 POWER_TABLE_COLUMNS = (
     "通道 / CH",
     "输出 / Output",
@@ -62,6 +78,15 @@ POWER_TABLE_COLUMNS = (
     "OCP启用 / OCP",
     "OCP阈值 / OCP A",
     "OCP触发 / OCP Trip",
+)
+
+SOURCE_TABLE_COLUMNS = (
+    "通道 / CH",
+    "输出 / Output",
+    "波形 / Function",
+    "频率 / Freq Hz",
+    "幅度 / Vpp",
+    "偏置 / Offset V",
 )
 
 
@@ -141,6 +166,47 @@ def dmm_config_status(config: WaveBenchConfig) -> str:
         f"驱动 / Driver: {config.dmm.driver} | "
         f"后端 / Backend: {config.dmm.backend} | "
         f"资源 / Resource: {resource}"
+    )
+
+
+def source_config_status(config: WaveBenchConfig) -> str:
+    if config.source is None:
+        return "信号源配置缺失 / Source config missing"
+    resource = config.source.resource or "未配置 / not configured"
+    return (
+        f"驱动 / Driver: {config.source.driver} | "
+        f"资源 / Resource: {resource} | "
+        f"默认通道 / Default CH: {config.source.default_channel}"
+    )
+
+
+def source_state_from_status(
+    *,
+    config: WaveBenchConfig,
+    instrument_id: str,
+    status: SourceStatus,
+    log_lines: list[str] | tuple[str, ...] = (),
+) -> SourcePanelState:
+    amplitude_vpp = "未知 / N/A"
+    amplitude_unit = (status.amplitude_unit or "").strip().upper()
+    if status.amplitude is not None:
+        if amplitude_unit == "VPP":
+            amplitude_vpp = f"{status.amplitude:.6g}"
+        else:
+            unit = status.amplitude_unit or ""
+            amplitude_vpp = f"非VPP / not VPP ({status.amplitude:.6g} {unit})"
+    return SourcePanelState(
+        config_status=source_config_status(config),
+        connection_status="已连接 / Connected",
+        instrument_status=f"仪器 / Instrument: {instrument_id}",
+        channel=status.channel,
+        output_raw=status.output.strip().upper(),
+        output=format_output_state(status.output),
+        function=status.function,
+        frequency_hz=format_optional_number(status.frequency_hz),
+        amplitude_vpp=amplitude_vpp,
+        offset_v=format_optional_number(status.offset_v),
+        log_lines=tuple(log_lines),
     )
 
 

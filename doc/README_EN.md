@@ -54,8 +54,8 @@ It provides small, explicit CLI commands for LAN-connected lab instruments, and 
 
 ### Terminal TUI: experimental control panel
 
-- `tui` launches the Textual terminal UI. It currently provides a DP800 power panel and a DMM readout panel.
-- `tui --fake` uses fake power and DMM adapters without connecting to real instruments.
+- `tui` launches the Textual terminal UI. It currently provides a DP800 power panel, a DMM readout panel, and a DG4202 source panel.
+- `tui --fake` uses fake power, DMM, and source adapters without connecting to real instruments.
 - `tui --refresh-interval 5` sets the automatic refresh interval; the default is 5 seconds.
 - Instrument I/O runs in background workers so refresh/read operations do not block the terminal UI.
 

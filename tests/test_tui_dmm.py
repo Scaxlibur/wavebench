@@ -16,6 +16,7 @@ from wavebench.config import (
 )
 from wavebench.drivers.dm3000 import DmmReading
 from wavebench.tui.dmm import FakeDmmPanelAdapter, build_dmm_panel_state
+from wavebench.tui.source import FakeSourcePanelAdapter
 from wavebench.tui.state import dmm_config_status, dmm_state_from_reading
 
 from wavebench.tui import app as tui_app
@@ -145,6 +146,7 @@ class TuiDmmBusyBehaviorTests(unittest.IsolatedAsyncioTestCase):
         app = tui_app.WaveBenchTuiApp(
             power_adapter=tui_app.FakePowerPanelAdapter(),
             dmm_adapter=SlowReadAdapter(),
+            source_adapter=FakeSourcePanelAdapter(),
             refresh_interval_s=60.0,
         )
         async with app.run_test() as pilot:
@@ -169,6 +171,7 @@ class TuiDmmBusyBehaviorTests(unittest.IsolatedAsyncioTestCase):
         app = tui_app.WaveBenchTuiApp(
             power_adapter=tui_app.FakePowerPanelAdapter(),
             dmm_adapter=adapter,
+            source_adapter=FakeSourcePanelAdapter(),
             refresh_interval_s=60.0,
         )
         async with app.run_test() as pilot:

@@ -20,6 +20,7 @@ from wavebench.errors import WaveBenchError
 from wavebench.logging import CommandLogger
 from wavebench.tui.dmm import FakeDmmPanelAdapter
 from wavebench.tui.power import FakePowerPanelAdapter, PowerServicePanelAdapter, build_power_panel_state
+from wavebench.tui.source import FakeSourcePanelAdapter
 from wavebench.tui.state import channel_state_from_status, format_output_state
 
 from wavebench.tui import app as tui_app
@@ -358,6 +359,7 @@ class TuiPowerBusyBehaviorTests(unittest.IsolatedAsyncioTestCase):
         app = tui_app.WaveBenchTuiApp(
             power_adapter=SlowReadAdapter(),
             dmm_adapter=FakeDmmPanelAdapter(),
+            source_adapter=FakeSourcePanelAdapter(),
             refresh_interval_s=60.0,
         )
         async with app.run_test() as pilot:
@@ -385,6 +387,7 @@ class TuiPowerBusyBehaviorTests(unittest.IsolatedAsyncioTestCase):
         app = tui_app.WaveBenchTuiApp(
             power_adapter=power,
             dmm_adapter=FakeDmmPanelAdapter(),
+            source_adapter=FakeSourcePanelAdapter(),
             refresh_interval_s=60.0,
         )
         async with app.run_test() as pilot:
@@ -410,6 +413,7 @@ class TuiPowerBusyBehaviorTests(unittest.IsolatedAsyncioTestCase):
         app = tui_app.WaveBenchTuiApp(
             power_adapter=power,
             dmm_adapter=FakeDmmPanelAdapter(),
+            source_adapter=FakeSourcePanelAdapter(),
             refresh_interval_s=60.0,
         )
         async with app.run_test() as pilot:
@@ -438,6 +442,7 @@ class TuiPowerBusyBehaviorTests(unittest.IsolatedAsyncioTestCase):
         app = tui_app.WaveBenchTuiApp(
             power_adapter=power,
             dmm_adapter=FakeDmmPanelAdapter(),
+            source_adapter=FakeSourcePanelAdapter(),
             refresh_interval_s=60.0,
         )
         async with app.run_test() as pilot:
