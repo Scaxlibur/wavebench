@@ -202,6 +202,7 @@ class TuiDmmBusyBehaviorTests(unittest.IsolatedAsyncioTestCase):
         async with app.run_test() as pilot:
             await pilot.pause(0.25)
             self.assertIsInstance(app.query_one("#dmm-func-acv"), Button)
+            self.assertEqual(app.query_one("#dmm-func-acv", Button).label.plain, "交流电压 / ACV")
             app._set_dmm_function("acv")
             await pilot.pause(0.25)
             self.assertEqual(adapter.apply_calls, ["acv"])

@@ -64,20 +64,9 @@ class SourcePanelState:
 
 POWER_TABLE_COLUMNS = (
     "通道 / CH",
-    "输出 / Output",
-    "模式 / Mode",
-    "规格 / Rating",
-    "设定电压 / Set V",
-    "限流 / Limit A",
-    "实测电压 / Meas V",
-    "实测电流 / Meas A",
-    "功率 / Power W",
-    "OVP启用 / OVP",
-    "OVP阈值 / OVP V",
-    "OVP触发 / OVP Trip",
-    "OCP启用 / OCP",
-    "OCP阈值 / OCP A",
-    "OCP触发 / OCP Trip",
+    "行 / Row",
+    "项目 A / Item A",
+    "项目 B / Item B",
 )
 
 SOURCE_TABLE_COLUMNS = (

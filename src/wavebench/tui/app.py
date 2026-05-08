@@ -29,17 +29,17 @@ else:  # pragma: no cover - import branch depends on optional extra
 
 if _TEXTUAL_IMPORT_ERROR is None:
     DMM_FUNCTION_BUTTONS = (
-        ("dcv", "DCV"),
-        ("acv", "ACV"),
-        ("dci", "DCI"),
-        ("aci", "ACI"),
-        ("res", "RES"),
-        ("fres", "FRES"),
-        ("freq", "FREQ"),
-        ("period", "PERIOD"),
-        ("continuity", "CONT"),
-        ("diode", "DIODE"),
-        ("cap", "CAP"),
+        ("dcv", "直流电压 / DCV"),
+        ("acv", "交流电压 / ACV"),
+        ("dci", "直流电流 / DCI"),
+        ("aci", "交流电流 / ACI"),
+        ("res", "电阻 / RES"),
+        ("fres", "四线电阻 / FRES"),
+        ("freq", "频率 / FREQ"),
+        ("period", "周期 / PERIOD"),
+        ("continuity", "通断 / CONT"),
+        ("diode", "二极管 / DIODE"),
+        ("cap", "电容 / CAP"),
     )
 
     class WaveBenchTuiApp(App):
@@ -58,7 +58,7 @@ if _TEXTUAL_IMPORT_ERROR is None:
         }
 
         #power-table {
-            height: 8;
+            height: 11;
         }
 
         .control-row {
@@ -653,21 +653,25 @@ if _TEXTUAL_IMPORT_ERROR is None:
             for channel in state.channels:
                 table.add_row(
                     f"CH{channel.channel}",
-                    channel.output,
-                    channel.mode,
-                    channel.rating,
-                    channel.set_voltage,
-                    channel.set_current,
-                    channel.measured_voltage,
-                    channel.measured_current,
-                    channel.measured_power,
-                    channel.ovp_enabled,
-                    channel.ovp_threshold,
-                    channel.ovp_tripped,
-                    channel.ocp_enabled,
-                    channel.ocp_threshold,
-                    channel.ocp_tripped,
-                    key=str(channel.channel),
+                    "设定 / Set",
+                    f"电压 / V: {channel.set_voltage}",
+                    f"限流 / I: {channel.set_current}",
+                    key=f"{channel.channel}-set",
+                )
+                table.add_row(
+                    "",
+                    "测量 / Meas",
+                    f"电压 / V: {channel.measured_voltage}",
+                    f"电流 / I: {channel.measured_current} | 功率 / P: {channel.measured_power}",
+                    key=f"{channel.channel}-meas",
+                )
+                table.add_row(
+                    "",
+                    "状态 / State",
+                    f"输出 / Out: {channel.output} | 模式 / Mode: {channel.mode}",
+                    f"OVP: {channel.ovp_enabled} {channel.ovp_threshold} {channel.ovp_tripped} | "
+                    f"OCP: {channel.ocp_enabled} {channel.ocp_threshold} {channel.ocp_tripped}",
+                    key=f"{channel.channel}-state",
                 )
             self._power_log_lines = state.log_lines
             self._render_log()

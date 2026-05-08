@@ -21,7 +21,7 @@ from wavebench.logging import CommandLogger
 from wavebench.tui.dmm import FakeDmmPanelAdapter
 from wavebench.tui.power import FakePowerPanelAdapter, PowerServicePanelAdapter, build_power_panel_state
 from wavebench.tui.source import FakeSourcePanelAdapter
-from wavebench.tui.state import channel_state_from_status, format_output_state
+from wavebench.tui.state import POWER_TABLE_COLUMNS, channel_state_from_status, format_output_state
 
 from wavebench.tui import app as tui_app
 
@@ -226,6 +226,12 @@ class TuiPowerTests(unittest.TestCase):
         self.assertEqual(state.output, "开 / ON")
         self.assertEqual(state.set_voltage, "5 V")
         self.assertEqual(state.measured_power, "0.0501 W")
+
+    def test_power_table_uses_compact_columns(self):
+        self.assertEqual(
+            POWER_TABLE_COLUMNS,
+            ("通道 / CH", "行 / Row", "项目 A / Item A", "项目 B / Item B"),
+        )
 
     def test_channel_state_formats_protection_status(self):
         state = channel_state_from_status(
