@@ -3,6 +3,7 @@ from __future__ import annotations
 import unittest
 from pathlib import Path
 import time
+from unittest.mock import patch
 
 from wavebench.config import (
     AutoscaleConfig,
@@ -146,6 +147,76 @@ class TuiDmmTests(unittest.TestCase):
         self.assertEqual(state.function, "dcv")
         self.assertEqual(service.read_calls, ["dcv"])
 
+    def test_service_adapter_repeated_function_click_skips_set_command(self):
+        class RecordingService:
+            config = make_config()
+            logger = type("Logger", (), {"entries": []})()
+
+            def __init__(self):
+                self.set_calls: list[str] = []
+                self.read_calls: list[str] = []
+
+            def idn(self):
+                return "RIGOL,DM3058,SN,FW"
+
+            def function_status(self):
+                return "dcv"
+
+            def set_function(self, function: str):
+                self.set_calls.append(function)
+                return function
+
+            def read(self, function: str = "dcv"):
+                self.read_calls.append(function)
+                return DmmReading(function=function, value=1.0, unit="V", raw="1.0")
+
+        service = RecordingService()
+        adapter = DmmServicePanelAdapter(service=service)  # type: ignore[arg-type]
+        state = adapter.set_function("dcv")
+        self.assertEqual(state.function, "dcv")
+        self.assertEqual(service.set_calls, [])
+        self.assertEqual(service.read_calls, ["dcv"])
+
+    def test_service_adapter_waits_after_function_change_before_read(self):
+        class RecordingService:
+            logger = type("Logger", (), {"entries": []})()
+
+            def __init__(self):
+                self.config = make_config()
+                object.__setattr__(self.config, "dmm", DmmConfig(
+                    driver="dm3000",
+                    resource="/dev/ttyUSB0",
+                    backend="serial",
+                    baudrate=9600,
+                    bytesize=8,
+                    parity="N",
+                    stopbits=1,
+                    timeout_ms=1000,
+                    settle_ms_before_read=0,
+                    settle_ms_after_function_change=500,
+                ))
+                self.events: list[str] = []
+
+            def idn(self):
+                return "RIGOL,DM3058,SN,FW"
+
+            def function_status(self):
+                return "dcv"
+
+            def set_function(self, function: str):
+                self.events.append(f"set:{function}")
+                return function
+
+            def read(self, function: str = "dcv"):
+                self.events.append(f"read:{function}")
+                return DmmReading(function=function, value=1.0, unit="V", raw="1.0")
+
+        service = RecordingService()
+        adapter = DmmServicePanelAdapter(service=service)  # type: ignore[arg-type]
+        with patch("wavebench.tui.dmm.time.sleep", side_effect=lambda seconds: service.events.append(f"sleep:{seconds}")):
+            adapter.set_function("acv")
+        self.assertEqual(service.events, ["set:acv", "sleep:0.5", "read:acv"])
+
     def test_power_resource_override_preserves_dmm_config(self):
         config = make_config().with_power_resource("TCPIP::new-power::INSTR")
         self.assertIsNotNone(config.dmm)
@@ -230,6 +301,24 @@ class TuiDmmBusyBehaviorTests(unittest.IsolatedAsyncioTestCase):
             app._set_dmm_function("acv")
             await pilot.pause(0.25)
             self.assertEqual(adapter.apply_calls, ["acv"])
+
+    async def test_dmm_readout_highlights_function_and_value(self):
+        app = tui_app.WaveBenchTuiApp(
+            power_adapter=tui_app.FakePowerPanelAdapter(),
+            dmm_adapter=FakeDmmPanelAdapter(),
+            source_adapter=FakeSourcePanelAdapter(),
+            refresh_interval_s=60.0,
+        )
+        async with app.run_test() as pilot:
+            await pilot.pause(0.25)
+            state = FakeDmmPanelAdapter().read("acv")
+            app._render_dmm_state(state)
+            text = tui_app._dmm_readout_text(state)
+            self.assertIn("功能 / Function", text.plain)
+            self.assertIn("读数 / Reading", text.plain)
+            styles = [str(span.style) for span in text.spans]
+            self.assertTrue(any("on #1f3a5f" in style for style in styles))
+            self.assertTrue(any("on #9adf9a" in style for style in styles))
 
 
 if __name__ == "__main__":

@@ -93,6 +93,7 @@ class DmmConfig:
     stopbits: float
     timeout_ms: int
     settle_ms_before_read: int = 0
+    settle_ms_after_function_change: int = 500
 
 @dataclass(frozen=True)
 class OutputConfig:
@@ -327,6 +328,7 @@ class WaveBenchConfig:
             stopbits=1,
             timeout_ms=1000,
             settle_ms_before_read=0,
+            settle_ms_after_function_change=500,
         )
         is_tcpip = resource.upper().startswith("TCPIP")
         return WaveBenchConfig(
@@ -348,6 +350,7 @@ class WaveBenchConfig:
                 stopbits=dmm.stopbits,
                 timeout_ms=dmm.timeout_ms,
                 settle_ms_before_read=dmm.settle_ms_before_read,
+                settle_ms_after_function_change=dmm.settle_ms_after_function_change,
             ),
             quality=self.quality,
             safety_limits=self.safety_limits,
@@ -407,6 +410,9 @@ def load_config(path: str | Path = "wavebench.toml") -> WaveBenchConfig:
                 stopbits=float(dmm_raw.get("stopbits", 1)),
                 timeout_ms=int(dmm_raw.get("timeout_ms", 1000)),
                 settle_ms_before_read=int(dmm_raw.get("settle_ms_before_read", 0)),
+                settle_ms_after_function_change=int(
+                    dmm_raw.get("settle_ms_after_function_change", 500)
+                ),
             )
         config = WaveBenchConfig(
             connection=ConnectionConfig(
@@ -530,6 +536,8 @@ def load_config(path: str | Path = "wavebench.toml") -> WaveBenchConfig:
             raise ConfigError("dmm.timeout_ms must be > 0")
         if config.dmm.settle_ms_before_read < 0:
             raise ConfigError("dmm.settle_ms_before_read must be >= 0")
+        if config.dmm.settle_ms_after_function_change < 0:
+            raise ConfigError("dmm.settle_ms_after_function_change must be >= 0")
     if config.power is not None:
         if config.power.driver.lower() != "dp800":
             raise ConfigError("power.driver must be 'dp800'")

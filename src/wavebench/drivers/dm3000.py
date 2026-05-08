@@ -60,17 +60,22 @@ DMM_FUNCTION_SET_COMMANDS = {
 }
 
 DMM_FUNCTION_QUERY_MAP = {
+    # DM3000 manuals document long return symbols for :FUNCtion?, while DM3058
+    # firmware can return the shorter scan/function symbols observed on LAN.
     "DCV": "dcv",
     "ACV": "acv",
     "DCI": "dci",
     "ACI": "aci",
     "RESISTANCE": "res",
+    "RES": "res",
     "2WR": "res",
     "FRESISTANCE": "fres",
+    "FRES": "fres",
     "4WR": "fres",
     "FREQUENCY": "freq",
     "FREQ": "freq",
     "PERIOD": "period",
+    "PERI": "period",
     "CONTINUITY": "continuity",
     "CONT": "continuity",
     "DIODE": "diode",

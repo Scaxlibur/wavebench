@@ -78,10 +78,13 @@ class DM3000DriverTests(unittest.TestCase):
 
     def test_function_status_accepts_dm3058_abbreviations(self):
         cases = {
+            "RES": "res",
             "CONT": "continuity",
             "FREQ": "freq",
+            "PERI": "period",
             "CAP": "cap",
             "2WR": "res",
+            "FRES": "fres",
             "4WR": "fres",
         }
         for raw, expected in cases.items():

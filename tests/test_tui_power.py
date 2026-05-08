@@ -237,6 +237,16 @@ class TuiPowerTests(unittest.TestCase):
             ("通道 / CH", "行 / Row", "项目 A / Item A", "项目 B / Item B"),
         )
 
+    @unittest.skipIf(tui_app._TEXTUAL_IMPORT_ERROR is not None, "Textual extra is not installed")
+    def test_power_state_cell_highlights_output_on_and_cc_mode(self):
+        cell = tui_app._power_state_cell(1, "开 / ON", "CC")
+        plain = cell.plain
+        self.assertIn("开 / ON", plain)
+        self.assertIn("CC", plain)
+        styles = [span.style for span in cell.spans]
+        self.assertTrue(any("green" in str(style) for style in styles))
+        self.assertTrue(any("blink" in str(style) for style in styles))
+
     def test_channel_state_formats_protection_status(self):
         state = channel_state_from_status(
             make_status(channel=1),
@@ -284,16 +294,32 @@ class TuiPowerTests(unittest.TestCase):
         self.assertEqual(state.channels[0].ovp_threshold, "6 V")
         self.assertTrue(any("Protection refresh" in line for line in state.log_lines))
 
-    def test_measurement_refresh_preserves_cached_static_fields(self):
+    def test_measurement_refresh_updates_mode_and_protection(self):
         service = FakePowerService()
         adapter = PowerServicePanelAdapter(service=service, channels=(1,))
         adapter.refresh()
+        service.statuses[1] = make_status(channel=1, output="ON", voltage=3.3, current=0.2)
+        service.statuses[1] = PowerStatus(
+            channel=1,
+            output="ON",
+            mode="CC",
+            rating="30V/3A",
+            set_voltage_v=3.3,
+            set_current_a=0.2,
+            measured_voltage_v=0.0,
+            measured_current_a=0.0,
+            measured_power_w=0.0,
+        )
+        service.protections[1] = make_protection(channel=1, ovp_tripped="YES", ocp_threshold=0.25)
         state = adapter.refresh_measurements()
-        self.assertEqual(service.status_calls, [1])
-        self.assertEqual(service.protection_calls, [1])
+        self.assertEqual(service.status_calls, [1, 1])
+        self.assertEqual(service.protection_calls, [1, 1])
         self.assertEqual(service.measurement_calls, [1])
-        self.assertEqual(state.channels[0].output, "关 / OFF")
+        self.assertEqual(state.channels[0].output, "开 / ON")
+        self.assertEqual(state.channels[0].mode, "CC")
         self.assertEqual(state.channels[0].set_voltage, "3.3 V")
+        self.assertEqual(state.channels[0].ovp_tripped, "已触发 / YES")
+        self.assertEqual(state.channels[0].ocp_threshold, "0.25 A")
         self.assertEqual(state.channels[0].measured_voltage, "3.31 V")
 
     def test_measurement_refresh_failure_forces_next_full_refresh(self):
@@ -301,11 +327,11 @@ class TuiPowerTests(unittest.TestCase):
         adapter = PowerServicePanelAdapter(service=service, channels=(1,))
         adapter.refresh()
         service.fail_measurement = True
-        with self.assertRaisesRegex(WaveBenchError, "测量刷新失败.*Measurement refresh failed"):
+        with self.assertRaisesRegex(WaveBenchError, "实时状态刷新失败.*Live status refresh failed"):
             adapter.refresh_measurements()
         service.fail_measurement = False
         adapter.refresh_measurements()
-        self.assertEqual(service.status_calls, [1, 1])
+        self.assertEqual(service.status_calls, [1, 1, 1])
 
     def test_manual_protection_refresh_does_not_read_measurements(self):
         service = FakePowerService()
@@ -323,8 +349,9 @@ class TuiPowerTests(unittest.TestCase):
         adapter = PowerServicePanelAdapter(service=service, channels=(1,))
         adapter.refresh()
         state = adapter.set_voltage_current_limit(channel=1, voltage_v=4.2, current_limit_a=0.3)
-        self.assertEqual(service.status_calls, [1])
+        self.assertEqual(service.status_calls, [1, 1])
         self.assertEqual(service.measurement_calls, [1])
+        self.assertEqual(service.protection_calls, [1, 1])
         self.assertEqual(state.channels[0].set_voltage, "4.2 V")
         self.assertEqual(state.channels[0].set_current, "0.3 A")
         self.assertEqual(state.channels[0].measured_power, "0.0331 W")
@@ -344,8 +371,8 @@ class TuiPowerTests(unittest.TestCase):
             ocp_enabled=None,
         )
         self.assertEqual(service.protection_set_calls, [(1, 5.5, True, 0.4, None)])
-        self.assertEqual(service.status_calls, [1])
-        self.assertEqual(service.protection_calls, [1])
+        self.assertEqual(service.status_calls, [1, 1])
+        self.assertEqual(service.protection_calls, [1, 1])
         self.assertEqual(service.measurement_calls, [1])
         self.assertEqual(state.channels[0].ovp_threshold, "5.5 V")
         self.assertEqual(state.channels[0].ocp_threshold, "0.4 A")

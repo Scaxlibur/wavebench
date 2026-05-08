@@ -344,12 +344,14 @@ backend = "lan"
 resource = "TCPIP::192.168.123.5::INSTR"
 timeout_ms = 3000
 settle_ms_before_read = 250
+settle_ms_after_function_change = 750
 ''', encoding="utf-8")
             config = load_config(path)
             self.assertEqual(config.dmm.driver, "dm3058")
             self.assertEqual(config.dmm.backend, "lan")
             self.assertEqual(config.dmm.resource, "TCPIP::192.168.123.5::INSTR")
             self.assertEqual(config.dmm.settle_ms_before_read, 250)
+            self.assertEqual(config.dmm.settle_ms_after_function_change, 750)
 
     def test_rejects_negative_dmm_read_settle_delay(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -365,6 +367,22 @@ resource = "TCPIP::192.168.123.5::INSTR"
 settle_ms_before_read = -1
 ''', encoding="utf-8")
             with self.assertRaisesRegex(Exception, "dmm.settle_ms_before_read"):
+                load_config(path)
+
+    def test_rejects_negative_dmm_function_change_settle_delay(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "wavebench.toml"
+            path.write_text('''
+[connection]
+resource = "TCPIP::scope::INSTR"
+[scope]
+[dmm]
+driver = "dm3058"
+backend = "lan"
+resource = "TCPIP::192.168.123.5::INSTR"
+settle_ms_after_function_change = -1
+''', encoding="utf-8")
+            with self.assertRaisesRegex(Exception, "dmm.settle_ms_after_function_change"):
                 load_config(path)
 
     def test_dmm_resource_override_infers_lan_for_tcpip(self):
@@ -394,7 +412,7 @@ settle_ms_before_read = -1
         self.assertEqual(updated.dmm.driver, "dm3058")
         self.assertEqual(updated.dmm.backend, "lan")
 
-    def test_dmm_resource_override_preserves_read_settle_delay(self):
+    def test_dmm_resource_override_preserves_settle_delays(self):
         config = WaveBenchConfig(
             connection=ConnectionConfig("lan", "TCPIP::127.0.0.1::INSTR", 100, 100),
             scope=ScopeConfig("rtm2032", None, 1, False, True),
@@ -402,7 +420,8 @@ settle_ms_before_read = -1
             waveform=WaveformConfig("real", "lsbf", "dmax"),
             output=OutputConfig(Path("data/raw"), "timestamp_label", True, True, True, True, False),
             source_path=Path("test.toml"),
-            dmm=DmmConfig("dm3058", "TCPIP::old::INSTR", "lan", 9600, 8, "N", 1, 1000, 500),
+            dmm=DmmConfig("dm3058", "TCPIP::old::INSTR", "lan", 9600, 8, "N", 1, 1000, 500, 750),
         )
         updated = config.with_dmm_resource("TCPIP::192.168.123.5::INSTR")
         self.assertEqual(updated.dmm.settle_ms_before_read, 500)
+        self.assertEqual(updated.dmm.settle_ms_after_function_change, 750)

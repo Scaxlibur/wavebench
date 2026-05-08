@@ -173,3 +173,7 @@ timeout_ms = 3000
 # Optional DMM stabilization wait before each reading. Set 0 for no wait.
 # 每次万用表读数前的可选稳定等待时间。设为 0 表示不等待。
 settle_ms_before_read = 0
+
+# Extra wait after changing DMM function before the first read.
+# 切换万用表功能后、第一次读数前的额外等待时间。
+settle_ms_after_function_change = 500

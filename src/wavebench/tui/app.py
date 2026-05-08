@@ -23,6 +23,7 @@ try:
     from textual.containers import Horizontal, Vertical, VerticalScroll
     from textual.worker import Worker, WorkerState
     from textual.widgets import Button, DataTable, Footer, Header, Input, RichLog, Static
+    from rich.text import Text
 except ModuleNotFoundError as exc:  # pragma: no cover - exercised by CLI smoke without extra
     _TEXTUAL_IMPORT_ERROR = exc
 else:  # pragma: no cover - import branch depends on optional extra
@@ -31,6 +32,11 @@ else:  # pragma: no cover - import branch depends on optional extra
 
 if _TEXTUAL_IMPORT_ERROR is None:
     DEFAULT_TUI_LOG_PATH = Path("data/tui/wavebench-tui.log")
+    POWER_CHANNEL_STYLES = {
+        1: "white on #1f2a44",
+        2: "white on #1f3a2e",
+        3: "white on #4a2f1b",
+    }
 
     DMM_FUNCTION_BUTTONS = (
         ("dcv", "直流电压 / DCV"),
@@ -45,6 +51,32 @@ if _TEXTUAL_IMPORT_ERROR is None:
         ("diode", "二极管 / DIODE"),
         ("cap", "电容 / CAP"),
     )
+
+    def _power_row_style(channel: int) -> str:
+        return POWER_CHANNEL_STYLES.get(channel, "white on #2f2f2f")
+
+    def _power_cell(channel: int, value: str) -> Text:
+        return Text(value, style=_power_row_style(channel))
+
+    def _power_state_cell(channel: int, output: str, mode: str) -> Text:
+        base_style = _power_row_style(channel)
+        text = Text("输出 / Out: ", style=base_style)
+        output_style = f"{base_style} bold green" if "开 / ON" in output else base_style
+        text.append(output, style=output_style)
+        text.append(" | 模式 / Mode: ", style=base_style)
+        mode_style = f"{base_style} bold red blink" if mode.strip().upper() == "CC" else base_style
+        text.append(mode, style=mode_style)
+        return text
+
+    def _dmm_readout_text(state: DmmPanelState) -> Text:
+        text = Text()
+        text.append("功能 / Function: ", style="white")
+        text.append(f"{state.function}", style="bold white on #1f3a5f")
+        text.append("  读数 / Reading: ", style="white")
+        text.append(f"{state.value} {state.unit}", style="bold black on #9adf9a")
+        text.append("  原始 / Raw: ", style="dim")
+        text.append(state.raw_reading, style="dim")
+        return text
 
     class WaveBenchTuiApp(App):
         CSS = """
@@ -697,25 +729,31 @@ if _TEXTUAL_IMPORT_ERROR is None:
             table.clear()
             for channel in state.channels:
                 table.add_row(
-                    f"CH{channel.channel}",
-                    "设定 / Set",
-                    f"电压 / V: {channel.set_voltage}",
-                    f"限流 / I: {channel.set_current}",
+                    _power_cell(channel.channel, f"CH{channel.channel}"),
+                    _power_cell(channel.channel, "设定 / Set"),
+                    _power_cell(channel.channel, f"电压 / V: {channel.set_voltage}"),
+                    _power_cell(channel.channel, f"限流 / I: {channel.set_current}"),
                     key=f"{channel.channel}-set",
                 )
                 table.add_row(
-                    "",
-                    "测量 / Meas",
-                    f"电压 / V: {channel.measured_voltage}",
-                    f"电流 / I: {channel.measured_current} | 功率 / P: {channel.measured_power}",
+                    _power_cell(channel.channel, ""),
+                    _power_cell(channel.channel, "测量 / Meas"),
+                    _power_cell(channel.channel, f"电压 / V: {channel.measured_voltage}"),
+                    _power_cell(
+                        channel.channel,
+                        f"电流 / I: {channel.measured_current} | 功率 / P: {channel.measured_power}",
+                    ),
                     key=f"{channel.channel}-meas",
                 )
                 table.add_row(
-                    "",
-                    "状态 / State",
-                    f"输出 / Out: {channel.output} | 模式 / Mode: {channel.mode}",
-                    f"OVP: {channel.ovp_enabled} {channel.ovp_threshold} {channel.ovp_tripped} | "
-                    f"OCP: {channel.ocp_enabled} {channel.ocp_threshold} {channel.ocp_tripped}",
+                    _power_cell(channel.channel, ""),
+                    _power_cell(channel.channel, "状态 / State"),
+                    _power_state_cell(channel.channel, channel.output, channel.mode),
+                    _power_cell(
+                        channel.channel,
+                        f"OVP: {channel.ovp_enabled} {channel.ovp_threshold} {channel.ovp_tripped} | "
+                        f"OCP: {channel.ocp_enabled} {channel.ocp_threshold} {channel.ocp_tripped}",
+                    ),
                     key=f"{channel.channel}-state",
                 )
             self._power_log_lines = state.log_lines
@@ -732,11 +770,7 @@ if _TEXTUAL_IMPORT_ERROR is None:
                 f"{state.instrument_status}"
             )
             readout = self.query_one("#dmm-readout", Static)
-            readout.update(
-                f"功能 / Function: {state.function} | "
-                f"读数 / Reading: {state.value} {state.unit} | "
-                f"原始 / Raw: {state.raw_reading}"
-            )
+            readout.update(_dmm_readout_text(state))
             self._dmm_log_lines = state.log_lines
             self._append_persistent_log_lines(state.log_lines)
             self._render_log()

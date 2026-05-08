@@ -76,12 +76,14 @@ class PowerServicePanelAdapter:
             return self.refresh()
         try:
             for channel in self.channels:
+                self._merge_status(self.service.status(channel=channel))
                 self._merge_measurement(self.service.measurement(channel=channel))
+                self._protections[channel] = self.service.protection_status(channel=channel)
         except Exception as exc:
             self._needs_full_refresh = True
             raise WaveBenchError(
-                "测量刷新失败，下次将执行完整刷新 / "
-                f"Measurement refresh failed; next refresh will run full refresh: {exc}"
+                "实时状态刷新失败，下次将执行完整刷新 / "
+                f"Live status refresh failed; next refresh will run full refresh: {exc}"
             ) from exc
         return self._build_state(statuses=[self._statuses[channel] for channel in self.channels])
 
@@ -203,7 +205,7 @@ class FakePowerPanelAdapter:
         )
 
     def refresh_measurements(self) -> PowerPanelState:
-        self.log_lines.append("测量刷新 / Measurement refresh fake DP832A snapshot")
+        self.log_lines.append("实时状态刷新 / Live status refresh fake DP832A snapshot")
         for channel, old in self.statuses.items():
             voltage = old.set_voltage_v if old.output == "ON" else 0.0
             measurement = PowerMeasurement(

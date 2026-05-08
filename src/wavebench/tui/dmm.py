@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
+import time
 from typing import Protocol
 
 from wavebench.config import WaveBenchConfig, load_config
@@ -58,8 +59,14 @@ class DmmServicePanelAdapter:
     def set_function(self, function: str) -> DmmPanelState:
         if self._instrument_id is None:
             self._instrument_id = self.service.idn()
+        requested_function = normalize_dmm_function(function) or "dcv"
+        if requested_function == self._active_function:
+            return self.read(function=requested_function)
         applied_function = self.service.set_function(function=function)
         self._active_function = applied_function
+        settle_s = self.service.config.dmm.settle_ms_after_function_change / 1000.0
+        if settle_s > 0:
+            time.sleep(settle_s)
         reading = self.service.read(function=applied_function)
         return build_dmm_panel_state(
             config=self.service.config,
