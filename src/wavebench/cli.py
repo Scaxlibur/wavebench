@@ -19,6 +19,13 @@ from .drivers.rtm2032 import WaveformData
 from .errors import ConfigError, WaveBenchError
 from .arbitrary import load_arbitrary_waveform, validate_waveform_name, write_arbitrary_payload_json, write_dg4000_dac14_binary_block
 from .logging import CommandLogger
+from .mcp_http import (
+    DEFAULT_MCP_HOST,
+    DEFAULT_MCP_PORT,
+    DEFAULT_MCP_TOKEN_ENV,
+    resolve_mcp_token,
+    serve_mcp_http,
+)
 from .services.scope_service import ScopeService
 from .services.source_service import SourceService
 from .services.power_service import PowerService
@@ -44,6 +51,7 @@ def build_parser() -> argparse.ArgumentParser:
     sweep_parser = subparsers.add_parser("sweep", help="Source/scope sweep commands")
     run_parser = subparsers.add_parser("run", help="Multi-instrument run plan commands")
     capture_parser = subparsers.add_parser("capture", help="Offline capture package commands")
+    mcp_parser = subparsers.add_parser("mcp", help="HTTP MCP server / HTTP MCP 服务")
     tui_parser = subparsers.add_parser("tui", help="Launch terminal UI / 启动终端界面")
     tui_parser.add_argument("--config", default="wavebench.toml", help="Path to wavebench TOML config")
     tui_parser.add_argument("--resource", help="Override power VISA resource / 覆盖电源 VISA 资源")
@@ -95,6 +103,37 @@ def build_parser() -> argparse.ArgumentParser:
     capture_inspect.add_argument("--fft-expect-frequency", type=float, default=None, help="Expected FFT peak frequency in Hz")
     capture_inspect.add_argument("--fft-frequency-tolerance", type=float, default=0.05, help="Relative tolerance for --fft-expect-frequency")
 
+    mcp_sub = mcp_parser.add_subparsers(dest="command", required=True)
+    mcp_serve = mcp_sub.add_parser(
+        "serve",
+        help="Serve read-only HTTP MCP tools / 启动只读 HTTP MCP 工具服务",
+    )
+    mcp_serve.add_argument(
+        "--host",
+        default=DEFAULT_MCP_HOST,
+        help="Bind host, defaults to 127.0.0.1 / 监听地址，默认 127.0.0.1",
+    )
+    mcp_serve.add_argument(
+        "--port",
+        type=int,
+        default=DEFAULT_MCP_PORT,
+        help="Bind port / 监听端口",
+    )
+    mcp_serve.add_argument(
+        "--token",
+        default=None,
+        help="Bearer token for HTTP MCP auth / HTTP MCP Bearer 认证 token",
+    )
+    mcp_serve.add_argument(
+        "--token-env",
+        default=DEFAULT_MCP_TOKEN_ENV,
+        help="Environment variable containing the bearer token / 保存 Bearer token 的环境变量",
+    )
+    mcp_serve.add_argument(
+        "--config",
+        default="wavebench.toml",
+        help="Path to wavebench TOML config for read-only checks / 只读检查使用的 wavebench TOML 配置",
+    )
 
     dmm_sub = dmm_parser.add_subparsers(dest="command", required=True)
     dmm_idn = dmm_sub.add_parser("idn", help="Query DMM *IDN? over configured backend")
@@ -645,7 +684,17 @@ def main(argv: list[str] | None = None) -> int:
                         max_harmonic_order=args.harmonics,
                         expected_frequency_hz=args.fft_expect_frequency,
                         frequency_tolerance_ratio=args.fft_frequency_tolerance,
-                    )
+                )
+                return 0
+        if args.domain == "mcp":
+            if args.command == "serve":
+                token = resolve_mcp_token(args.token, args.token_env)
+                serve_mcp_http(
+                    host=args.host,
+                    port=args.port,
+                    token=token,
+                    config_path=args.config,
+                )
                 return 0
         if args.domain == "run":
             if args.command == "report":
