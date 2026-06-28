@@ -19,6 +19,8 @@ python -m wavebench mcp serve --config wavebench.toml --token-env WAVEBENCH_MCP_
 - `GET /tools`：返回当前只读工具列表，需要 Bearer token。
 - `POST /call`：调用只读工具，需要 Bearer token，请求体为 JSON 对象。
 
+`/mcp` 和 `/call` 的 JSON 请求体上限为 1 MiB。
+
 `/call` 请求体格式：
 
 ```json
@@ -47,8 +49,8 @@ MCP notification 请求没有 `id` 时返回空响应；普通请求返回 JSON-
 ## Tools
 
 - `run.schema`：返回 run plan schema 文本和结构化 schema 行。
-- `run.check`：参数 `{"plan": "<plan.toml>"}`，只解析并检查 run plan，不连接仪器。
-- `capture.inspect`：参数 `{"path": "<capture_dir>"}`，读取离线采集包摘要。
+- `run.check`：参数 `{"plan": "plans/<name>.toml"}`，只解析并检查 `plans/*.toml` 下的 run plan，不连接仪器。
+- `capture.inspect`：参数 `{"path": "data/raw/<capture_dir>"}`，读取 `data/raw/` 下的离线采集包摘要。
 
 ## 安全边界
 
@@ -59,4 +61,6 @@ MCP notification 请求没有 `id` 时返回空响应；普通请求返回 JSON-
 - 不提供 raw SCPI。
 - 不提供 power/source output on/off。
 - 不提供 run 执行工具。
-- HTTP 路径参数会拒绝明显敏感的 key、secret、token、password、pem、SSH、AWS、GitHub 配置路径。
+- `run.check` 只允许项目内 `plans/*.toml`。
+- `capture.inspect` 只允许项目内 `data/raw/` 离线采集包。
+- `/mcp` 和 `/call` 的 JSON 请求体有 1 MiB 上限。
