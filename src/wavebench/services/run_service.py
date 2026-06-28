@@ -20,6 +20,7 @@ from wavebench.services.run_analysis import (
     step_status,
 )
 from wavebench.services.run_plan import RunPlan, RunStep
+from wavebench.services.run_restore import restore_source_state, snapshot_source_state
 from wavebench.services.run_safety import (
     check_run_plan_safety_limits,
     plan_scope_guard_channels,
@@ -134,13 +135,15 @@ class RunService:
         restore_state: list[RestorableSourceState] | None = None
         restore_error: dict[str, str] | None = None
         try:
-            restore_state = self._snapshot_source_state(plan)
+            restore_state = snapshot_source_state(plan, source_service_factory=self._source_service)
             for step in plan.steps:
                 record = self._run_step(plan, step)
                 records.append(record)
                 write_step_record(steps_dir, record)
         except Exception as exc:
-            restore_error = self._restore_source_state(restore_state)
+            restore_error = restore_source_state(
+                restore_state, source_service_factory=self._source_service
+            )
             write_run_files(
                 plan=plan,
                 run_json_path=run_json_path,
@@ -155,7 +158,9 @@ class RunService:
                 raise
             raise
 
-        restore_error = self._restore_source_state(restore_state)
+        restore_error = restore_source_state(
+            restore_state, source_service_factory=self._source_service
+        )
         if restore_error is not None:
             write_run_files(
                 plan=plan,
@@ -376,35 +381,6 @@ class RunService:
 
     def _scope_service(self) -> ScopeService:
         return ScopeService(config=self.config, logger=CommandLogger())
-
-    def _snapshot_source_state(self, plan: RunPlan) -> list[RestorableSourceState] | None:
-        if not plan.restore.source_state:
-            return None
-        service = self._source_service()
-        channels = plan.restore.source_channels or (None,)
-        return [service.snapshot_restorable_state(channel=channel) for channel in channels]
-
-    def _restore_source_state(
-        self, states: list[RestorableSourceState] | None
-    ) -> dict[str, Any] | None:
-        if not states:
-            return None
-        errors: list[dict[str, str | int | None]] = []
-        service = self._source_service()
-        for state in states:
-            try:
-                service.restore_restorable_state(state)
-            except Exception as exc:  # pragma: no cover - defensive, covered through mocks
-                errors.append(
-                    {"channel": state.channel, "type": type(exc).__name__, "message": str(exc)}
-                )
-        if errors:
-            return {
-                "type": "RestoreError",
-                "message": "source state restore failed",
-                "errors": errors,
-            }
-        return None
 
     def _scope_service_for_capture(self, plan: RunPlan, step: RunStep) -> ScopeService:
         config = self.config
