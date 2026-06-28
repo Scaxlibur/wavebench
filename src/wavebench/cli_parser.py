@@ -1,0 +1,317 @@
+from __future__ import annotations
+
+import argparse
+
+from .discovery import DEFAULT_DISCOVERY_PORTS
+from .mcp_http import DEFAULT_MCP_HOST, DEFAULT_MCP_PORT, DEFAULT_MCP_TOKEN_ENV
+
+
+def add_runtime_options(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--config", default="wavebench.toml", help="Path to wavebench TOML config")
+    parser.add_argument("--resource", help="Override VISA resource, e.g. TCPIP::192.168.1.100::INSTR")
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="wavebench")
+    subparsers = parser.add_subparsers(dest="domain", required=True)
+
+    scope_parser = subparsers.add_parser("scope", help="Oscilloscope commands")
+    source_parser = subparsers.add_parser("source", help="Signal generator commands")
+    power_parser = subparsers.add_parser("power", help="Power supply commands")
+    dmm_parser = subparsers.add_parser("dmm", help="Digital multimeter commands")
+    sweep_parser = subparsers.add_parser("sweep", help="Source/scope sweep commands")
+    run_parser = subparsers.add_parser("run", help="Multi-instrument run plan commands")
+    capture_parser = subparsers.add_parser("capture", help="Offline capture package commands")
+    mcp_parser = subparsers.add_parser("mcp", help="HTTP MCP server / HTTP MCP 服务")
+    tui_parser = subparsers.add_parser("tui", help="Launch terminal UI / 启动终端界面")
+    net_parser = subparsers.add_parser("net", help="Network discovery helpers / 网络发现工具")
+    tui_parser.add_argument("--config", default="wavebench.toml", help="Path to wavebench TOML config")
+    tui_parser.add_argument("--resource", help="Override power VISA resource / 覆盖电源 VISA 资源")
+    tui_parser.add_argument(
+        "--fake",
+        action="store_true",
+        help="Use fake power, DMM, and source snapshots / 使用模拟电源、万用表和信号源快照",
+    )
+    tui_parser.add_argument(
+        "--refresh-interval",
+        type=float,
+        default=5.0,
+        help="Refresh interval in seconds / 刷新间隔（秒）",
+    )
+    tui_parser.add_argument(
+        "--log-file",
+        default="data/tui/wavebench-tui.log",
+        help="Persist TUI debug log to this file / TUI 调试日志文件",
+    )
+
+    net_sub = net_parser.add_subparsers(dest="command", required=True)
+    net_discover = net_sub.add_parser(
+        "discover",
+        help="Read-only scan for LAN SCPI/VISA instruments / 只读扫描局域网 SCPI/VISA 仪器",
+    )
+    net_discover.add_argument("--subnet", required=True, help="Subnet to scan, e.g. 192.168.1.0/24")
+    net_discover.add_argument(
+        "--ports",
+        default=",".join(str(port) for port in DEFAULT_DISCOVERY_PORTS),
+        help="Comma-separated TCP ports to probe / 要探测的 TCP 端口",
+    )
+    net_discover.add_argument(
+        "--timeout-ms",
+        type=int,
+        default=300,
+        help="Per-connection timeout in milliseconds / 每次连接超时毫秒数",
+    )
+    net_discover.add_argument("--workers", type=int, default=64, help="Concurrent probe workers / 并发探测数")
+    net_discover.add_argument(
+        "--max-hosts",
+        type=int,
+        default=256,
+        help="Maximum hosts allowed in one scan / 单次扫描允许的最大主机数",
+    )
+    net_discover.add_argument(
+        "--no-idn",
+        action="store_true",
+        help="Only test open ports; do not send read-only *IDN? / 只测端口，不发送只读 *IDN?",
+    )
+    net_discover.add_argument(
+        "--idn-only",
+        action="store_true",
+        help="Only show devices that answered *IDN? / 只显示响应 *IDN? 的设备",
+    )
+    net_discover.add_argument(
+        "--no-visa",
+        action="store_true",
+        help="Skip PyVISA resource-manager discovery / 跳过 PyVISA 资源枚举",
+    )
+
+    run_sub = run_parser.add_subparsers(dest="command", required=True)
+    run_check = run_sub.add_parser(
+        "check", help="Parse and validate a run plan without connecting to instruments"
+    )
+    run_check.add_argument("--plan", required=True, help="Path to a WaveBench run plan TOML file")
+    add_runtime_options(run_check)
+    run_verify = run_sub.add_parser(
+        "verify",
+        help="Verify / 预检 instruments referenced by a run plan with read-only *IDN? queries",
+    )
+    run_verify.add_argument("--plan", required=True, help="Path to a WaveBench run plan TOML file")
+    add_runtime_options(run_verify)
+    run_sub.add_parser("schema", help="Print supported run plan step kinds and fields")
+    run_plan = run_sub.add_parser("plan", help="Execute a WaveBench run plan")
+    run_plan.add_argument("--plan", required=True, help="Path to a WaveBench run plan TOML file")
+    add_runtime_options(run_plan)
+    run_report = run_sub.add_parser("report", help="Generate an offline HTML report for a run package")
+    run_report.add_argument("path", help="Path to data/runs/<run_dir>")
+    run_report.add_argument("--output", default=None, help="Output HTML path; defaults to <run_dir>/report.html")
+    run_report_index = run_sub.add_parser("report-index", help="Generate manifest JSON/CSV for multiple run directories")
+    run_report_index.add_argument("paths", nargs="+", help="Paths to data/runs/<run_dir>")
+    run_report_index.add_argument("--output", required=True, help="Output directory for manifest.json and manifest.csv")
+
+    capture_sub = capture_parser.add_subparsers(dest="command", required=True)
+    capture_inspect = capture_sub.add_parser("inspect", help="Inspect an offline capture package")
+    capture_inspect.add_argument("path", help="Path to data/raw/<capture_dir>")
+    capture_inspect.add_argument("--fft", action="store_true", help="Print offline FFT spectrum summary for saved NPY waveforms")
+    capture_inspect.add_argument("--harmonics", type=int, default=5, help="Highest harmonic order to report with --fft")
+    capture_inspect.add_argument("--fft-expect-frequency", type=float, default=None, help="Expected FFT peak frequency in Hz")
+    capture_inspect.add_argument("--fft-frequency-tolerance", type=float, default=0.05, help="Relative tolerance for --fft-expect-frequency")
+
+    mcp_sub = mcp_parser.add_subparsers(dest="command", required=True)
+    mcp_serve = mcp_sub.add_parser(
+        "serve",
+        help="Serve read-only HTTP MCP tools / 启动只读 HTTP MCP 工具服务",
+    )
+    mcp_serve.add_argument(
+        "--host",
+        default=DEFAULT_MCP_HOST,
+        help="Bind host, defaults to 127.0.0.1 / 监听地址，默认 127.0.0.1",
+    )
+    mcp_serve.add_argument(
+        "--port",
+        type=int,
+        default=DEFAULT_MCP_PORT,
+        help="Bind port / 监听端口",
+    )
+    mcp_serve.add_argument(
+        "--token",
+        default=None,
+        help="Bearer token for HTTP MCP auth / HTTP MCP Bearer 认证 token",
+    )
+    mcp_serve.add_argument(
+        "--token-env",
+        default=DEFAULT_MCP_TOKEN_ENV,
+        help="Environment variable containing the bearer token / 保存 Bearer token 的环境变量",
+    )
+    mcp_serve.add_argument(
+        "--config",
+        default="wavebench.toml",
+        help="Path to wavebench TOML config for read-only checks / 只读检查使用的 wavebench TOML 配置",
+    )
+
+    dmm_sub = dmm_parser.add_subparsers(dest="command", required=True)
+    dmm_idn = dmm_sub.add_parser("idn", help="Query DMM *IDN? over configured backend")
+    add_runtime_options(dmm_idn)
+    dmm_read = dmm_sub.add_parser("read", help="Read one DMM measurement")
+    dmm_read.add_argument("function", nargs="?", default="dcv", help="dcv/acv/dci/aci/res/fres/freq/period/continuity/diode/cap")
+    add_runtime_options(dmm_read)
+    dmm_function = dmm_sub.add_parser(
+        "function", help="Query or set DMM function / 查询或设置万用表功能"
+    )
+    dmm_function_sub = dmm_function.add_subparsers(
+        dest="dmm_function_command", required=True
+    )
+    dmm_function_status = dmm_function_sub.add_parser(
+        "status", help="Query current DMM function / 查询当前万用表功能"
+    )
+    add_runtime_options(dmm_function_status)
+    dmm_function_set = dmm_function_sub.add_parser(
+        "set", help="Set DMM function / 设置万用表功能"
+    )
+    dmm_function_set.add_argument(
+        "function",
+        help="dcv/acv/dci/aci/res/fres/freq/period/continuity/diode/cap",
+    )
+    add_runtime_options(dmm_function_set)
+
+    power_sub = power_parser.add_subparsers(dest="command", required=True)
+    power_idn = power_sub.add_parser("idn", help="Query power supply *IDN?")
+    add_runtime_options(power_idn)
+    power_status = power_sub.add_parser("status", help="Query power supply channel status")
+    power_status.add_argument("--channel", type=int, default=None)
+    add_runtime_options(power_status)
+    power_set = power_sub.add_parser("set", help="Set power supply voltage and current limit; does not change output state")
+    power_set.add_argument("--channel", type=int, default=None)
+    power_set.add_argument("--voltage", type=float, required=True)
+    power_set.add_argument("--current-limit", type=float, required=True)
+    add_runtime_options(power_set)
+    power_output = power_sub.add_parser("output", help="Turn power supply channel output on or off")
+    power_output.add_argument("--channel", type=int, default=None)
+    power_output.add_argument("state", choices=["on", "off"])
+    add_runtime_options(power_output)
+    power_protection = power_sub.add_parser("protection", help="Query or set power supply OVP/OCP protection")
+    protection_sub = power_protection.add_subparsers(dest="protection_command", required=True)
+    protection_status = protection_sub.add_parser("status", help="Query OVP/OCP protection status")
+    protection_status.add_argument("--channel", type=int, default=None)
+    add_runtime_options(protection_status)
+    protection_set = protection_sub.add_parser("set", help="Set OVP/OCP thresholds or enable state")
+    protection_set.add_argument("--channel", type=int, default=None)
+    protection_set.add_argument("--ovp-threshold", type=float, default=None)
+    protection_set.add_argument("--ovp", choices=["on", "off"], default=None)
+    protection_set.add_argument("--ocp-threshold", type=float, default=None)
+    protection_set.add_argument("--ocp", choices=["on", "off"], default=None)
+    add_runtime_options(protection_set)
+
+    source_sub = source_parser.add_subparsers(dest="command", required=True)
+
+    source_idn = source_sub.add_parser("idn", help="Query source *IDN?")
+    add_runtime_options(source_idn)
+
+    source_errors = source_sub.add_parser("errors", help="Read source SYST:ERR? until empty")
+    add_runtime_options(source_errors)
+
+    source_status = source_sub.add_parser("status", help="Query source channel status")
+    source_status.add_argument("--channel", type=int, default=None)
+    add_runtime_options(source_status)
+
+    source_set_freq = source_sub.add_parser("set-freq", help="Set source channel frequency in Hz")
+    source_set_freq.add_argument("--channel", type=int, default=None)
+    source_set_freq.add_argument("value_hz", type=float)
+    add_runtime_options(source_set_freq)
+
+    source_output = source_sub.add_parser("output", help="Set source channel output on or off")
+    source_output.add_argument("--channel", type=int, default=None)
+    source_output.add_argument("state", choices=["on", "off", "ON", "OFF"])
+    add_runtime_options(source_output)
+
+    source_set_func = source_sub.add_parser("set-func", help="Set source channel waveform function")
+    source_set_func.add_argument("--channel", type=int, default=None)
+    source_set_func.add_argument("function", help="Waveform function: sin, squ, ramp/triangle, puls, nois, or dc")
+    add_runtime_options(source_set_func)
+
+    source_set_vpp = source_sub.add_parser("set-vpp", help="Set source channel amplitude in Vpp")
+    source_set_vpp.add_argument("--channel", type=int, default=None)
+    source_set_vpp.add_argument("value_vpp", type=float)
+    add_runtime_options(source_set_vpp)
+
+    source_set_duty = source_sub.add_parser("set-duty", help="Set square-wave duty cycle in percent")
+    source_set_duty.add_argument("--channel", type=int, default=None)
+    source_set_duty.add_argument("duty_percent", type=float)
+    add_runtime_options(source_set_duty)
+
+    source_arb_probe = source_sub.add_parser("arb-probe", help="Run query-only DG4202 arbitrary-waveform SCPI probes; does not upload or enable output")
+    source_arb_probe.add_argument("--channel", type=int, default=None)
+    source_arb_probe.add_argument("--probe-timeout-ms", type=int, default=1000, help="Per-query timeout for unsupported SCPI candidates")
+    add_runtime_options(source_arb_probe)
+
+    source_arb_load = source_sub.add_parser("arb-load", help="Load a DG4202 arbitrary waveform from .csv/.npy; dry-run can export offline payloads")
+    source_arb_load.add_argument("--channel", type=int, required=True)
+    source_arb_load.add_argument("--file", required=True, help="Input waveform file: .csv or .npy")
+    source_arb_load.add_argument("--name", required=True, help="Instrument waveform name, e.g. REI_ARB")
+    source_arb_load.add_argument("--amplitude", type=float, required=True, help="Target output amplitude in Vpp")
+    source_arb_load.add_argument("--frequency", type=float, default=None, help="Arbitrary waveform playback frequency in Hz; required when uploading")
+    source_arb_load.add_argument("--offset", type=float, default=0.0, help="Target output offset in V")
+    source_arb_load.add_argument("--sample-rate", type=float, default=None, help="Sample rate in Hz when the file has no time axis")
+    source_arb_load.add_argument("--max-points", type=int, default=16384, help="Point-count guard; DG4000 specs list 16K arbitrary length")
+    source_arb_load.add_argument("--output-on", action="store_true", help="Allow output state change after upload; ignored by dry-run")
+    source_arb_load.add_argument("--export-payload", default=None, help="Write a WaveBench JSON payload artifact for manual review or future upload")
+    source_arb_load.add_argument("--export-dg4000-dac-block", default=None, help="Write a DG4000 DATA:DAC VOLATILE binary SCPI command; offline artifact only")
+    source_arb_load.add_argument("--dg4000-byte-order", choices=("big", "little"), default="little", help="Byte order for DG4000 uint16 DAC block; DG4202 hardware validation confirmed little-endian")
+    source_arb_load.add_argument("--dry-run", action="store_true", help="Only validate/build payload summary; do not connect to the instrument")
+    add_runtime_options(source_arb_load)
+
+    sweep_sub = sweep_parser.add_subparsers(dest="command", required=True)
+    sweep_discrete = sweep_sub.add_parser("discrete", help="Run a discrete source-frequency sweep and capture each point")
+    sweep_discrete.add_argument("--source-channel", type=int, default=None)
+    sweep_discrete.add_argument("--scope-channel", type=int, default=None)
+    sweep_discrete.add_argument("--source-resource", default=None, help="Override source VISA resource")
+    sweep_discrete.add_argument("--frequencies", required=True, help="Comma-separated frequency list in Hz, e.g. 1000,2000,5000")
+    sweep_discrete.add_argument("--target-cycles", type=float, default=10.0)
+    sweep_discrete.add_argument("--frequency-tolerance", type=float, default=None)
+    sweep_discrete.add_argument("--source-func", default=None, help="Optional source function to set once before sweep")
+    sweep_discrete.add_argument("--source-vpp", type=float, default=None, help="Optional source amplitude in Vpp to set once before sweep")
+    sweep_discrete.add_argument("--restore-source-state", action="store_true", help="Restore source output/function/frequency/amplitude after sweep")
+    sweep_discrete.add_argument("--allow-50ohm", action="store_true", help="Explicitly allow scope input coupling that may be 50 ohm; default requires high impedance")
+    sweep_discrete.add_argument("--label", default="discrete_sweep")
+    sweep_discrete.add_argument("--no-csv", action="store_true", help="Do not save per-point CSV waveform output")
+    sweep_discrete.add_argument("--no-npy", action="store_true", help="Do not save per-point NPY waveform output")
+    add_runtime_options(sweep_discrete)
+
+    scope_sub = scope_parser.add_subparsers(dest="command", required=True)
+
+    idn = scope_sub.add_parser("idn", help="Query *IDN?")
+    add_runtime_options(idn)
+
+    errors = scope_sub.add_parser("errors", help="Read SYST:ERR? until empty")
+    add_runtime_options(errors)
+
+    auto = scope_sub.add_parser("auto", help="Run explicit AUToscale and wait for *OPC?")
+    add_runtime_options(auto)
+
+    autoscale = scope_sub.add_parser("autoscale", help="Alias of scope auto")
+    add_runtime_options(autoscale)
+
+    fetch = scope_sub.add_parser("fetch", help="Fetch waveform data without creating full package")
+    fetch.add_argument("--channel", type=int, default=None)
+    fetch.add_argument("--points", default=None, help="Override waveform points: def, max, or dmax")
+    fetch.add_argument("--allow-50ohm", action="store_true", help="Explicitly allow scope input coupling that may be 50 ohm; default requires high impedance")
+    add_runtime_options(fetch)
+
+    capture = scope_sub.add_parser("capture", help="Capture waveform data into an acquisition package")
+    capture.add_argument("--channel", type=int, action="append", default=None, help="Capture channel; repeat for multiple channels")
+    capture.add_argument("--label", default="capture")
+    capture.add_argument("--points", default=None, help="Override waveform points: def, max, or dmax")
+    capture.add_argument("--time-range", type=float, default=None, help="Set total acquisition time across 10 divisions, in seconds")
+    capture.add_argument("--expect-frequency", type=float, default=None, help="Expected signal frequency in Hz for metadata quality checks")
+    capture.add_argument("--window-frequency", type=float, default=None, help="Frequency in Hz used only to compute target-cycle time range")
+    capture.add_argument("--target-cycles", type=float, default=None, help="Set time range to target_cycles / window_frequency")
+    capture.add_argument("--frequency-tolerance", type=float, default=None, help="Relative frequency tolerance, e.g. 0.05 for 5 percent")
+    capture.add_argument("--vertical-scale", type=float, default=None, help="Set channel vertical scale in V/div before capture")
+    capture.add_argument("--target-vpp", type=float, default=None, help="Set vertical scale from expected Vpp; defaults to about 5 vertical divisions")
+    capture.add_argument("--no-csv", action="store_true", help="Do not save CSV waveform output")
+    capture.add_argument("--no-npy", action="store_true", help="Do not save NPY waveform output")
+    capture.add_argument("--screenshot", action="store_true", help="Save a PNG screenshot artifact in the capture package")
+    capture.add_argument("--allow-50ohm", action="store_true", help="Explicitly allow scope input coupling that may be 50 ohm; default requires high impedance")
+    add_runtime_options(capture)
+
+    return parser
+
+
