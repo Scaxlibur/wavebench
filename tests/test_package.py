@@ -1,6 +1,23 @@
+import json
+import tempfile
 import unittest
+from pathlib import Path
+from unittest.mock import patch
 
+import numpy as np
+
+from wavebench.config import (
+    AutoscaleConfig,
+    ConnectionConfig,
+    OutputConfig,
+    ScopeConfig,
+    WaveBenchConfig,
+    WaveformConfig,
+)
 from wavebench.data.package import safe_label
+from wavebench.drivers.rtm2032 import WaveformData, WaveformHeader
+from wavebench.logging import CommandLogger
+from wavebench.services.scope_service import ScopeService
 
 
 class PackageTests(unittest.TestCase):
@@ -9,22 +26,6 @@ class PackageTests(unittest.TestCase):
 
     def test_safe_label_replaces_spaces(self):
         self.assertEqual(safe_label("my capture"), "my_capture")
-
-
-if __name__ == "__main__":
-    unittest.main()
-
-from pathlib import Path
-import json
-import tempfile
-from unittest.mock import patch
-
-import numpy as np
-
-from wavebench.config import AutoscaleConfig, ConnectionConfig, OutputConfig, ScopeConfig, WaveBenchConfig, WaveformConfig
-from wavebench.drivers.rtm2032 import WaveformData, WaveformHeader
-from wavebench.logging import CommandLogger
-from wavebench.services.scope_service import ScopeService
 
 
 class ScreenshotScope:
@@ -65,3 +66,7 @@ class ScreenshotCaptureTests(unittest.TestCase):
             self.assertEqual(result.screenshot_path.read_bytes()[:8], b"\x89PNG\r\n\x1a\n")
             metadata = json.loads((result.package_dir / "metadata.json").read_text(encoding="utf-8"))
             self.assertEqual(metadata["files"]["screenshot"], str(result.screenshot_path))
+
+
+if __name__ == "__main__":
+    unittest.main()

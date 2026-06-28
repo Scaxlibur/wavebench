@@ -13,6 +13,8 @@ from wavebench.config import WaveBenchConfig
 from wavebench.data.package import new_package_dir
 from wavebench.drivers.rtm2032 import RTM2032Scope, WaveformData
 from wavebench.errors import ConfigError, WaveBenchError
+from wavebench.logging import CommandLogger
+from wavebench.transport.rsinstrument_transport import RsInstrumentTransport
 
 HIGH_IMPEDANCE_COUPLINGS = {"DCL", "DCLIMIT", "ACL", "ACLIMIT"}
 LOW_IMPEDANCE_COUPLINGS = {"DC", "AC"}
@@ -45,8 +47,7 @@ def assert_scope_high_impedance(coupling: str, *, channel: int, allow_50ohm: boo
         "Known high-impedance values: ACL, ACLimit, DCL, DCLimit. "
         f"/ 示波器 CH{channel} 耦合值 {normalized!r} 无法确认是否高阻，默认拒绝采集。"
     )
-from wavebench.logging import CommandLogger
-from wavebench.transport.rsinstrument_transport import RsInstrumentTransport
+
 
 @dataclass(frozen=True)
 class CaptureResult:

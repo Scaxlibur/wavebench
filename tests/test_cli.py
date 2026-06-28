@@ -305,6 +305,52 @@ max_source_vpp = 2.0
         self.assertEqual(args.config, "wavebench.toml")
         self.assertEqual(args.plan, "plans/example.toml")
 
+    def test_net_discover_accepts_scan_options(self):
+        args = build_parser().parse_args([
+            "net", "discover",
+            "--subnet", "192.168.1.0/24",
+            "--ports", "5025,5555,111",
+            "--timeout-ms", "200",
+            "--workers", "8",
+            "--max-hosts", "512",
+            "--no-idn",
+            "--idn-only",
+            "--no-visa",
+        ])
+        self.assertEqual(args.domain, "net")
+        self.assertEqual(args.command, "discover")
+        self.assertEqual(args.subnet, "192.168.1.0/24")
+        self.assertEqual(args.ports, "5025,5555,111")
+        self.assertEqual(args.timeout_ms, 200)
+        self.assertEqual(args.workers, 8)
+        self.assertEqual(args.max_hosts, 512)
+        self.assertTrue(args.no_idn)
+        self.assertTrue(args.idn_only)
+        self.assertTrue(args.no_visa)
+
+    def test_net_discover_prints_results(self):
+        class StubResult:
+            address = "192.168.1.161"
+            port = 5025
+            status = "idn"
+            protocol = "scpi-socket"
+            source = "network"
+            resource = "TCPIP::192.168.1.161::5025::SOCKET"
+            idn = "RIGOL TECHNOLOGIES,DP832,DP8A000000000,00.01.16"
+            note = ""
+
+        stdout = io.StringIO()
+        with patch("wavebench.cli.discover_instruments", return_value=[StubResult()]):
+            with redirect_stdout(stdout):
+                code = main([
+                    "net", "discover", "--subnet", "192.168.1.0/24", "--timeout-ms", "10", "--no-visa"
+                ])
+        self.assertEqual(code, 0)
+        output = stdout.getvalue()
+        self.assertIn("address	port	status	protocol", output)
+        self.assertIn("192.168.1.161", output)
+        self.assertIn("RIGOL TECHNOLOGIES,DP832", output)
+
 
     def test_run_check_applies_config_safety_limits_without_io(self):
         with TemporaryDirectory() as tmp:

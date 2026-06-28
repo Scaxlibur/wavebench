@@ -10,6 +10,7 @@ import numpy as np
 from .config import load_config, vertical_scale_from_vpp
 from .data.fft import analyze_fft, fft_harmonics
 from .data.packages import load_capture_package, load_run_package
+from .discovery import DEFAULT_DISCOVERY_PORTS, discover_instruments
 from .report.html import write_run_report_html
 from .report.index import write_report_index
 from .drivers.dg4202 import SourceStatus
@@ -53,6 +54,7 @@ def build_parser() -> argparse.ArgumentParser:
     capture_parser = subparsers.add_parser("capture", help="Offline capture package commands")
     mcp_parser = subparsers.add_parser("mcp", help="HTTP MCP server / HTTP MCP 服务")
     tui_parser = subparsers.add_parser("tui", help="Launch terminal UI / 启动终端界面")
+    net_parser = subparsers.add_parser("net", help="Network discovery helpers / 网络发现工具")
     tui_parser.add_argument("--config", default="wavebench.toml", help="Path to wavebench TOML config")
     tui_parser.add_argument("--resource", help="Override power VISA resource / 覆盖电源 VISA 资源")
     tui_parser.add_argument(
@@ -70,6 +72,46 @@ def build_parser() -> argparse.ArgumentParser:
         "--log-file",
         default="data/tui/wavebench-tui.log",
         help="Persist TUI debug log to this file / TUI 调试日志文件",
+    )
+
+    net_sub = net_parser.add_subparsers(dest="command", required=True)
+    net_discover = net_sub.add_parser(
+        "discover",
+        help="Read-only scan for LAN SCPI/VISA instruments / 只读扫描局域网 SCPI/VISA 仪器",
+    )
+    net_discover.add_argument("--subnet", required=True, help="Subnet to scan, e.g. 192.168.1.0/24")
+    net_discover.add_argument(
+        "--ports",
+        default=",".join(str(port) for port in DEFAULT_DISCOVERY_PORTS),
+        help="Comma-separated TCP ports to probe / 要探测的 TCP 端口",
+    )
+    net_discover.add_argument(
+        "--timeout-ms",
+        type=int,
+        default=300,
+        help="Per-connection timeout in milliseconds / 每次连接超时毫秒数",
+    )
+    net_discover.add_argument("--workers", type=int, default=64, help="Concurrent probe workers / 并发探测数")
+    net_discover.add_argument(
+        "--max-hosts",
+        type=int,
+        default=256,
+        help="Maximum hosts allowed in one scan / 单次扫描允许的最大主机数",
+    )
+    net_discover.add_argument(
+        "--no-idn",
+        action="store_true",
+        help="Only test open ports; do not send read-only *IDN? / 只测端口，不发送只读 *IDN?",
+    )
+    net_discover.add_argument(
+        "--idn-only",
+        action="store_true",
+        help="Only show devices that answered *IDN? / 只显示响应 *IDN? 的设备",
+    )
+    net_discover.add_argument(
+        "--no-visa",
+        action="store_true",
+        help="Skip PyVISA resource-manager discovery / 跳过 PyVISA 资源枚举",
     )
 
     run_sub = run_parser.add_subparsers(dest="command", required=True)
@@ -577,6 +619,20 @@ def _project_root_from_capture_path(package_dir: Path) -> Path:
     return package_dir.parent
 
 
+def _print_discovery_results(results: list[Any]) -> None:
+    if not results:
+        print("no_instruments_found / 未发现仪器")
+        return
+    print("address	port	status	protocol	source	resource	idn	note")
+    for item in results:
+        port = "" if item.port is None else str(item.port)
+        idn = "" if item.idn is None else item.idn
+        print(
+            f"{item.address}	{port}	{item.status}	{item.protocol}	"
+            f"{item.source}	{item.resource}	{idn}	{item.note}"
+        )
+
+
 def _print_arbitrary_probe_results(results: list[Any]) -> None:
     for item in results:
         response = "" if item.response is None else item.response
@@ -662,6 +718,20 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     try:
+        if args.domain == "net":
+            if args.command == "discover":
+                results = discover_instruments(
+                    subnet=args.subnet,
+                    ports=args.ports,
+                    timeout_ms=args.timeout_ms,
+                    workers=args.workers,
+                    max_hosts=args.max_hosts,
+                    query_idn=not args.no_idn,
+                    idn_only=args.idn_only,
+                    include_visa=not args.no_visa,
+                )
+                _print_discovery_results(results)
+                return 0
         if args.domain == "tui":
             if args.refresh_interval <= 0:
                 raise ConfigError("--refresh-interval must be > 0 / 刷新间隔必须 > 0")

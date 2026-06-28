@@ -144,8 +144,6 @@ def estimate_frequency_hysteresis(times_s: np.ndarray, voltages_v: np.ndarray) -
     center = (v_max + v_min) / 2.0
     hysteresis = span * 0.10
     low = center - hysteresis
-    high = center + hysteresis
-
     armed = bool(voltages_v[0] < low)
     crossings: list[float] = []
     prev_v = float(voltages_v[0])

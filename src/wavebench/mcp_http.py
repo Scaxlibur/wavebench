@@ -10,6 +10,7 @@ from typing import Any, Callable
 from urllib.parse import urlparse
 
 from wavebench.config import load_config
+from wavebench import __version__
 from wavebench.data.packages import load_capture_package
 from wavebench.errors import ConfigError, WaveBenchError
 from wavebench.logging import CommandLogger
@@ -281,7 +282,7 @@ class McpHttpHandler(BaseHTTPRequestHandler):
                 result = {
                     "protocolVersion": "2025-06-18",
                     "capabilities": {"tools": {"listChanged": False}},
-                    "serverInfo": {"name": "wavebench", "version": "0.6.0"},
+                    "serverInfo": {"name": "wavebench", "version": __version__},
                 }
             elif method == "tools/list":
                 result = {

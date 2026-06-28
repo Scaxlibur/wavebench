@@ -15,6 +15,7 @@ python -m wavebench mcp serve --config wavebench.toml --token-env WAVEBENCH_MCP_
 ## Endpoints
 
 - `GET /health`：健康检查，不需要 token。
+- `POST /mcp`：MCP JSON-RPC 入口，支持 `initialize`、`tools/list`、`tools/call`，需要 Bearer token。
 - `GET /tools`：返回当前只读工具列表，需要 Bearer token。
 - `POST /call`：调用只读工具，需要 Bearer token，请求体为 JSON 对象。
 
@@ -26,6 +27,22 @@ python -m wavebench mcp serve --config wavebench.toml --token-env WAVEBENCH_MCP_
   "arguments": {}
 }
 ```
+
+`/mcp` 请求体格式：
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/call",
+  "params": {
+    "name": "run.schema",
+    "arguments": {}
+  }
+}
+```
+
+MCP notification 请求没有 `id` 时返回空响应；普通请求返回 JSON-RPC `result` 或 `error`。
 
 ## Tools
 

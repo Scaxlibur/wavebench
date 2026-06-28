@@ -2,7 +2,7 @@ import unittest
 import tempfile
 from pathlib import Path
 
-from wavebench.config import AutoscaleConfig, ConnectionConfig, DmmConfig, OutputConfig, PowerConfig, SafetyLimitsConfig, ScopeConfig, WaveBenchConfig, WaveformConfig, load_config
+from wavebench.config import AutoscaleConfig, ConnectionConfig, DmmConfig, OutputConfig, SafetyLimitsConfig, ScopeConfig, WaveBenchConfig, WaveformConfig, load_config
 
 
 class ConfigOverrideTests(unittest.TestCase):

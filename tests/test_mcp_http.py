@@ -6,6 +6,7 @@ import urllib.request
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+from wavebench import __version__
 from wavebench.cli import build_parser
 from wavebench.errors import ConfigError
 from wavebench.mcp_http import (
@@ -194,6 +195,22 @@ value_vpp = 1.0
             self.assertEqual(payload["result"]["channels"][0]["channel"], 1)
             self.assertEqual(payload["result"]["channels"][0]["summary"]["samples"], 1000)
 
+
+    def test_mcp_jsonrpc_initialize_reports_package_version(self):
+        with TemporaryDirectory() as tmp:
+            server = self._start_server(self._write_config(Path(tmp)))
+
+            status, payload = self._request(
+                server,
+                "POST",
+                "/mcp",
+                token="test-token",
+                body={"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}},
+            )
+
+            self.assertEqual(status, 200)
+            self.assertEqual(payload["result"]["serverInfo"]["name"], "wavebench")
+            self.assertEqual(payload["result"]["serverInfo"]["version"], __version__)
 
     def test_mcp_jsonrpc_tools_list_and_call(self):
         with TemporaryDirectory() as tmp:
