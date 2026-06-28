@@ -20,27 +20,15 @@ from wavebench.services.run_analysis import (
     step_status,
 )
 from wavebench.services.run_plan import RunPlan, RunStep
+from wavebench.services.run_safety import (
+    check_run_plan_safety_limits,
+    plan_scope_guard_channels,
+    reject_unsupported_steps,
+    run_scope_safety_guards,
+)
 from wavebench.services.scope_service import ScopeService
 from wavebench.services.source_service import SourceService
 from wavebench.services.source_state import RestorableSourceState
-
-
-_EXECUTABLE_STEP_KINDS = {
-    "power.status",
-    "power.set",
-    "power.output",
-    "scope.auto",
-    "scope.capture",
-    "source.status",
-    "source.set_freq",
-    "source.arb_load",
-    "source.set_func",
-    "source.set_vpp",
-    "source.set_duty",
-    "source.output",
-    "dmm.read",
-    "sleep",
-}
 
 
 @dataclass(frozen=True)
@@ -116,8 +104,8 @@ class RunService:
         return records
 
     def check(self, plan: RunPlan) -> None:
-        self._check_run_plan_safety_limits(plan)
-        self._reject_unsupported_steps(plan)
+        check_run_plan_safety_limits(plan, self.config.safety_limits)
+        reject_unsupported_steps(plan)
 
     def _plan_instruments(self, plan: RunPlan) -> set[str]:
         instruments = {step.kind.split(".", 1)[0] for step in plan.steps if "." in step.kind}
@@ -126,14 +114,14 @@ class RunService:
             instruments.add("source")
         if plan.safety.require_scope_coupling_not:
             instruments.add("scope")
-        if self._scope_guard_channels(plan):
+        if plan_scope_guard_channels(plan, self.config.scope.default_channel):
             instruments.add("scope")
         return instruments
 
     def run(self, plan: RunPlan) -> RunResult:
-        self._check_run_plan_safety_limits(plan)
+        check_run_plan_safety_limits(plan, self.config.safety_limits)
         self._run_safety_guards(plan)
-        self._reject_unsupported_steps(plan)
+        reject_unsupported_steps(plan)
         run_dir = new_package_dir(run_output_base(self.config), plan.label)
         steps_dir = run_dir / "steps"
         steps_dir.mkdir(parents=True, exist_ok=False)
@@ -199,73 +187,12 @@ class RunService:
             steps=records,
         )
 
-    def _check_run_plan_safety_limits(self, plan: RunPlan) -> None:
-        limits = self.config.safety_limits
-        for step in plan.steps:
-            if step.kind == "source.set_vpp":
-                _check_limit(
-                    step.fields["value_vpp"],
-                    limits.max_source_vpp,
-                    field=f"run step {step.index} source amplitude / 运行步骤 {step.index} 信号源幅度",
-                    config_key="max_source_vpp",
-                    unit="Vpp",
-                )
-            elif step.kind == "source.arb_load":
-                _check_limit(
-                    step.fields["amplitude_vpp"],
-                    limits.max_source_vpp,
-                    field=f"run step {step.index} arbitrary waveform amplitude / 运行步骤 {step.index} 任意波幅度",
-                    config_key="max_source_vpp",
-                    unit="Vpp",
-                )
-            elif step.kind == "power.set":
-                _check_limit(
-                    step.fields["voltage_v"],
-                    limits.max_power_voltage_v,
-                    field=f"run step {step.index} power voltage / 运行步骤 {step.index} 电源电压",
-                    config_key="max_power_voltage_v",
-                    unit="V",
-                )
-                _check_limit(
-                    step.fields["current_limit_a"],
-                    limits.max_power_current_limit_a,
-                    field=f"run step {step.index} power current limit / 运行步骤 {step.index} 电源限流",
-                    config_key="max_power_current_limit_a",
-                    unit="A",
-                )
-
-    def _scope_guard_channels(self, plan: RunPlan) -> list[int]:
-        channels: list[int] = []
-        for step in plan.steps:
-            if step.kind == "scope.capture":
-                channel = step.fields.get("channel") or self.config.scope.default_channel
-                if channel not in channels:
-                    channels.append(channel)
-        return channels
-
     def _run_safety_guards(self, plan: RunPlan) -> None:
-        service = ScopeService(config=self.config, logger=CommandLogger())
-        if plan.safety.require_scope_coupling_not:
-            if plan.safety.scope_guard_channel is None:  # pragma: no cover - parser enforces this
-                raise ConfigError("safety.scope_guard_channel is required")
-            channel = plan.safety.scope_guard_channel
-            coupling = service.channel_coupling(channel)
-            blocked = set(plan.safety.require_scope_coupling_not)
-            if coupling.strip().upper() in blocked:
-                blocked_text = ", ".join(sorted(blocked))
-                raise ConfigError(
-                    f"safety guard failed: scope CH{channel} coupling is {coupling}; "
-                    f"blocked coupling value(s): {blocked_text}"
-                )
-        for channel in self._scope_guard_channels(plan):
-            service.require_high_impedance(channel, allow_50ohm=plan.safety.allow_50ohm)
-
-    def _reject_unsupported_steps(self, plan: RunPlan) -> None:
-        unsupported = [step.kind for step in plan.steps if step.kind not in _EXECUTABLE_STEP_KINDS]
-        if unsupported:
-            raise ConfigError(
-                "run plan execution does not support step kind(s) yet: " + ", ".join(unsupported)
-            )
+        run_scope_safety_guards(
+            plan,
+            scope_service=ScopeService(config=self.config, logger=CommandLogger()),
+            default_channel=self.config.scope.default_channel,
+        )
 
     def _run_step(self, plan: RunPlan, step: RunStep) -> RunStepRecord:
         if step.kind == "power.status":
@@ -499,18 +426,6 @@ class RunService:
                 save_screenshot=step.fields.get("screenshot"),
             )
         return ScopeService(config=config, logger=CommandLogger())
-
-
-def _check_limit(
-    value: float | None, limit: float | None, *, field: str, config_key: str, unit: str
-) -> None:
-    if value is None or limit is None:
-        return
-    if value > limit:
-        raise ConfigError(
-            f"safety limit exceeded / 安全上限已超出: {field} {value:.12g} {unit} "
-            f"> {config_key} {limit:.12g} {unit}"
-        )
 
 
 def _has_waveform_overrides(step: RunStep) -> bool:
