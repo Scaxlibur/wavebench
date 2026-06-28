@@ -1,3 +1,4 @@
+import http.client
 import json
 import threading
 import unittest
@@ -11,6 +12,7 @@ from wavebench.cli import build_parser
 from wavebench.errors import ConfigError
 from wavebench.mcp_http import (
     DEFAULT_MCP_HOST,
+    MAX_MCP_BODY_BYTES,
     make_mcp_http_server,
     resolve_mcp_token,
     validate_mcp_host,
@@ -38,7 +40,9 @@ max_source_vpp = 10.0
         return path
 
     def _write_plan(self, root: Path) -> Path:
-        path = root / "plan.toml"
+        plans = root / "plans"
+        plans.mkdir(exist_ok=True)
+        path = plans / "plan.toml"
         path.write_text(
             """
 [[steps]]
@@ -51,7 +55,9 @@ value_vpp = 1.0
         return path
 
     def _write_capture(self, root: Path) -> Path:
-        path = root / "capture"
+        captures = root / "data" / "raw"
+        captures.mkdir(parents=True, exist_ok=True)
+        path = captures / "capture"
         path.mkdir()
         (path / "metadata.json").write_text(
             json.dumps(
@@ -94,6 +100,25 @@ value_vpp = 1.0
             request.add_header("Content-Type", "application/json")
         with urllib.request.urlopen(request, timeout=5) as response:
             return response.status, json.loads(response.read().decode("utf-8"))
+
+    def _raw_request(
+        self,
+        server,
+        method: str,
+        path: str,
+        *,
+        token: str | None = None,
+        data: bytes = b"",
+        content_type: str | None = "application/json",
+    ):
+        url = f"http://127.0.0.1:{server.server_address[1]}{path}"
+        request = urllib.request.Request(url, data=data, method=method)
+        if token is not None:
+            request.add_header("Authorization", f"Bearer {token}")
+        if content_type is not None:
+            request.add_header("Content-Type", content_type)
+        with urllib.request.urlopen(request, timeout=5) as response:
+            return response.status, response.read().decode("utf-8")
 
     def test_cli_default_host_is_localhost(self):
         args = build_parser().parse_args(["mcp", "serve", "--token", "abc"])
@@ -177,6 +202,46 @@ value_vpp = 1.0
             self.assertEqual(payload["result"]["status"], "ok")
             self.assertEqual(payload["result"]["plan"]["steps"][0]["kind"], "source.set_vpp")
 
+    def test_call_run_check_rejects_plan_outside_plans_dir(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config = self._write_config(root)
+            outside = root / "outside.toml"
+            outside.write_text("[[steps]]\nkind = 'source.status'\n", encoding="utf-8")
+            server = self._start_server(config)
+
+            with self.assertRaises(urllib.error.HTTPError) as caught:
+                self._request(
+                    server,
+                    "POST",
+                    "/call",
+                    token="test-token",
+                    body={"tool": "run.check", "arguments": {"plan": str(outside)}},
+                )
+
+            self.assertEqual(caught.exception.code, 400)
+
+    def test_call_run_check_rejects_non_toml_plan(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config = self._write_config(root)
+            plans = root / "plans"
+            plans.mkdir()
+            bad_plan = plans / "plan.txt"
+            bad_plan.write_text("[[steps]]\nkind = 'source.status'\n", encoding="utf-8")
+            server = self._start_server(config)
+
+            with self.assertRaises(urllib.error.HTTPError) as caught:
+                self._request(
+                    server,
+                    "POST",
+                    "/call",
+                    token="test-token",
+                    body={"tool": "run.check", "arguments": {"plan": str(bad_plan)}},
+                )
+
+            self.assertEqual(caught.exception.code, 400)
+
     def test_call_capture_inspect_succeeds_offline(self):
         with TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -195,6 +260,49 @@ value_vpp = 1.0
             self.assertEqual(payload["result"]["channels"][0]["channel"], 1)
             self.assertEqual(payload["result"]["channels"][0]["summary"]["samples"], 1000)
 
+
+    def test_call_capture_inspect_rejects_path_outside_data_raw(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config = self._write_config(root)
+            outside = root / "capture"
+            outside.mkdir()
+            (outside / "metadata.json").write_text(
+                json.dumps({"operation": {}, "waveform": {"summary": {}}}),
+                encoding="utf-8",
+            )
+            server = self._start_server(config)
+
+            with self.assertRaises(urllib.error.HTTPError) as caught:
+                self._request(
+                    server,
+                    "POST",
+                    "/call",
+                    token="test-token",
+                    body={"tool": "capture.inspect", "arguments": {"path": str(outside)}},
+                )
+
+            self.assertEqual(caught.exception.code, 400)
+
+    def test_call_capture_inspect_rejects_traversal_out_of_data_raw(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config = self._write_config(root)
+            server = self._start_server(config)
+
+            with self.assertRaises(urllib.error.HTTPError) as caught:
+                self._request(
+                    server,
+                    "POST",
+                    "/call",
+                    token="test-token",
+                    body={
+                        "tool": "capture.inspect",
+                        "arguments": {"path": "data/raw/../../capture"},
+                    },
+                )
+
+            self.assertEqual(caught.exception.code, 400)
 
     def test_mcp_jsonrpc_initialize_reports_package_version(self):
         with TemporaryDirectory() as tmp:
@@ -257,6 +365,72 @@ value_vpp = 1.0
                     body={"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}},
                 )
             self.assertEqual(caught.exception.code, 401)
+
+    def _raw_request_with_content_length(
+        self, server, path: str, *, token: str, content_length: int
+    ):
+        connection = http.client.HTTPConnection(
+            "127.0.0.1", server.server_address[1], timeout=5
+        )
+        try:
+            connection.putrequest("POST", path)
+            connection.putheader("Authorization", f"Bearer {token}")
+            connection.putheader("Content-Type", "application/json")
+            connection.putheader("Content-Length", str(content_length))
+            connection.endheaders()
+            response = connection.getresponse()
+            return response.status, response.read().decode("utf-8")
+        finally:
+            connection.close()
+
+    def test_call_rejects_body_larger_than_limit(self):
+        with TemporaryDirectory() as tmp:
+            server = self._start_server(self._write_config(Path(tmp)))
+
+            status, raw = self._raw_request_with_content_length(
+                server, "/call", token="test-token", content_length=MAX_MCP_BODY_BYTES + 1
+            )
+            payload = json.loads(raw)
+
+            self.assertEqual(status, 400)
+            self.assertEqual(payload["error"]["type"], "ConfigError")
+
+    def test_mcp_jsonrpc_reports_large_body_as_error(self):
+        with TemporaryDirectory() as tmp:
+            server = self._start_server(self._write_config(Path(tmp)))
+
+            status, raw = self._raw_request_with_content_length(
+                server, "/mcp", token="test-token", content_length=MAX_MCP_BODY_BYTES + 1
+            )
+            payload = json.loads(raw)
+
+            self.assertEqual(status, 200)
+            self.assertEqual(payload["error"]["code"], -32602)
+            self.assertEqual(payload["error"]["data"]["type"], "ConfigError")
+
+    def test_mcp_jsonrpc_rejects_plan_outside_plans_dir(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            server = self._start_server(self._write_config(root))
+            outside = root / "outside.toml"
+            outside.write_text("[[steps]]\nkind = 'source.status'\n", encoding="utf-8")
+
+            status, payload = self._request(
+                server,
+                "POST",
+                "/mcp",
+                token="test-token",
+                body={
+                    "jsonrpc": "2.0",
+                    "id": 9,
+                    "method": "tools/call",
+                    "params": {"name": "run.check", "arguments": {"plan": str(outside)}},
+                },
+            )
+
+            self.assertEqual(status, 200)
+            self.assertEqual(payload["error"]["code"], -32602)
+            self.assertEqual(payload["error"]["data"]["type"], "ConfigError")
 
     def test_unknown_and_write_like_tools_are_rejected(self):
         with TemporaryDirectory() as tmp:

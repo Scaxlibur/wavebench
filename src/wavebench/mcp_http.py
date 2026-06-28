@@ -22,6 +22,10 @@ from wavebench.services.run_service import RunService
 DEFAULT_MCP_HOST = "127.0.0.1"
 DEFAULT_MCP_PORT = 8765
 DEFAULT_MCP_TOKEN_ENV = "WAVEBENCH_MCP_TOKEN"
+MAX_MCP_BODY_BYTES = 1_048_576
+
+_MCP_RUN_PLAN_DIR = Path("plans")
+_MCP_CAPTURE_DIR = Path("data/raw")
 
 _SENSITIVE_PATH_EXACT = {
     ".aws",
@@ -92,6 +96,41 @@ def _reject_sensitive_path(path: str | Path, *, label: str) -> Path:
     return candidate
 
 
+def _project_root_from_config_path(config_path: str | Path) -> Path:
+    candidate = Path(config_path)
+    if not candidate.is_absolute():
+        candidate = Path.cwd() / candidate
+    return candidate.parent.resolve(strict=False)
+
+
+def _resolve_allowed_tool_path(
+    path: str | Path,
+    *,
+    config_path: str | Path,
+    allowed_subdir: Path,
+    label: str,
+    allowed_suffixes: set[str] | None = None,
+) -> Path:
+    project_root = _project_root_from_config_path(config_path)
+    candidate = _reject_sensitive_path(path, label=label)
+    if not candidate.is_absolute():
+        candidate = project_root / candidate
+    try:
+        allowed_root = (project_root / allowed_subdir).resolve(strict=False)
+        resolved = candidate.resolve(strict=False)
+    except (OSError, RuntimeError) as exc:
+        raise ConfigError(f"{label} path cannot be resolved / {label} 路径无法解析: {exc}") from exc
+    if resolved != allowed_root and allowed_root not in resolved.parents:
+        raise ConfigError(
+            f"{label} must be under {allowed_subdir.as_posix()} / "
+            f"{label} 必须位于 {allowed_subdir.as_posix()} 下"
+        )
+    if allowed_suffixes is not None and resolved.suffix.lower() not in allowed_suffixes:
+        allowed = ", ".join(sorted(allowed_suffixes))
+        raise ConfigError(f"{label} must use suffix {allowed} / {label} 后缀必须为 {allowed}")
+    return resolved
+
+
 def _require_arguments(arguments: dict[str, Any], *names: str) -> None:
     missing = [name for name in names if name not in arguments or arguments[name] in (None, "")]
     if missing:
@@ -109,7 +148,13 @@ def _run_schema_tool(arguments: dict[str, Any], config_path: Path) -> dict[str, 
 
 def _run_check_tool(arguments: dict[str, Any], config_path: Path) -> dict[str, Any]:
     _require_arguments(arguments, "plan")
-    plan_path = _reject_sensitive_path(arguments["plan"], label="plan")
+    plan_path = _resolve_allowed_tool_path(
+        arguments["plan"],
+        config_path=config_path,
+        allowed_subdir=_MCP_RUN_PLAN_DIR,
+        allowed_suffixes={".toml"},
+        label="plan",
+    )
     safe_config_path = _reject_sensitive_path(config_path, label="config")
     plan = load_run_plan(plan_path)
     config = load_config(safe_config_path)
@@ -140,7 +185,12 @@ def _run_check_tool(arguments: dict[str, Any], config_path: Path) -> dict[str, A
 
 def _capture_inspect_tool(arguments: dict[str, Any], config_path: Path) -> dict[str, Any]:
     _require_arguments(arguments, "path")
-    package_path = _reject_sensitive_path(arguments["path"], label="path")
+    package_path = _resolve_allowed_tool_path(
+        arguments["path"],
+        config_path=config_path,
+        allowed_subdir=_MCP_CAPTURE_DIR,
+        label="path",
+    )
     package = load_capture_package(package_path)
     return {
         "path": str(package.path),
@@ -345,7 +395,17 @@ class McpHttpHandler(BaseHTTPRequestHandler):
         return True
 
     def _read_json_object(self) -> dict[str, Any]:
-        length = int(self.headers.get("Content-Length", "0") or "0")
+        try:
+            length = int(self.headers.get("Content-Length", "0") or "0")
+        except ValueError as exc:
+            raise ConfigError("invalid Content-Length / Content-Length 无效") from exc
+        if length < 0:
+            raise ConfigError("invalid Content-Length / Content-Length 无效")
+        if length > MAX_MCP_BODY_BYTES:
+            raise ConfigError(
+                f"JSON body too large; max {MAX_MCP_BODY_BYTES} bytes / "
+                f"JSON 请求体过大；最大 {MAX_MCP_BODY_BYTES} 字节"
+            )
         raw = self.rfile.read(length)
         try:
             payload = json.loads(raw.decode("utf-8"))
