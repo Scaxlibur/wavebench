@@ -17,6 +17,7 @@ def capture_fft_summary(capture: Any) -> dict[str, Any]:
         return {"status": "unavailable", "error": f"{type(exc).__name__}: {exc}"}
     return {"status": "ok", **analysis}
 
+
 def step_status(artifact: dict[str, Any]) -> str:
     if artifact.get("expect", {}).get("status") == "failed":
         return "failed"
@@ -37,7 +38,12 @@ def evaluate_expect(values: dict[str, Any], expect: dict[str, dict[str, float]])
         try:
             value = float(raw_value)
         except (TypeError, ValueError):
-            checks[metric] = {"status": "failed", "reason": "not_numeric", "value": raw_value, "limits": limits}
+            checks[metric] = {
+                "status": "failed",
+                "reason": "not_numeric",
+                "value": raw_value,
+                "limits": limits,
+            }
             failures.append(f"{metric}: not numeric")
             continue
         status = "ok"
@@ -64,7 +70,11 @@ def evaluate_expect(values: dict[str, Any], expect: dict[str, dict[str, float]])
 def capture_consistency(artifacts: list[dict[str, Any]], quality_config: Any) -> dict[str, Any]:
     required = quality_config.consistency_required_captures
     if len(artifacts) < required:
-        return {"status": "insufficient_captures", "required_captures": required, "actual_captures": len(artifacts)}
+        return {
+            "status": "insufficient_captures",
+            "required_captures": required,
+            "actual_captures": len(artifacts),
+        }
     window = artifacts[-required:]
     checks: dict[str, Any] = {}
     checks["frequency_estimate_hz"] = _relative_consistency(
@@ -81,9 +91,21 @@ def capture_consistency(artifacts: list[dict[str, Any]], quality_config: Any) ->
     )
     usable = {name: check for name, check in checks.items() if check["status"] != "unavailable"}
     if not usable:
-        return {"status": "no_comparable_metrics", "required_captures": required, "actual_captures": len(artifacts), "checks": checks}
-    status = "consistent" if all(check["status"] == "ok" for check in usable.values()) else "diverged"
-    return {"status": status, "required_captures": required, "actual_captures": len(artifacts), "checks": checks}
+        return {
+            "status": "no_comparable_metrics",
+            "required_captures": required,
+            "actual_captures": len(artifacts),
+            "checks": checks,
+        }
+    status = (
+        "consistent" if all(check["status"] == "ok" for check in usable.values()) else "diverged"
+    )
+    return {
+        "status": status,
+        "required_captures": required,
+        "actual_captures": len(artifacts),
+        "checks": checks,
+    }
 
 
 def _metric_values(artifacts: list[dict[str, Any]], metric: str) -> list[float] | None:
@@ -105,12 +127,20 @@ def _relative_consistency(values: list[float] | None, tolerance_ratio: float) ->
     span = max(values) - min(values)
     reference = max(max(abs(value) for value in values), 1e-12)
     ratio = span / reference
-    return {"status": "ok" if ratio <= tolerance_ratio else "diverged", "span": span, "ratio": ratio, "tolerance_ratio": tolerance_ratio}
+    return {
+        "status": "ok" if ratio <= tolerance_ratio else "diverged",
+        "span": span,
+        "ratio": ratio,
+        "tolerance_ratio": tolerance_ratio,
+    }
 
 
 def _absolute_consistency(values: list[float] | None, tolerance: float) -> dict[str, Any]:
     if not values:
         return {"status": "unavailable"}
     span = max(values) - min(values)
-    return {"status": "ok" if span <= tolerance else "diverged", "span": span, "tolerance": tolerance}
-
+    return {
+        "status": "ok" if span <= tolerance else "diverged",
+        "span": span,
+        "tolerance": tolerance,
+    }

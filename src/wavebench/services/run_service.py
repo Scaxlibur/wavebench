@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import csv
-import json
 import shutil
 import time
 from dataclasses import dataclass
@@ -14,6 +12,7 @@ from wavebench.errors import ConfigError, WaveBenchError
 from wavebench.logging import CommandLogger
 from wavebench.services.power_service import PowerService
 from wavebench.services.dmm_service import DmmService
+from wavebench.services.run_artifacts import RunStepRecord, write_run_files, write_step_record
 from wavebench.services.run_analysis import (
     capture_consistency,
     capture_fft_summary,
@@ -42,24 +41,6 @@ _EXECUTABLE_STEP_KINDS = {
     "dmm.read",
     "sleep",
 }
-
-
-@dataclass(frozen=True)
-class RunStepRecord:
-    index: int
-    kind: str
-    status: str
-    fields: dict[str, Any]
-    artifact: dict[str, Any]
-
-    def as_dict(self) -> dict[str, Any]:
-        return {
-            "index": self.index,
-            "kind": self.kind,
-            "status": self.status,
-            "fields": self.fields,
-            "artifact": self.artifact,
-        }
 
 
 @dataclass(frozen=True)
@@ -92,38 +73,46 @@ class RunService:
         instruments = self._plan_instruments(plan)
         records: list[RunPreflightRecord] = []
         if "scope" in instruments:
-            records.append(RunPreflightRecord(
-                instrument="scope",
-                resource=self.config.connection.resource,
-                idn=self._scope_service().idn(),
-            ))
+            records.append(
+                RunPreflightRecord(
+                    instrument="scope",
+                    resource=self.config.connection.resource,
+                    idn=self._scope_service().idn(),
+                )
+            )
         if "source" in instruments:
             source = self.config.source
             if source is None or not source.resource:
                 raise ConfigError("source resource is required by this run plan")
-            records.append(RunPreflightRecord(
-                instrument="source",
-                resource=source.resource,
-                idn=self._source_service().idn(),
-            ))
+            records.append(
+                RunPreflightRecord(
+                    instrument="source",
+                    resource=source.resource,
+                    idn=self._source_service().idn(),
+                )
+            )
         if "power" in instruments:
             power = self.config.power
             if power is None or not power.resource:
                 raise ConfigError("power resource is required by this run plan")
-            records.append(RunPreflightRecord(
-                instrument="power",
-                resource=power.resource,
-                idn=self._power_service().idn(),
-            ))
+            records.append(
+                RunPreflightRecord(
+                    instrument="power",
+                    resource=power.resource,
+                    idn=self._power_service().idn(),
+                )
+            )
         if "dmm" in instruments:
             dmm = self.config.dmm
             if dmm is None or not dmm.resource:
                 raise ConfigError("dmm resource is required by this run plan")
-            records.append(RunPreflightRecord(
-                instrument="dmm",
-                resource=dmm.resource,
-                idn=self._dmm_service().idn(),
-            ))
+            records.append(
+                RunPreflightRecord(
+                    instrument="dmm",
+                    resource=dmm.resource,
+                    idn=self._dmm_service().idn(),
+                )
+            )
         return records
 
     def check(self, plan: RunPlan) -> None:
@@ -161,10 +150,10 @@ class RunService:
             for step in plan.steps:
                 record = self._run_step(plan, step)
                 records.append(record)
-                self._write_step_record(steps_dir, record)
+                write_step_record(steps_dir, record)
         except Exception as exc:
             restore_error = self._restore_source_state(restore_state)
-            self._write_run_files(
+            write_run_files(
                 plan=plan,
                 run_json_path=run_json_path,
                 summary_csv_path=summary_csv_path,
@@ -180,7 +169,7 @@ class RunService:
 
         restore_error = self._restore_source_state(restore_state)
         if restore_error is not None:
-            self._write_run_files(
+            write_run_files(
                 plan=plan,
                 run_json_path=run_json_path,
                 summary_csv_path=summary_csv_path,
@@ -193,7 +182,7 @@ class RunService:
             raise ConfigError("run plan source state restore failed: " + restore_error["message"])
 
         run_status = "failed" if any(record.status == "failed" for record in records) else "ok"
-        self._write_run_files(
+        write_run_files(
             plan=plan,
             run_json_path=run_json_path,
             summary_csv_path=summary_csv_path,
@@ -365,7 +354,6 @@ class RunService:
             artifact=artifact,
         )
 
-
     def _run_scope_capture_step(self, plan: RunPlan, step: RunStep) -> dict[str, Any]:
         service = self._scope_service_for_capture(plan, step)
         channel = step.fields.get("channel", self.config.scope.default_channel)
@@ -382,7 +370,9 @@ class RunService:
             consistency = capture_consistency(artifacts, self.config.quality)
             for attempt in range(1, self.config.quality.auto_recover_attempts + 1):
                 service.autoscale()
-                retry = service.capture_waveform(channel=channel, label=f"{label}_auto_retry{attempt}")
+                retry = service.capture_waveform(
+                    channel=channel, label=f"{label}_auto_retry{attempt}"
+                )
                 artifact = self._capture_artifact(retry, service)
                 artifacts.append(artifact)
                 attempts.append(self._recovery_attempt_record(attempt, "auto_retry", artifact))
@@ -416,7 +406,9 @@ class RunService:
             artifact["expect_fft"] = evaluate_expect(fft_summary, step.fields["expect_fft"])
         return artifact
 
-    def _recovery_attempt_record(self, index: int, kind: str, artifact: dict[str, Any]) -> dict[str, Any]:
+    def _recovery_attempt_record(
+        self, index: int, kind: str, artifact: dict[str, Any]
+    ) -> dict[str, Any]:
         return {
             "index": index,
             "kind": kind,
@@ -465,7 +457,9 @@ class RunService:
         channels = plan.restore.source_channels or (None,)
         return [service.snapshot_restorable_state(channel=channel) for channel in channels]
 
-    def _restore_source_state(self, states: list[RestorableSourceState] | None) -> dict[str, Any] | None:
+    def _restore_source_state(
+        self, states: list[RestorableSourceState] | None
+    ) -> dict[str, Any] | None:
         if not states:
             return None
         errors: list[dict[str, str | int | None]] = []
@@ -474,9 +468,15 @@ class RunService:
             try:
                 service.restore_restorable_state(state)
             except Exception as exc:  # pragma: no cover - defensive, covered through mocks
-                errors.append({"channel": state.channel, "type": type(exc).__name__, "message": str(exc)})
+                errors.append(
+                    {"channel": state.channel, "type": type(exc).__name__, "message": str(exc)}
+                )
         if errors:
-            return {"type": "RestoreError", "message": "source state restore failed", "errors": errors}
+            return {
+                "type": "RestoreError",
+                "message": "source state restore failed",
+                "errors": errors,
+            }
         return None
 
     def _scope_service_for_capture(self, plan: RunPlan, step: RunStep) -> ScopeService:
@@ -500,98 +500,10 @@ class RunService:
             )
         return ScopeService(config=config, logger=CommandLogger())
 
-    def _write_step_record(self, steps_dir: Path, record: RunStepRecord) -> None:
-        safe_kind = record.kind.replace(".", "_")
-        path = steps_dir / f"{record.index:02d}_{safe_kind}.json"
-        path.write_text(
-            json.dumps(record.as_dict(), indent=2, ensure_ascii=False),
-            encoding="utf-8",
-        )
 
-    def _write_run_files(
-        self,
-        *,
-        plan: RunPlan,
-        run_json_path: Path,
-        summary_csv_path: Path,
-        status: str,
-        records: list[RunStepRecord],
-        error: dict[str, str] | None,
-        restore_state: list[RestorableSourceState] | None = None,
-        restore_error: dict[str, str] | None = None,
-    ) -> None:
-        run_data: dict[str, Any] = {
-            "status": status,
-            "experiment": {"name": plan.name, "label": plan.label},
-            "plan": str(plan.path),
-            "steps": [record.as_dict() for record in records],
-        }
-        if restore_state is not None:
-            snapshots = [state.as_dict() for state in restore_state]
-            channels = [state.channel for state in restore_state]
-            run_data["restore"] = {
-                "source_state": True,
-                "source_channels": channels,
-                "snapshots": snapshots,
-                "status": "failed" if restore_error is not None else "ok",
-            }
-            if len(restore_state) == 1:
-                run_data["restore"]["source_channel"] = restore_state[0].channel
-                run_data["restore"]["snapshot"] = restore_state[0].as_dict()
-            if restore_error is not None:
-                run_data["restore"]["error"] = restore_error
-        elif plan.restore.source_state:
-            run_data["restore"] = {
-                "source_state": True,
-                "source_channels": list(plan.restore.source_channels),
-                "status": "not_started",
-            }
-            if len(plan.restore.source_channels) == 1:
-                run_data["restore"]["source_channel"] = plan.restore.source_channels[0]
-        if error is not None:
-            run_data["error"] = error
-        run_json_path.write_text(
-            json.dumps(run_data, indent=2, ensure_ascii=False),
-            encoding="utf-8",
-        )
-
-        with summary_csv_path.open("w", newline="", encoding="utf-8") as file:
-            fieldnames = [
-                "index",
-                "kind",
-                "status",
-                "package",
-                "metadata",
-                "quality_status",
-                "quality_warnings",
-                "recovered",
-                "expect_status",
-                "expect_failures",
-                "expect_fft_status",
-                "expect_fft_failures",
-            ]
-            writer = csv.DictWriter(file, fieldnames=fieldnames)
-            writer.writeheader()
-            for record in records:
-                writer.writerow(
-                    {
-                        "index": record.index,
-                        "kind": record.kind,
-                        "status": record.status,
-                        "package": record.artifact.get("package", ""),
-                        "metadata": record.artifact.get("metadata", ""),
-                        "quality_status": record.artifact.get("quality", {}).get("status", ""),
-                        "quality_warnings": " | ".join(record.artifact.get("quality", {}).get("warnings", [])),
-                        "recovered": "yes" if "quality_recovery" in record.artifact else "",
-                        "expect_status": record.artifact.get("expect", {}).get("status", ""),
-                        "expect_failures": " | ".join(record.artifact.get("expect", {}).get("failures", [])),
-                        "expect_fft_status": record.artifact.get("expect_fft", {}).get("status", ""),
-                        "expect_fft_failures": " | ".join(record.artifact.get("expect_fft", {}).get("failures", [])),
-                    }
-                )
-
-
-def _check_limit(value: float | None, limit: float | None, *, field: str, config_key: str, unit: str) -> None:
+def _check_limit(
+    value: float | None, limit: float | None, *, field: str, config_key: str, unit: str
+) -> None:
     if value is None or limit is None:
         return
     if value > limit:
