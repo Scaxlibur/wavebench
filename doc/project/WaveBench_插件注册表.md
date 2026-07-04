@@ -6,12 +6,13 @@
 
 ## 目标
 
-当前阶段的目标是给内置驱动和后续外部驱动提供一个统一的只读能力目录：
+当前阶段的目标是给内置驱动、显式 Python entry points、本地市场索引和声明式 SCPI metadata 提供统一的只读能力目录：
 
 - 列出 WaveBench 知道哪些仪器驱动；
 - 查看单个驱动的型号、能力、IDN 匹配和配置字段；
 - 检查插件 metadata 是否符合当前 API 约定；
-- 为后续声明式 SCPI 插件和 marketplace 索引预留入口。
+- 展示只读市场索引；
+- 校验本地声明式 SCPI metadata，并在显式授权时执行只读 IDN 匹配。
 
 ## 非目标
 
@@ -21,7 +22,9 @@
 - 不把 service 层改成插件调度；
 - 不提供插件安装命令；
 - 不默认导入第三方 Python 包；
-- 不提供 marketplace 搜索或下载。
+- 不下载远端 marketplace；
+- 不通过 marketplace 安装插件；
+- 不让声明式 SCPI 插件执行任意命令。
 
 ## 插件 metadata
 
@@ -148,11 +151,25 @@ python -m wavebench plugin doctor --include-entry-points
 - entry point 加载失败会输出 error；
 - entry point `driver_id` 与已有插件重复会输出 error。
 
-## 后续方向
+## 当前插件相关命令
 
-推荐后续按以下顺序推进：
+```bash
+python -m wavebench plugin list
+python -m wavebench plugin info rigol.dp800
+python -m wavebench plugin doctor
+python -m wavebench plugin market search rigol
+python -m wavebench plugin market info wavebench-rigol-dg4202
+python -m wavebench plugin scpi check doc/project/scpi-plugin.example.toml
+python -m wavebench plugin scpi info doc/project/scpi-plugin.example.toml
+python -m wavebench plugin scpi probe doc/project/scpi-dp800.example.toml --resource TCPIP::192.168.1.161::INSTR
+python -m wavebench plugin scpi doctor doc/project/scpi-dp800.example.toml --probe --resource TCPIP::192.168.1.161::INSTR
+```
 
-1. 只读 marketplace index：`plugin market search/info`，只读取本地 JSON 索引，不安装插件。
-2. 声明式 SCPI 插件：本地 TOML metadata 校验、展示和显式只读 IDN probe。
-3. service 层按 capability 调用，而不是按具体型号判断。
-4. 插件安装流程必须保持显式确认，不做自动安装。
+## 仍然不做的事
+
+- 不自动下载插件；
+- 不自动安装插件；
+- 不让 service 层按声明式插件执行控制命令；
+- 不绕过显式资源参数访问仪器；
+- 不执行任意 SCPI；
+- 不打开或关闭输出。
