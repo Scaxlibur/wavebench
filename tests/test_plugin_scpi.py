@@ -71,6 +71,75 @@ def test_scpi_plugin_doctor_accepts_valid_plugin(tmp_path):
     assert not has_scpi_doctor_errors(records)
 
 
+def test_scpi_plugin_doctor_probe_appends_idn_records(tmp_path):
+    path = tmp_path / "plugin.toml"
+    write_scpi_plugin(path)
+
+    class FakeTransport:
+        def query(self, command):
+            return "Example,EX1,123"
+
+        def close(self):
+            pass
+
+    records = scpi_plugin_doctor_records(
+        path,
+        probe_resource="TCPIP::192.0.2.10::INSTR",
+        transport_factory=lambda config, logger: FakeTransport(),
+    )
+
+    assert ("ok", "example.scope", "metadata valid") in records
+    assert ("ok", "probe", "idn_response=Example,EX1,123") in records
+    assert ("ok", "probe", "idn matched declared patterns") in records
+    assert not has_scpi_doctor_errors(records)
+
+
+def test_scpi_plugin_doctor_probe_reports_idn_mismatch(tmp_path):
+    path = tmp_path / "plugin.toml"
+    write_scpi_plugin(path)
+
+    class FakeTransport:
+        def query(self, command):
+            return "Other,MODEL,123"
+
+        def close(self):
+            pass
+
+    records = scpi_plugin_doctor_records(
+        path,
+        probe_resource="TCPIP::192.0.2.10::INSTR",
+        transport_factory=lambda config, logger: FakeTransport(),
+    )
+
+    assert ("error", "probe", "idn did not match declared patterns") in records
+    assert has_scpi_doctor_errors(records)
+
+
+def test_scpi_plugin_doctor_probe_skips_when_metadata_invalid(tmp_path):
+    path = tmp_path / "plugin.toml"
+    write_scpi_plugin(
+        path,
+        """
+driver_id = "example.scope"
+kind = "scope"
+display_name = "Example Scope"
+manufacturer = "Example"
+models = ["EX1"]
+capabilities = ["source.idn"]
+summary = "Example declarative SCPI plugin."
+""".strip(),
+    )
+
+    records = scpi_plugin_doctor_records(
+        path,
+        probe_resource="TCPIP::192.0.2.10::INSTR",
+        transport_factory=lambda config, logger: None,
+    )
+
+    assert ("warning", "example.scope", "probe skipped because metadata validation failed") in records
+    assert has_scpi_doctor_errors(records)
+
+
 def test_scpi_plugin_doctor_rejects_write_command_idn_query(tmp_path):
     path = tmp_path / "plugin.toml"
     write_scpi_plugin(

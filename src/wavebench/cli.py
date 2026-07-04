@@ -177,6 +177,19 @@ def main(argv: list[str] | None = None) -> int:
                     records = scpi_plugin_doctor_records(args.path)
                     _print_scpi_doctor(records)
                     return 2 if has_scpi_doctor_errors(records) else 0
+                if args.scpi_command == "doctor":
+                    if args.resource and not args.probe:
+                        raise ConfigError("--resource requires --probe")
+                    if args.probe and not args.resource:
+                        raise ConfigError("--probe requires --resource")
+                    records = scpi_plugin_doctor_records(
+                        args.path,
+                        probe_resource=args.resource if args.probe else None,
+                        backend=args.backend,
+                        timeout_ms=args.timeout_ms,
+                    )
+                    _print_scpi_doctor(records)
+                    return 2 if has_scpi_doctor_errors(records) else 0
                 if args.scpi_command == "info":
                     _print_scpi_plugin_info(load_scpi_plugin(args.path))
                     return 0

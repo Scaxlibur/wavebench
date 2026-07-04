@@ -5,8 +5,8 @@ from pathlib import Path
 from typing import Any
 import tomllib
 
-from wavebench.errors import ConfigError
 from wavebench.config import ConnectionConfig
+from wavebench.errors import ConfigError, WaveBenchError
 from wavebench.logging import CommandLogger
 from wavebench.transport.pyvisa_transport import PyVisaTransport
 from wavebench.transport.rsinstrument_transport import RsInstrumentTransport
@@ -42,7 +42,14 @@ def load_scpi_plugin(path: str | Path) -> DeclarativeScpiPlugin:
     return _parse_scpi_plugin(raw)
 
 
-def scpi_plugin_doctor_records(path: str | Path):
+def scpi_plugin_doctor_records(
+    path: str | Path,
+    *,
+    probe_resource: str | None = None,
+    backend: str = "pyvisa",
+    timeout_ms: int = 1_000,
+    transport_factory=None,
+):
     try:
         scpi_plugin = load_scpi_plugin(path)
     except ConfigError as exc:
@@ -50,9 +57,22 @@ def scpi_plugin_doctor_records(path: str | Path):
         return [("error", subject, str(exc))]
     records = plugin_doctor_records(PluginRegistry((scpi_plugin.plugin,)))
     extra_errors = _validate_scpi_query(scpi_plugin.idn_query)
-    return [(record.severity, record.subject, record.message) for record in records] + [
+    doctor_records = [(record.severity, record.subject, record.message) for record in records] + [
         ("error", scpi_plugin.plugin.driver_id, message) for message in extra_errors
     ]
+    if probe_resource is None:
+        return doctor_records
+    if has_scpi_doctor_errors(doctor_records):
+        return doctor_records + [
+            ("warning", scpi_plugin.plugin.driver_id, "probe skipped because metadata validation failed")
+        ]
+    return doctor_records + _scpi_probe_doctor_records(
+        path,
+        probe_resource=probe_resource,
+        backend=backend,
+        timeout_ms=timeout_ms,
+        transport_factory=transport_factory,
+    )
 
 
 def has_scpi_doctor_errors(records) -> bool:
@@ -96,6 +116,32 @@ def probe_scpi_plugin(
         response=response,
         matched=_matches_idn(scpi_plugin.plugin.idn_patterns, response),
     )
+
+
+def _scpi_probe_doctor_records(
+    path: str | Path,
+    *,
+    probe_resource: str,
+    backend: str,
+    timeout_ms: int,
+    transport_factory=None,
+):
+    try:
+        result = probe_scpi_plugin(
+            path,
+            resource=probe_resource,
+            backend=backend,
+            timeout_ms=timeout_ms,
+            transport_factory=transport_factory,
+        )
+    except WaveBenchError as exc:
+        return [("error", "probe", str(exc))]
+    records = [("ok", "probe", f"idn_response={result.response}")]
+    if result.matched:
+        records.append(("ok", "probe", "idn matched declared patterns"))
+    else:
+        records.append(("error", "probe", "idn did not match declared patterns"))
+    return records
 
 
 def _transport_factory(backend: str):

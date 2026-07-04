@@ -12,6 +12,13 @@
 python -m wavebench plugin scpi check doc/project/scpi-plugin.example.toml
 ```
 
+诊断本地 TOML，并可选执行只读 IDN probe：
+
+```bash
+python -m wavebench plugin scpi doctor doc/project/scpi-dp800.example.toml
+python -m wavebench plugin scpi doctor doc/project/scpi-dp800.example.toml --probe --resource TCPIP::192.168.1.161::INSTR
+```
+
 查看本地 TOML：
 
 ```bash
@@ -99,7 +106,7 @@ scpi.idn_query = "*IDN?"
 
 ## 安全边界
 
-`plugin scpi check` 和 `plugin scpi info` 只读 TOML：
+`plugin scpi check`、`plugin scpi doctor` 和 `plugin scpi info` 默认只读 TOML：
 
 - 不发送 SCPI；
 - 不写配置；
@@ -107,7 +114,7 @@ scpi.idn_query = "*IDN?"
 - 不把本地 TOML 注册成可执行 driver；
 - 不改变 service 层真实仪器控制路径。
 
-`plugin scpi probe` 需要显式传入 `--resource`，只会发送 TOML 中的 `scpi.idn_query`：
+`plugin scpi doctor --probe --resource ...` 和 `plugin scpi probe` 会连接一个显式资源，只会发送 TOML 中的 `scpi.idn_query`：
 
 - `scpi.idn_query` 必须是单行查询；
 - `scpi.idn_query` 不能包含 `;` 分隔符；

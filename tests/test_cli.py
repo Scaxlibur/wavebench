@@ -383,6 +383,20 @@ max_source_vpp = 2.0
         self.assertEqual(args.scpi_command, "check")
         self.assertEqual(args.path, "plugin.toml")
 
+    def test_plugin_scpi_doctor_accepts_probe_options(self):
+        args = build_parser().parse_args([
+            "plugin", "scpi", "doctor", "plugin.toml",
+            "--probe",
+            "--resource", "TCPIP::192.0.2.10::INSTR",
+            "--timeout-ms", "250",
+        ])
+        self.assertEqual(args.domain, "plugin")
+        self.assertEqual(args.command, "scpi")
+        self.assertEqual(args.scpi_command, "doctor")
+        self.assertTrue(args.probe)
+        self.assertEqual(args.resource, "TCPIP::192.0.2.10::INSTR")
+        self.assertEqual(args.timeout_ms, 250)
+
     def test_plugin_scpi_info_accepts_path(self):
         args = build_parser().parse_args(["plugin", "scpi", "info", "plugin.toml"])
         self.assertEqual(args.domain, "plugin")
@@ -477,6 +491,35 @@ max_source_vpp = 2.0
             code = main(["plugin", "scpi", "check", "doc/project/scpi-plugin.example.toml"])
         self.assertEqual(code, 0)
         self.assertIn("ok\texample.scope\tmetadata valid", stdout.getvalue())
+
+    def test_plugin_scpi_doctor_requires_probe_with_resource(self):
+        stderr = io.StringIO()
+        with redirect_stderr(stderr):
+            code = main([
+                "plugin", "scpi", "doctor", "doc/project/scpi-plugin.example.toml",
+                "--resource", "TCPIP::192.0.2.10::INSTR",
+            ])
+        self.assertEqual(code, 2)
+        self.assertIn("--resource requires --probe", stderr.getvalue())
+
+    def test_plugin_scpi_doctor_probe_prints_result(self):
+        stdout = io.StringIO()
+        with patch(
+            "wavebench.cli.scpi_plugin_doctor_records",
+            return_value=[
+                ("ok", "example.scope", "metadata valid"),
+                ("ok", "probe", "idn_response=Example,EX1,123"),
+                ("ok", "probe", "idn matched declared patterns"),
+            ],
+        ):
+            with redirect_stdout(stdout):
+                code = main([
+                    "plugin", "scpi", "doctor", "doc/project/scpi-plugin.example.toml",
+                    "--probe", "--resource", "TCPIP::192.0.2.10::INSTR",
+                ])
+        self.assertEqual(code, 0)
+        output = stdout.getvalue()
+        self.assertIn("ok\tprobe\tidn_response=Example,EX1,123", output)
 
     def test_plugin_scpi_info_prints_metadata(self):
         stdout = io.StringIO()
