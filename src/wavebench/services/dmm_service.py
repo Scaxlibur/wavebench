@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 import time
 
@@ -15,6 +17,7 @@ from wavebench.transport.serial_transport import SerialTransport
 class DmmService:
     config: WaveBenchConfig
     logger: CommandLogger
+    session: DM3000Dmm | None = None
 
     def _dmm_config(self) -> DmmConfig:
         if self.config.dmm is None or not self.config.dmm.resource:
@@ -45,33 +48,32 @@ class DmmService:
     def open_session(self) -> DM3000Dmm:
         return self._open_dmm()
 
-    def idn(self) -> str:
+    @contextmanager
+    def _dmm_session(self) -> Iterator[DM3000Dmm]:
+        if self.session is not None:
+            yield self.session
+            return
         dmm = self._open_dmm()
         try:
-            return dmm.idn()
+            yield dmm
         finally:
             dmm.close()
+
+    def idn(self) -> str:
+        with self._dmm_session() as dmm:
+            return dmm.idn()
 
     def function_status(self) -> str:
-        dmm = self._open_dmm()
-        try:
+        with self._dmm_session() as dmm:
             return dmm.function_status()
-        finally:
-            dmm.close()
 
     def set_function(self, function: str) -> str:
-        dmm = self._open_dmm()
-        try:
+        with self._dmm_session() as dmm:
             return dmm.set_function(function=function)
-        finally:
-            dmm.close()
 
     def read(self, function: str = "dcv") -> DmmReading:
-        dmm = self._open_dmm()
-        try:
+        with self._dmm_session() as dmm:
             settle_s = self._dmm_config().settle_ms_before_read / 1000.0
             if settle_s > 0:
                 time.sleep(settle_s)
             return dmm.read(function=function)
-        finally:
-            dmm.close()
