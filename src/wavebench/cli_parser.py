@@ -429,5 +429,3 @@ def build_parser() -> argparse.ArgumentParser:
     add_runtime_options(capture)
 
     return parser
-
-

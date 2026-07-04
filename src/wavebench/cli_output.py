@@ -380,5 +380,3 @@ def _print_waveform_summary(waveform: WaveformData) -> None:
         print(f"frequency_error≈{frequency_error:.3%}")
     for warning in summary.get("quality_warnings", []):
         print(f"warning={warning}")
-
-

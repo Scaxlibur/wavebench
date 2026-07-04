@@ -126,4 +126,3 @@ market index 是只读目录，不是安装源。
 - 不下载 artifact；
 - 不修改 `wavebench.toml`；
 - 不把条目写入本地插件注册表。
-
