@@ -356,6 +356,26 @@ max_source_vpp = 2.0
         self.assertEqual(args.command, "doctor")
         self.assertTrue(args.include_entry_points)
 
+    def test_plugin_market_search_accepts_query_and_index(self):
+        args = build_parser().parse_args([
+            "plugin", "market", "search", "rigol", "--index", "src/wavebench/plugins/market.example.json"
+        ])
+        self.assertEqual(args.domain, "plugin")
+        self.assertEqual(args.command, "market")
+        self.assertEqual(args.market_command, "search")
+        self.assertEqual(args.query, "rigol")
+        self.assertEqual(args.index, "src/wavebench/plugins/market.example.json")
+
+    def test_plugin_market_info_accepts_plugin_id_and_index(self):
+        args = build_parser().parse_args([
+            "plugin", "market", "info", "wavebench-rigol-dg4202", "--index", "market.json"
+        ])
+        self.assertEqual(args.domain, "plugin")
+        self.assertEqual(args.command, "market")
+        self.assertEqual(args.market_command, "info")
+        self.assertEqual(args.plugin_id, "wavebench-rigol-dg4202")
+        self.assertEqual(args.index, "market.json")
+
     def test_plugin_list_prints_builtin_plugins(self):
         stdout = io.StringIO()
         with redirect_stdout(stdout):
@@ -402,6 +422,25 @@ max_source_vpp = 2.0
                 code = main(["plugin", "doctor", "--include-entry-points"])
         self.assertEqual(code, 2)
         self.assertIn("error\tentry_point:broken\tboom", stdout.getvalue())
+
+    def test_plugin_market_search_prints_default_index(self):
+        stdout = io.StringIO()
+        with redirect_stdout(stdout):
+            code = main(["plugin", "market", "search", "rigol"])
+        self.assertEqual(code, 0)
+        output = stdout.getvalue()
+        self.assertIn("plugin_id\tdriver_id\tkind\tpackage\tversion\tsummary", output)
+        self.assertIn("wavebench-rigol-dg4202", output)
+
+    def test_plugin_market_info_prints_default_index_entry(self):
+        stdout = io.StringIO()
+        with redirect_stdout(stdout):
+            code = main(["plugin", "market", "info", "wavebench-rs-rtm2032"])
+        self.assertEqual(code, 0)
+        output = stdout.getvalue()
+        self.assertIn("plugin_id=wavebench-rs-rtm2032", output)
+        self.assertIn("driver_id=rohde-schwarz.rtm2032", output)
+        self.assertIn("capabilities=scope.idn", output)
 
     def test_net_discover_accepts_scan_options(self):
         args = build_parser().parse_args([

@@ -80,6 +80,29 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Also load Python entry points from wavebench.drivers / 同时加载 wavebench.drivers 入口点",
     )
+    plugin_market = plugin_sub.add_parser(
+        "market",
+        help="Read-only plugin marketplace index / 只读插件市场索引",
+    )
+    plugin_market_sub = plugin_market.add_subparsers(dest="market_command", required=True)
+    plugin_market_search = plugin_market_sub.add_parser(
+        "search",
+        help="Search a local plugin market index / 搜索本地插件市场索引",
+    )
+    plugin_market_search.add_argument("query", nargs="?", help="Search text / 搜索文本")
+    plugin_market_search.add_argument(
+        "--index",
+        help="Path to a local plugin market JSON index / 本地插件市场 JSON 索引路径",
+    )
+    plugin_market_info = plugin_market_sub.add_parser(
+        "info",
+        help="Show one plugin market entry / 显示单个市场插件条目",
+    )
+    plugin_market_info.add_argument("plugin_id", help="Market plugin id, e.g. wavebench-rigol-dg4202")
+    plugin_market_info.add_argument(
+        "--index",
+        help="Path to a local plugin market JSON index / 本地插件市场 JSON 索引路径",
+    )
 
     net_sub = net_parser.add_subparsers(dest="command", required=True)
     net_discover = net_sub.add_parser(

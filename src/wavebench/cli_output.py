@@ -19,6 +19,7 @@ from .drivers.dp800 import PowerProtectionStatus, PowerStatus
 from .drivers.rtm2032 import WaveformData
 from .errors import ConfigError
 from .plugins.api import InstrumentPlugin, PluginDoctorRecord
+from .plugins.market import MarketPlugin
 from .services.run_plan import RunPlan, RunStep
 
 
@@ -56,6 +57,34 @@ def _print_plugin_info(plugin: InstrumentPlugin) -> None:
 def _print_plugin_doctor(records: list[PluginDoctorRecord]) -> None:
     for record in records:
         print(f"{record.severity}\t{record.subject}\t{record.message}")
+
+
+def _print_market_search_results(plugins: list[MarketPlugin]) -> None:
+    if not plugins:
+        print("no_market_plugins_found / 未发现市场插件")
+        return
+    print("plugin_id\tdriver_id\tkind\tpackage\tversion\tsummary")
+    for plugin in plugins:
+        print(
+            f"{plugin.plugin_id}\t{plugin.driver_id}\t{plugin.kind}\t"
+            f"{plugin.package}\t{plugin.version}\t{plugin.summary}"
+        )
+
+
+def _print_market_plugin_info(plugin: MarketPlugin) -> None:
+    print(f"plugin_id={plugin.plugin_id}")
+    print(f"driver_id={plugin.driver_id}")
+    print(f"name={plugin.name}")
+    print(f"kind={plugin.kind}")
+    print(f"package={plugin.package}")
+    print(f"version={plugin.version}")
+    print(f"summary={plugin.summary}")
+    if plugin.homepage:
+        print(f"homepage={plugin.homepage}")
+    if plugin.capabilities:
+        print("capabilities=" + plugin.capability_text)
+    if plugin.tags:
+        print("tags=" + plugin.tag_text)
 
 def _format_step_summary(step: RunStep) -> str:
     if not step.fields:

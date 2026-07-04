@@ -152,7 +152,7 @@ python -m wavebench plugin doctor --include-entry-points
 
 推荐后续按以下顺序推进：
 
-1. 只读 marketplace index：`market search/info`，只读取索引，不安装插件。
+1. 只读 marketplace index：`plugin market search/info`，只读取本地 JSON 索引，不安装插件。
 2. 声明式 SCPI 插件：TOML/YAML metadata + 只读 probe 起步。
 3. service 层按 capability 调用，而不是按具体型号判断。
 4. 插件安装流程必须保持显式确认，不做自动安装。

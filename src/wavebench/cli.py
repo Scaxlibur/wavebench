@@ -20,6 +20,8 @@ from .cli_output import (
     _print_dmm_function_set,
     _print_dmm_function_status,
     _print_dmm_reading,
+    _print_market_plugin_info,
+    _print_market_search_results,
     _print_plugin_doctor,
     _print_plugin_info,
     _print_plugin_list,
@@ -35,6 +37,7 @@ from .mcp_http import (
     resolve_mcp_token,
     serve_mcp_http,
 )
+from .plugins.market import load_market_index
 from .plugins.registry import build_plugin_registry, has_doctor_errors, plugin_doctor_records
 from .services.scope_service import ScopeService
 from .services.source_service import SourceService
@@ -157,6 +160,14 @@ def main(argv: list[str] | None = None) -> int:
                 records = plugin_doctor_records(registry, load_errors=result.load_errors)
                 _print_plugin_doctor(records)
                 return 2 if has_doctor_errors(records) else 0
+            if args.command == "market":
+                market = load_market_index(args.index)
+                if args.market_command == "search":
+                    _print_market_search_results(market.search(args.query))
+                    return 0
+                if args.market_command == "info":
+                    _print_market_plugin_info(market.get(args.plugin_id))
+                    return 0
         if args.domain == "net":
             if args.command == "discover":
                 results = discover_instruments(
