@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 
 from wavebench.config import ConnectionConfig, PowerConfig, WaveBenchConfig
@@ -13,6 +15,7 @@ from wavebench.transport.pyvisa_transport import PyVisaTransport
 class PowerService:
     config: WaveBenchConfig
     logger: CommandLogger
+    session: DP800Power | None = None
 
     def _power_config(self) -> PowerConfig:
         if self.config.power is None or not self.config.power.resource:
@@ -35,39 +38,38 @@ class PowerService:
     def open_session(self) -> DP800Power:
         return self._open_power()
 
-    def idn(self) -> str:
+    @contextmanager
+    def _power_session(self) -> Iterator[DP800Power]:
+        if self.session is not None:
+            yield self.session
+            return
         power = self._open_power()
         try:
-            return power.idn()
+            yield power
         finally:
             power.close()
+
+    def idn(self) -> str:
+        with self._power_session() as power:
+            return power.idn()
 
     def status(self, channel: int | None = None) -> PowerStatus:
         power_cfg = self._power_config()
         channel = power_cfg.default_channel if channel is None else channel
-        power = self._open_power()
-        try:
+        with self._power_session() as power:
             return power.get_status(channel)
-        finally:
-            power.close()
 
     def measurement(self, channel: int | None = None) -> PowerMeasurement:
         power_cfg = self._power_config()
         channel = power_cfg.default_channel if channel is None else channel
-        power = self._open_power()
-        try:
+        with self._power_session() as power:
             return power.get_measurement(channel)
-        finally:
-            power.close()
 
     def protection_status(self, channel: int | None = None) -> PowerProtectionStatus:
         power_cfg = self._power_config()
         channel = power_cfg.default_channel if channel is None else channel
-        power = self._open_power()
-        try:
+        with self._power_session() as power:
             return power.get_protection_status(channel)
-        finally:
-            power.close()
 
     def set_protection(
         self,
@@ -88,8 +90,7 @@ class PowerService:
         ):
             raise ConfigError("no protection change requested / 未请求保护设置变更")
         self._check_power_limits(voltage_v=ovp_threshold_v, current_limit_a=ocp_threshold_a)
-        power = self._open_power()
-        try:
+        with self._power_session() as power:
             setpoints = power.get_status(channel)
             protection = power.get_protection_status(channel)
             effective_ovp = ovp_threshold_v if ovp_threshold_v is not None else protection.ovp_threshold_v
@@ -108,8 +109,6 @@ class PowerService:
                 ocp_enabled=ocp_enabled,
                 check_errors=power_cfg.check_errors,
             )
-        finally:
-            power.close()
 
     def set_voltage_current_limit(
         self, channel: int | None, voltage_v: float, current_limit_a: float
@@ -117,8 +116,7 @@ class PowerService:
         power_cfg = self._power_config()
         self._check_power_limits(voltage_v=voltage_v, current_limit_a=current_limit_a)
         channel = power_cfg.default_channel if channel is None else channel
-        power = self._open_power()
-        try:
+        with self._power_session() as power:
             return power.set_voltage_current_limit(
                 channel,
                 voltage_v,
@@ -126,8 +124,6 @@ class PowerService:
                 check_errors=power_cfg.check_errors,
                 settle_ms_after_set=power_cfg.settle_ms_after_set,
             )
-        finally:
-            power.close()
 
     def _check_power_limits(self, *, voltage_v: float | None, current_limit_a: float | None) -> None:
         max_voltage = self.config.safety_limits.max_power_voltage_v
@@ -165,8 +161,7 @@ class PowerService:
     def set_output(self, channel: int | None, enabled: bool) -> PowerStatus:
         power_cfg = self._power_config()
         channel = power_cfg.default_channel if channel is None else channel
-        power = self._open_power()
-        try:
+        with self._power_session() as power:
             if enabled:
                 status = power.get_status(channel)
                 self._check_power_limits(
@@ -179,5 +174,3 @@ class PowerService:
                 check_errors=power_cfg.check_errors,
                 settle_ms_after_output=power_cfg.settle_ms_after_output,
             )
-        finally:
-            power.close()

@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import shutil
 import time
+from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 from wavebench.config import WaveBenchConfig
 from wavebench.data.package import new_package_dir
@@ -45,6 +46,14 @@ class RunPreflightRecord:
     instrument: str
     resource: str
     idn: str
+
+
+@dataclass(frozen=True)
+class RunInstrumentServices:
+    scope: ScopeService | None = None
+    source: SourceService | None = None
+    power: PowerService | None = None
+    dmm: DmmService | None = None
 
 
 def run_output_base(config: WaveBenchConfig) -> Path:
@@ -121,112 +130,129 @@ class RunService:
 
     def run(self, plan: RunPlan) -> RunResult:
         check_run_plan_safety_limits(plan, self.config.safety_limits)
-        self._run_safety_guards(plan)
         reject_unsupported_steps(plan)
-        run_dir = new_package_dir(run_output_base(self.config), plan.label)
-        steps_dir = run_dir / "steps"
-        steps_dir.mkdir(parents=True, exist_ok=False)
-        if plan.path.exists():
-            shutil.copyfile(plan.path, run_dir / "plan.toml")
+        with self._run_instrument_services(plan) as services:
+            self._run_safety_guards(plan, services=services)
+            run_dir = new_package_dir(run_output_base(self.config), plan.label)
+            steps_dir = run_dir / "steps"
+            steps_dir.mkdir(parents=True, exist_ok=False)
+            if plan.path.exists():
+                shutil.copyfile(plan.path, run_dir / "plan.toml")
 
-        records: list[RunStepRecord] = []
-        run_json_path = run_dir / "run.json"
-        summary_csv_path = run_dir / "summary.csv"
-        restore_state: list[RestorableSourceState] | None = None
-        restore_error: dict[str, str] | None = None
-        try:
-            restore_state = snapshot_source_state(plan, source_service_factory=self._source_service)
-            for step in plan.steps:
-                record = self._run_step(plan, step)
-                records.append(record)
-                write_step_record(steps_dir, record)
-        except Exception as exc:
-            restore_error = restore_source_state(
-                restore_state, source_service_factory=self._source_service
-            )
-            write_run_files(
-                plan=plan,
-                run_json_path=run_json_path,
-                summary_csv_path=summary_csv_path,
-                status="failed",
-                records=records,
-                error={"type": type(exc).__name__, "message": str(exc)},
-                restore_state=restore_state,
-                restore_error=restore_error,
-            )
-            if isinstance(exc, WaveBenchError):
+            records: list[RunStepRecord] = []
+            run_json_path = run_dir / "run.json"
+            summary_csv_path = run_dir / "summary.csv"
+            restore_state: list[RestorableSourceState] | None = None
+            restore_error: dict[str, str] | None = None
+            try:
+                restore_state = snapshot_source_state(
+                    plan,
+                    source_service_factory=lambda: self._source_service(services=services),
+                )
+                for step in plan.steps:
+                    record = self._run_step(plan, step, services=services)
+                    records.append(record)
+                    write_step_record(steps_dir, record)
+            except Exception as exc:
+                restore_error = restore_source_state(
+                    restore_state,
+                    source_service_factory=lambda: self._source_service(services=services),
+                )
+                write_run_files(
+                    plan=plan,
+                    run_json_path=run_json_path,
+                    summary_csv_path=summary_csv_path,
+                    status="failed",
+                    records=records,
+                    error={"type": type(exc).__name__, "message": str(exc)},
+                    restore_state=restore_state,
+                    restore_error=restore_error,
+                )
+                if isinstance(exc, WaveBenchError):
+                    raise
                 raise
-            raise
 
-        restore_error = restore_source_state(
-            restore_state, source_service_factory=self._source_service
-        )
-        if restore_error is not None:
+            restore_error = restore_source_state(
+                restore_state,
+                source_service_factory=lambda: self._source_service(services=services),
+            )
+            if restore_error is not None:
+                write_run_files(
+                    plan=plan,
+                    run_json_path=run_json_path,
+                    summary_csv_path=summary_csv_path,
+                    status="failed",
+                    records=records,
+                    error={"type": "ConfigError", "message": "source state restore failed"},
+                    restore_state=restore_state,
+                    restore_error=restore_error,
+                )
+                raise ConfigError("run plan source state restore failed: " + restore_error["message"])
+
+            run_status = "failed" if any(record.status == "failed" for record in records) else "ok"
             write_run_files(
                 plan=plan,
                 run_json_path=run_json_path,
                 summary_csv_path=summary_csv_path,
-                status="failed",
+                status=run_status,
                 records=records,
-                error={"type": "ConfigError", "message": "source state restore failed"},
+                error=None,
                 restore_state=restore_state,
-                restore_error=restore_error,
+                restore_error=None,
             )
-            raise ConfigError("run plan source state restore failed: " + restore_error["message"])
+            return RunResult(
+                run_dir=run_dir,
+                run_json_path=run_json_path,
+                summary_csv_path=summary_csv_path,
+                steps=records,
+            )
 
-        run_status = "failed" if any(record.status == "failed" for record in records) else "ok"
-        write_run_files(
-            plan=plan,
-            run_json_path=run_json_path,
-            summary_csv_path=summary_csv_path,
-            status=run_status,
-            records=records,
-            error=None,
-            restore_state=restore_state,
-            restore_error=None,
-        )
-        return RunResult(
-            run_dir=run_dir,
-            run_json_path=run_json_path,
-            summary_csv_path=summary_csv_path,
-            steps=records,
-        )
-
-    def _run_safety_guards(self, plan: RunPlan) -> None:
+    def _run_safety_guards(
+        self,
+        plan: RunPlan,
+        *,
+        services: RunInstrumentServices | None = None,
+    ) -> None:
         run_scope_safety_guards(
             plan,
-            scope_service=ScopeService(config=self.config, logger=CommandLogger()),
+            scope_service=self._scope_service(services=services),
             default_channel=self.config.scope.default_channel,
         )
 
-    def _run_step(self, plan: RunPlan, step: RunStep) -> RunStepRecord:
+    def _run_step(
+        self,
+        plan: RunPlan,
+        step: RunStep,
+        *,
+        services: RunInstrumentServices | None = None,
+    ) -> RunStepRecord:
         if step.kind == "power.status":
-            status = self._power_service().status(channel=step.fields.get("channel"))
+            status = self._power_service(services=services).status(channel=step.fields.get("channel"))
             artifact = {"power_status": _status_payload(status)}
         elif step.kind == "power.set":
-            status = self._power_service().set_voltage_current_limit(
+            status = self._power_service(services=services).set_voltage_current_limit(
                 channel=step.fields.get("channel"),
                 voltage_v=step.fields["voltage_v"],
                 current_limit_a=step.fields["current_limit_a"],
             )
             artifact = {"power_status": _status_payload(status)}
         elif step.kind == "power.output":
-            status = self._power_service().set_output(
+            status = self._power_service(services=services).set_output(
                 channel=step.fields.get("channel"),
                 enabled=step.fields["state"] == "on",
             )
             artifact = {"power_status": _status_payload(status)}
         elif step.kind == "source.status":
-            status = self._source_service().status(channel=step.fields.get("channel"))
+            status = self._source_service(services=services).status(channel=step.fields.get("channel"))
             artifact = {"source_status": _status_payload(status)}
         elif step.kind == "source.set_freq":
-            status = self._source_service().set_frequency(
+            status = self._source_service(services=services).set_frequency(
                 channel=step.fields.get("channel"),
                 value_hz=step.fields["frequency_hz"],
             )
             artifact = {"source_status": _status_payload(status)}
         elif step.kind == "source.arb_load":
-            status = self._source_service().upload_arbitrary_waveform(
+            status = self._source_service(services=services).upload_arbitrary_waveform(
                 channel=step.fields.get("channel"),
                 file_path=step.fields["file"],
                 playback_frequency_hz=step.fields["frequency_hz"],
@@ -239,36 +265,36 @@ class RunService:
             )
             artifact = {"source_status": _status_payload(status)}
         elif step.kind == "source.set_func":
-            status = self._source_service().set_function(
+            status = self._source_service(services=services).set_function(
                 channel=step.fields.get("channel"),
                 function=step.fields["function"],
             )
             artifact = {"source_status": _status_payload(status)}
         elif step.kind == "source.set_vpp":
-            status = self._source_service().set_amplitude_vpp(
+            status = self._source_service(services=services).set_amplitude_vpp(
                 channel=step.fields.get("channel"),
                 value_vpp=step.fields["value_vpp"],
             )
             artifact = {"source_status": _status_payload(status)}
         elif step.kind == "source.set_duty":
-            status = self._source_service().set_square_duty_cycle(
+            status = self._source_service(services=services).set_square_duty_cycle(
                 channel=step.fields.get("channel"),
                 duty_percent=step.fields["duty_percent"],
             )
             artifact = {"source_status": _status_payload(status)}
         elif step.kind == "source.output":
-            status = self._source_service().set_output(
+            status = self._source_service(services=services).set_output(
                 channel=step.fields.get("channel"),
                 enabled=step.fields["state"] == "on",
             )
             artifact = {"source_status": _status_payload(status)}
         elif step.kind == "scope.auto":
-            self._scope_service().autoscale()
+            self._scope_service(services=services).autoscale()
             artifact = {"autoscale": "completed"}
         elif step.kind == "scope.capture":
-            artifact = self._run_scope_capture_step(plan, step)
+            artifact = self._run_scope_capture_step(plan, step, services=services)
         elif step.kind == "dmm.read":
-            reading = self._dmm_service().read(function=step.fields.get("function", "dcv"))
+            reading = self._dmm_service(services=services).read(function=step.fields.get("function", "dcv"))
             reading_payload = _status_payload(reading)
             artifact = {"dmm_reading": reading_payload}
             if "expect" in step.fields:
@@ -286,8 +312,14 @@ class RunService:
             artifact=artifact,
         )
 
-    def _run_scope_capture_step(self, plan: RunPlan, step: RunStep) -> dict[str, Any]:
-        service = self._scope_service_for_capture(plan, step)
+    def _run_scope_capture_step(
+        self,
+        plan: RunPlan,
+        step: RunStep,
+        *,
+        services: RunInstrumentServices | None = None,
+    ) -> dict[str, Any]:
+        service = self._scope_service_for_capture(plan, step, services=services)
         channel = step.fields.get("channel", self.config.scope.default_channel)
         label = step.fields.get("label", f"{plan.label}_{step.index:02d}_capture")
         capture = service.capture_waveform(channel=channel, label=label)
@@ -370,19 +402,65 @@ class RunService:
             },
         }
 
-    def _power_service(self) -> PowerService:
+    @contextmanager
+    def _run_instrument_services(self, plan: RunPlan) -> Iterator[RunInstrumentServices]:
+        instruments = self._plan_instruments(plan)
+        with ExitStack() as stack:
+            scope: ScopeService | None = None
+            source: SourceService | None = None
+            power: PowerService | None = None
+            dmm: DmmService | None = None
+
+            if "scope" in instruments:
+                logger = CommandLogger()
+                session = ScopeService(config=self.config, logger=logger).open_session()
+                stack.callback(session.close)
+                scope = ScopeService(config=self.config, logger=logger, session=session)
+            if "source" in instruments:
+                logger = CommandLogger()
+                session = SourceService(config=self.config, logger=logger).open_session()
+                stack.callback(session.close)
+                source = SourceService(config=self.config, logger=logger, session=session)
+            if "power" in instruments:
+                logger = CommandLogger()
+                session = PowerService(config=self.config, logger=logger).open_session()
+                stack.callback(session.close)
+                power = PowerService(config=self.config, logger=logger, session=session)
+            if "dmm" in instruments:
+                logger = CommandLogger()
+                session = DmmService(config=self.config, logger=logger).open_session()
+                stack.callback(session.close)
+                dmm = DmmService(config=self.config, logger=logger, session=session)
+
+            yield RunInstrumentServices(scope=scope, source=source, power=power, dmm=dmm)
+
+    def _power_service(self, *, services: RunInstrumentServices | None = None) -> PowerService:
+        if services is not None and services.power is not None:
+            return services.power
         return PowerService(config=self.config, logger=CommandLogger())
 
-    def _source_service(self) -> SourceService:
+    def _source_service(self, *, services: RunInstrumentServices | None = None) -> SourceService:
+        if services is not None and services.source is not None:
+            return services.source
         return SourceService(config=self.config, logger=CommandLogger())
 
-    def _dmm_service(self) -> DmmService:
+    def _dmm_service(self, *, services: RunInstrumentServices | None = None) -> DmmService:
+        if services is not None and services.dmm is not None:
+            return services.dmm
         return DmmService(config=self.config, logger=CommandLogger())
 
-    def _scope_service(self) -> ScopeService:
+    def _scope_service(self, *, services: RunInstrumentServices | None = None) -> ScopeService:
+        if services is not None and services.scope is not None:
+            return services.scope
         return ScopeService(config=self.config, logger=CommandLogger())
 
-    def _scope_service_for_capture(self, plan: RunPlan, step: RunStep) -> ScopeService:
+    def _scope_service_for_capture(
+        self,
+        plan: RunPlan,
+        step: RunStep,
+        *,
+        services: RunInstrumentServices | None = None,
+    ) -> ScopeService:
         config = self.config
         if _has_waveform_overrides(step):
             config = config.with_waveform_overrides(
@@ -400,6 +478,12 @@ class RunService:
                 save_csv=step.fields.get("save_csv"),
                 save_npy=step.fields.get("save_npy"),
                 save_screenshot=step.fields.get("screenshot"),
+            )
+        if services is not None and services.scope is not None:
+            return ScopeService(
+                config=config,
+                logger=services.scope.logger,
+                session=services.scope.session,
             )
         return ScopeService(config=config, logger=CommandLogger())
 

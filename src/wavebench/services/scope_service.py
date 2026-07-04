@@ -3,6 +3,8 @@ from __future__ import annotations
 import csv
 import json
 import traceback
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -72,60 +74,60 @@ class MultiCaptureResult:
 class ScopeService:
     config: WaveBenchConfig
     logger: CommandLogger
+    session: RTM2032Scope | None = None
 
     def _open_scope(self) -> RTM2032Scope:
         transport = RsInstrumentTransport.open(self.config.connection, logger=self.logger)
         return RTM2032Scope(transport=transport, check_errors_after_ops=self.config.scope.check_errors)
 
-    def idn(self) -> str:
+    def open_session(self) -> RTM2032Scope:
+        return self._open_scope()
+
+    @contextmanager
+    def _scope_session(self) -> Iterator[RTM2032Scope]:
+        if self.session is not None:
+            yield self.session
+            return
         scope = self._open_scope()
         try:
-            return scope.idn()
+            yield scope
         finally:
             scope.close()
+
+    def idn(self) -> str:
+        with self._scope_session() as scope:
+            return scope.idn()
 
     def errors(self) -> list[str]:
-        scope = self._open_scope()
-        try:
+        with self._scope_session() as scope:
             return scope.errors()
-        finally:
-            scope.close()
 
     def channel_coupling(self, channel: int) -> str:
-        scope = self._open_scope()
-        try:
+        with self._scope_session() as scope:
             return scope.channel_coupling(channel)
-        finally:
-            scope.close()
 
     def require_high_impedance(self, channel: int, *, allow_50ohm: bool = False) -> str:
         coupling = self.channel_coupling(channel)
         return assert_scope_high_impedance(coupling, channel=channel, allow_50ohm=allow_50ohm)
 
     def autoscale(self) -> None:
-        scope = self._open_scope()
-        try:
+        with self._scope_session() as scope:
             scope.autoscale(
                 wait_opc=self.config.autoscale.wait_opc,
                 check_errors=self.config.autoscale.check_errors,
             )
-        finally:
-            scope.close()
 
     def fetch_waveform(self, channel: int) -> WaveformData:
         if self.config.waveform.format.lower() != "real":
             raise ConfigError("MVP-1 only supports waveform.format = 'real'")
         if self.config.waveform.byte_order.lower() != "lsbf":
             raise ConfigError("MVP-1 only supports waveform.byte_order = 'lsbf'")
-        scope = self._open_scope()
-        try:
+        with self._scope_session() as scope:
             return scope.fetch_waveform(
                 channel=channel,
                 points=self.config.waveform.points,
                 check_errors=self.config.scope.check_errors,
             )
-        finally:
-            scope.close()
 
     def _write_waveform_files(self, package_dir: Path, channel: int, waveform: WaveformData) -> dict[str, str]:
         times = waveform.times_s
@@ -211,8 +213,7 @@ class ScopeService:
         screenshot_path: Path | None = None
         screenshot_error: dict[str, str] | None = None
         try:
-            scope = self._open_scope()
-            try:
+            with self._scope_session() as scope:
                 instrument_idn = scope.idn()
                 capture_kwargs = {
                     "channel": channel,
@@ -224,8 +225,6 @@ class ScopeService:
                     capture_kwargs["vertical_scale_v_per_div"] = self.config.waveform.vertical_scale_v_per_div
                 waveform = scope.capture_waveform(**capture_kwargs)
                 screenshot_path, screenshot_error = self._write_screenshot_file(package_dir, scope)
-            finally:
-                scope.close()
         except Exception as exc:
             self._failed_capture_package(
                 package_dir=package_dir,
@@ -287,8 +286,7 @@ class ScopeService:
         screenshot_path: Path | None = None
         screenshot_error: dict[str, str] | None = None
         try:
-            scope = self._open_scope()
-            try:
+            with self._scope_session() as scope:
                 instrument_idn = scope.idn()
                 for channel in channels:
                     capture_kwargs = {
@@ -301,8 +299,6 @@ class ScopeService:
                         capture_kwargs["vertical_scale_v_per_div"] = self.config.waveform.vertical_scale_v_per_div
                     waveforms[channel] = scope.capture_waveform(**capture_kwargs)
                 screenshot_path, screenshot_error = self._write_screenshot_file(package_dir, scope)
-            finally:
-                scope.close()
         except Exception as exc:
             self._failed_capture_package(
                 package_dir=package_dir,

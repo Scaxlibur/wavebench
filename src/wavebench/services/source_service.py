@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 import time
 
@@ -16,6 +18,7 @@ from wavebench.transport.pyvisa_transport import PyVisaTransport
 class SourceService:
     config: WaveBenchConfig
     logger: CommandLogger
+    session: DG4202Source | None = None
 
     def _source_config(self) -> SourceConfig:
         if self.config.source is None or not self.config.source.resource:
@@ -35,28 +38,33 @@ class SourceService:
         transport = PyVisaTransport.open(connection, logger=self.logger)
         return DG4202Source(transport=transport, check_errors_after_ops=source.check_errors)
 
-    def idn(self) -> str:
+    def open_session(self) -> DG4202Source:
+        return self._open_source()
+
+    @contextmanager
+    def _source_session(self) -> Iterator[DG4202Source]:
+        if self.session is not None:
+            yield self.session
+            return
         source = self._open_source()
         try:
-            return source.idn()
+            yield source
         finally:
             source.close()
 
+    def idn(self) -> str:
+        with self._source_session() as source:
+            return source.idn()
+
     def errors(self) -> list[str]:
-        source = self._open_source()
-        try:
+        with self._source_session() as source:
             return source.errors()
-        finally:
-            source.close()
 
     def status(self, channel: int | None = None) -> SourceStatus:
         source_cfg = self._source_config()
         channel = source_cfg.default_channel if channel is None else channel
-        source = self._open_source()
-        try:
+        with self._source_session() as source:
             return source.get_status(channel)
-        finally:
-            source.close()
 
     def snapshot_restorable_state(self, channel: int | None = None) -> RestorableSourceState:
         return RestorableSourceState.from_status(self.status(channel=channel))
@@ -75,8 +83,7 @@ class SourceService:
     def set_frequency(self, channel: int | None, value_hz: float) -> SourceStatus:
         source_cfg = self._source_config()
         channel = source_cfg.default_channel if channel is None else channel
-        source = self._open_source()
-        try:
+        with self._source_session() as source:
             status = source.set_frequency(
                 channel,
                 value_hz,
@@ -89,48 +96,34 @@ class SourceService:
             if source_cfg.check_errors:
                 source.assert_no_errors()
             return status
-        finally:
-            source.close()
 
     def set_output(self, channel: int | None, enabled: bool) -> SourceStatus:
         source_cfg = self._source_config()
         channel = source_cfg.default_channel if channel is None else channel
-        source = self._open_source()
-        try:
+        with self._source_session() as source:
             if enabled:
                 status = source.get_status(channel)
                 self._check_source_vpp(status.amplitude, field="source output amplitude / 信号源输出幅度")
             return source.set_output(channel, enabled, check_errors=source_cfg.check_errors)
-        finally:
-            source.close()
 
     def set_function(self, channel: int | None, function: str) -> SourceStatus:
         source_cfg = self._source_config()
         channel = source_cfg.default_channel if channel is None else channel
-        source = self._open_source()
-        try:
+        with self._source_session() as source:
             return source.set_function(channel, function, check_errors=source_cfg.check_errors)
-        finally:
-            source.close()
 
     def set_square_duty_cycle(self, channel: int | None, duty_percent: float) -> SourceStatus:
         source_cfg = self._source_config()
         channel = source_cfg.default_channel if channel is None else channel
-        source = self._open_source()
-        try:
+        with self._source_session() as source:
             return source.set_square_duty_cycle(channel, duty_percent, check_errors=source_cfg.check_errors)
-        finally:
-            source.close()
 
     def set_amplitude_vpp(self, channel: int | None, value_vpp: float) -> SourceStatus:
         source_cfg = self._source_config()
         self._check_source_vpp(value_vpp, field="source amplitude / 信号源幅度")
         channel = source_cfg.default_channel if channel is None else channel
-        source = self._open_source()
-        try:
+        with self._source_session() as source:
             return source.set_amplitude_vpp(channel, value_vpp, check_errors=source_cfg.check_errors)
-        finally:
-            source.close()
 
 
     def upload_arbitrary_waveform(
@@ -155,8 +148,7 @@ class SourceService:
             max_points=max_points,
         )
         block = build_dg4000_dac14_binary_block(waveform, byte_order=byte_order)
-        source = self._open_source()
-        try:
+        with self._source_session() as source:
             return source.upload_dg4000_dac14_block(
                 channel=channel,
                 block=block,
@@ -166,8 +158,6 @@ class SourceService:
                 output_on=output_on,
                 check_errors=source_cfg.check_errors,
             )
-        finally:
-            source.close()
 
     def _check_source_vpp(self, value_vpp: float, *, field: str) -> None:
         limit = self.config.safety_limits.max_source_vpp
@@ -180,8 +170,5 @@ class SourceService:
     def probe_arbitrary_queries(self, channel: int | None = None) -> list[ArbitraryQueryProbeResult]:
         source_cfg = self._source_config()
         channel = source_cfg.default_channel if channel is None else channel
-        source = self._open_source()
-        try:
+        with self._source_session() as source:
             return source.probe_arbitrary_queries(channel)
-        finally:
-            source.close()

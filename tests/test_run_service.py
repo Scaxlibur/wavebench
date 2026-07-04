@@ -1,7 +1,7 @@
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
-from unittest.mock import call, patch
+from unittest.mock import Mock, call, patch
 import json
 import unittest
 
@@ -297,6 +297,98 @@ duration_s = 0.01
             self.assertEqual(len(run_data["steps"]), 4)
             self.assertIn("data", str(result.run_dir))
             self.assertIn("runs", str(result.run_dir))
+
+
+    def test_reuses_power_session_across_run_steps(self):
+        with TemporaryDirectory() as tmp:
+            plan = load_run_plan(
+                write_plan(
+                    tmp,
+                    """
+[[steps]]
+kind = "power.status"
+channel = 1
+
+[[steps]]
+kind = "power.set"
+channel = 1
+voltage_v = 3.3
+current_limit_a = 0.1
+""",
+                )
+            )
+            with patch("wavebench.services.run_service.PowerService") as power_cls:
+                power = power_cls.return_value
+                session = SimpleNamespace(close=Mock())
+                power.open_session.return_value = session
+                power.status.return_value = ok_power_status()
+                power.set_voltage_current_limit.return_value = ok_power_status()
+
+                RunService(config=make_config(tmp), logger=CommandLogger()).run(plan)
+
+                power.open_session.assert_called_once_with()
+                power.status.assert_called_once_with(channel=1)
+                power.set_voltage_current_limit.assert_called_once_with(
+                    channel=1,
+                    voltage_v=3.3,
+                    current_limit_a=0.1,
+                )
+                session.close.assert_called_once_with()
+
+    def test_closes_power_session_after_step_failure(self):
+        with TemporaryDirectory() as tmp:
+            plan = load_run_plan(
+                write_plan(
+                    tmp,
+                    """
+[[steps]]
+kind = "power.set"
+channel = 1
+voltage_v = 3.3
+current_limit_a = 0.1
+""",
+                )
+            )
+            with patch("wavebench.services.run_service.PowerService") as power_cls:
+                power = power_cls.return_value
+                session = SimpleNamespace(close=Mock())
+                power.open_session.return_value = session
+                power.set_voltage_current_limit.side_effect = ConfigError("boom")
+
+                with self.assertRaisesRegex(ConfigError, "boom"):
+                    RunService(config=make_config(tmp), logger=CommandLogger()).run(plan)
+
+                session.close.assert_called_once_with()
+
+    def test_opens_all_required_sessions_before_first_step(self):
+        with TemporaryDirectory() as tmp:
+            plan = load_run_plan(
+                write_plan(
+                    tmp,
+                    """
+[[steps]]
+kind = "power.status"
+channel = 1
+
+[[steps]]
+kind = "dmm.read"
+function = "dcv"
+""",
+                )
+            )
+            with patch("wavebench.services.run_service.PowerService") as power_cls, patch(
+                "wavebench.services.run_service.DmmService"
+            ) as dmm_cls:
+                power = power_cls.return_value
+                power_session = SimpleNamespace(close=Mock())
+                power.open_session.return_value = power_session
+                dmm_cls.return_value.open_session.side_effect = ConfigError("dmm offline")
+
+                with self.assertRaisesRegex(ConfigError, "dmm offline"):
+                    RunService(config=make_config(tmp), logger=CommandLogger()).run(plan)
+
+                power.status.assert_not_called()
+                power_session.close.assert_called_once_with()
 
 
     def test_runs_power_output_step(self):
@@ -700,13 +792,16 @@ channel = 1
             with patch("wavebench.services.run_service.ScopeService") as scope_cls, patch(
                 "wavebench.services.run_service.PowerService"
             ) as power_cls:
+                power_session = SimpleNamespace(close=Mock())
+                power_cls.return_value.open_session.return_value = power_session
                 scope_cls.return_value.channel_coupling.return_value = "DC"
 
                 with self.assertRaisesRegex(ConfigError, "scope CH2 coupling is DC"):
                     RunService(config=make_config(tmp), logger=CommandLogger()).run(plan)
 
                 scope_cls.return_value.channel_coupling.assert_called_once_with(2)
-                power_cls.assert_not_called()
+                power_cls.return_value.status.assert_not_called()
+                power_session.close.assert_called_once_with()
 
 
     def test_runs_source_arbitrary_load_step(self):
@@ -838,6 +933,40 @@ function = "SQU"
                 run_data = json.loads(result.run_json_path.read_text(encoding="utf-8"))
                 self.assertEqual(run_data["restore"]["status"], "ok")
                 self.assertEqual(run_data["restore"]["snapshot"]["square_duty_cycle_percent"], 50.0)
+
+    def test_source_snapshot_step_and_restore_share_run_session(self):
+        with TemporaryDirectory() as tmp:
+            plan = load_run_plan(
+                write_plan(
+                    tmp,
+                    """
+[restore]
+source_state = true
+source_channel = 2
+
+[[steps]]
+kind = "source.set_func"
+channel = 2
+function = "SQU"
+""",
+                )
+            )
+            fake_state = SimpleNamespace(channel=2, as_dict=lambda: {"channel": 2, "function": "SIN"})
+            fake_status = SimpleNamespace(as_dict=lambda: {"channel": 2})
+            with patch("wavebench.services.run_service.SourceService") as source_cls:
+                source = source_cls.return_value
+                session = SimpleNamespace(close=Mock())
+                source.open_session.return_value = session
+                source.snapshot_restorable_state.return_value = fake_state
+                source.set_function.return_value = fake_status
+
+                RunService(config=make_config(tmp), logger=CommandLogger()).run(plan)
+
+                source.open_session.assert_called_once_with()
+                source.snapshot_restorable_state.assert_called_once_with(channel=2)
+                source.set_function.assert_called_once_with(channel=2, function="SQU")
+                source.restore_restorable_state.assert_called_once_with(fake_state)
+                session.close.assert_called_once_with()
 
     def test_restores_source_state_after_step_failure_when_enabled(self):
         with TemporaryDirectory() as tmp:
