@@ -64,7 +64,7 @@ src/wavebench/plugins/market.example.json
       "driver_id": "rigol.dg4202",
       "name": "RIGOL DG4202 driver",
       "package": "wavebench",
-      "version": "0.6.0",
+      "version": "0.7.0",
       "kind": "source",
       "summary": "Built-in metadata entry for the WaveBench RIGOL DG4000-series signal source driver.",
       "homepage": "https://github.com/Scaxlibur/wavebench",
