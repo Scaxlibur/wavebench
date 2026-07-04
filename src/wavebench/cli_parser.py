@@ -118,6 +118,24 @@ def build_parser() -> argparse.ArgumentParser:
         help="Show a local SCPI plugin TOML file / 显示本地 SCPI 插件 TOML",
     )
     plugin_scpi_info.add_argument("path", help="Path to a SCPI plugin TOML file / SCPI 插件 TOML 路径")
+    plugin_scpi_probe = plugin_scpi_sub.add_parser(
+        "probe",
+        help="Run the plugin idn_query against one resource / 对一个资源执行插件 idn_query",
+    )
+    plugin_scpi_probe.add_argument("path", help="Path to a SCPI plugin TOML file / SCPI 插件 TOML 路径")
+    plugin_scpi_probe.add_argument("--resource", required=True, help="VISA resource to query / 要查询的 VISA 资源")
+    plugin_scpi_probe.add_argument(
+        "--backend",
+        choices=("pyvisa", "rsinstrument"),
+        default="pyvisa",
+        help="SCPI transport backend / SCPI 传输后端",
+    )
+    plugin_scpi_probe.add_argument(
+        "--timeout-ms",
+        type=int,
+        default=1000,
+        help="Probe timeout in milliseconds / 探测超时毫秒数",
+    )
 
     net_sub = net_parser.add_subparsers(dest="command", required=True)
     net_discover = net_sub.add_parser(

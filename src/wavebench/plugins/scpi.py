@@ -6,6 +6,10 @@ from typing import Any
 import tomllib
 
 from wavebench.errors import ConfigError
+from wavebench.config import ConnectionConfig
+from wavebench.logging import CommandLogger
+from wavebench.transport.pyvisa_transport import PyVisaTransport
+from wavebench.transport.rsinstrument_transport import RsInstrumentTransport
 
 from .api import SUPPORTED_PLUGIN_API_VERSION, InstrumentPlugin
 from .registry import PluginRegistry, plugin_doctor_records
@@ -15,6 +19,16 @@ from .registry import PluginRegistry, plugin_doctor_records
 class DeclarativeScpiPlugin:
     plugin: InstrumentPlugin
     idn_query: str
+
+
+@dataclass(frozen=True)
+class ScpiProbeResult:
+    driver_id: str
+    resource: str
+    backend: str
+    query: str
+    response: str
+    matched: bool
 
 
 def load_scpi_plugin(path: str | Path) -> DeclarativeScpiPlugin:
@@ -43,6 +57,53 @@ def scpi_plugin_doctor_records(path: str | Path):
 
 def has_scpi_doctor_errors(records) -> bool:
     return any(record[0] == "error" for record in records)
+
+
+def probe_scpi_plugin(
+    path: str | Path,
+    *,
+    resource: str,
+    backend: str = "pyvisa",
+    timeout_ms: int = 1_000,
+    transport_factory=None,
+) -> ScpiProbeResult:
+    if not resource.strip():
+        raise ConfigError("--resource must be non-empty")
+    if timeout_ms < 1:
+        raise ConfigError("--timeout-ms must be >= 1")
+    scpi_plugin = load_scpi_plugin(path)
+    query_errors = _validate_scpi_query(scpi_plugin.idn_query)
+    if query_errors:
+        raise ConfigError("; ".join(query_errors))
+    normalized_backend = backend.strip().lower()
+    config = ConnectionConfig(
+        backend=normalized_backend,
+        resource=resource.strip(),
+        timeout_ms=timeout_ms,
+        opc_timeout_ms=timeout_ms,
+    )
+    factory = transport_factory or _transport_factory(normalized_backend)
+    transport = factory(config, CommandLogger())
+    try:
+        response = transport.query(scpi_plugin.idn_query).strip()
+    finally:
+        transport.close()
+    return ScpiProbeResult(
+        driver_id=scpi_plugin.plugin.driver_id,
+        resource=config.resource,
+        backend=normalized_backend,
+        query=scpi_plugin.idn_query,
+        response=response,
+        matched=_matches_idn(scpi_plugin.plugin.idn_patterns, response),
+    )
+
+
+def _transport_factory(backend: str):
+    if backend == "pyvisa":
+        return PyVisaTransport.open
+    if backend == "rsinstrument":
+        return RsInstrumentTransport.open
+    raise ConfigError("SCPI probe backend must be one of: pyvisa, rsinstrument")
 
 
 def _parse_scpi_plugin(raw: Any) -> DeclarativeScpiPlugin:
@@ -118,3 +179,10 @@ def _validate_scpi_query(command: str) -> list[str]:
     if not command.endswith("?"):
         errors.append("scpi.idn_query must be a query ending with '?'")
     return errors
+
+
+def _matches_idn(patterns: tuple[str, ...], response: str) -> bool:
+    if not patterns:
+        return True
+    normalized_response = response.lower()
+    return any(pattern.lower() in normalized_response for pattern in patterns)

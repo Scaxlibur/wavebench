@@ -390,6 +390,21 @@ max_source_vpp = 2.0
         self.assertEqual(args.scpi_command, "info")
         self.assertEqual(args.path, "plugin.toml")
 
+    def test_plugin_scpi_probe_accepts_resource_and_backend(self):
+        args = build_parser().parse_args([
+            "plugin", "scpi", "probe", "plugin.toml",
+            "--resource", "TCPIP::192.0.2.10::INSTR",
+            "--backend", "rsinstrument",
+            "--timeout-ms", "250",
+        ])
+        self.assertEqual(args.domain, "plugin")
+        self.assertEqual(args.command, "scpi")
+        self.assertEqual(args.scpi_command, "probe")
+        self.assertEqual(args.path, "plugin.toml")
+        self.assertEqual(args.resource, "TCPIP::192.0.2.10::INSTR")
+        self.assertEqual(args.backend, "rsinstrument")
+        self.assertEqual(args.timeout_ms, 250)
+
     def test_plugin_list_prints_builtin_plugins(self):
         stdout = io.StringIO()
         with redirect_stdout(stdout):
@@ -472,6 +487,32 @@ max_source_vpp = 2.0
         self.assertIn("driver_id=example.scope", output)
         self.assertIn("origin=local", output)
         self.assertIn("scpi_idn_query=*IDN?", output)
+
+    def test_plugin_scpi_probe_prints_result(self):
+        from wavebench.plugins.scpi import ScpiProbeResult
+
+        stdout = io.StringIO()
+        with patch(
+            "wavebench.cli.probe_scpi_plugin",
+            return_value=ScpiProbeResult(
+                driver_id="example.scope",
+                resource="TCPIP::192.0.2.10::INSTR",
+                backend="pyvisa",
+                query="*IDN?",
+                response="Example,EX1,123",
+                matched=True,
+            ),
+        ):
+            with redirect_stdout(stdout):
+                code = main([
+                    "plugin", "scpi", "probe", "doc/project/scpi-plugin.example.toml",
+                    "--resource", "TCPIP::192.0.2.10::INSTR",
+                ])
+
+        self.assertEqual(code, 0)
+        output = stdout.getvalue()
+        self.assertIn("query=*IDN?", output)
+        self.assertIn("idn_match=yes", output)
 
     def test_net_discover_accepts_scan_options(self):
         args = build_parser().parse_args([

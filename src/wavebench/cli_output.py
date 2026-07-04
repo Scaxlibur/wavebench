@@ -20,7 +20,7 @@ from .drivers.rtm2032 import WaveformData
 from .errors import ConfigError
 from .plugins.api import InstrumentPlugin, PluginDoctorRecord
 from .plugins.market import MarketPlugin
-from .plugins.scpi import DeclarativeScpiPlugin
+from .plugins.scpi import DeclarativeScpiPlugin, ScpiProbeResult
 from .services.run_plan import RunPlan, RunStep
 
 
@@ -96,6 +96,15 @@ def _print_scpi_plugin_info(scpi_plugin: DeclarativeScpiPlugin) -> None:
 def _print_scpi_doctor(records: list[tuple[str, str, str]]) -> None:
     for severity, subject, message in records:
         print(f"{severity}\t{subject}\t{message}")
+
+
+def _print_scpi_probe_result(result: ScpiProbeResult) -> None:
+    print(f"driver_id={result.driver_id}")
+    print(f"resource={result.resource}")
+    print(f"backend={result.backend}")
+    print(f"query={result.query}")
+    print(f"response={result.response}")
+    print(f"idn_match={'yes' if result.matched else 'no'}")
 
 def _format_step_summary(step: RunStep) -> str:
     if not step.fields:

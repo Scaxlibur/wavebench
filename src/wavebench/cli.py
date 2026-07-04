@@ -26,6 +26,7 @@ from .cli_output import (
     _print_plugin_info,
     _print_plugin_list,
     _print_scpi_doctor,
+    _print_scpi_probe_result,
     _print_scpi_plugin_info,
     _print_power_protection_status,
     _print_power_status,
@@ -41,7 +42,7 @@ from .mcp_http import (
 )
 from .plugins.market import load_market_index
 from .plugins.registry import build_plugin_registry, has_doctor_errors, plugin_doctor_records
-from .plugins.scpi import has_scpi_doctor_errors, load_scpi_plugin, scpi_plugin_doctor_records
+from .plugins.scpi import has_scpi_doctor_errors, load_scpi_plugin, probe_scpi_plugin, scpi_plugin_doctor_records
 from .services.scope_service import ScopeService
 from .services.source_service import SourceService
 from .services.power_service import PowerService
@@ -179,6 +180,15 @@ def main(argv: list[str] | None = None) -> int:
                 if args.scpi_command == "info":
                     _print_scpi_plugin_info(load_scpi_plugin(args.path))
                     return 0
+                if args.scpi_command == "probe":
+                    result = probe_scpi_plugin(
+                        args.path,
+                        resource=args.resource,
+                        backend=args.backend,
+                        timeout_ms=args.timeout_ms,
+                    )
+                    _print_scpi_probe_result(result)
+                    return 0 if result.matched else 2
         if args.domain == "net":
             if args.command == "discover":
                 results = discover_instruments(

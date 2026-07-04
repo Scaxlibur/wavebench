@@ -2,7 +2,7 @@
 
 本文档记录 WaveBench 当前本地声明式 SCPI 插件 TOML 的格式、命令和安全边界。
 
-当前声明式 SCPI 插件只用于 metadata 校验和展示。它不会连接仪器，不会发送 SCPI，不会把插件注册到真实执行路径。
+当前声明式 SCPI 插件用于 metadata 校验、展示和显式只读 IDN probe。它不会把插件注册到真实执行路径。
 
 ## 命令
 
@@ -18,12 +18,19 @@ python -m wavebench plugin scpi check doc/project/scpi-plugin.example.toml
 python -m wavebench plugin scpi info doc/project/scpi-plugin.example.toml
 ```
 
+对一个显式资源执行只读 IDN 查询：
+
+```bash
+python -m wavebench plugin scpi probe doc/project/scpi-dp800.example.toml --resource TCPIP::192.168.1.161::INSTR
+```
+
 ## 示例
 
 示例文件位于：
 
 ```text
 doc/project/scpi-plugin.example.toml
+doc/project/scpi-dp800.example.toml
 ```
 
 内容：
@@ -92,11 +99,20 @@ scpi.idn_query = "*IDN?"
 
 ## 安全边界
 
-当前实现只读 TOML：
+`plugin scpi check` 和 `plugin scpi info` 只读 TOML：
 
-- 不连接仪器；
 - 不发送 SCPI；
 - 不写配置；
 - 不导入 Python 包；
 - 不把本地 TOML 注册成可执行 driver；
 - 不改变 service 层真实仪器控制路径。
+
+`plugin scpi probe` 需要显式传入 `--resource`，只会发送 TOML 中的 `scpi.idn_query`：
+
+- `scpi.idn_query` 必须是单行查询；
+- `scpi.idn_query` 不能包含 `;` 分隔符；
+- `scpi.idn_query` 必须以 `?` 结尾；
+- 不支持任意 SCPI；
+- 不打开或关闭输出；
+- 不写仪器状态；
+- 不修改配置文件。

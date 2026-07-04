@@ -4,6 +4,7 @@ from wavebench.errors import ConfigError
 from wavebench.plugins.scpi import (
     has_scpi_doctor_errors,
     load_scpi_plugin,
+    probe_scpi_plugin,
     scpi_plugin_doctor_records,
 )
 
@@ -103,3 +104,84 @@ def test_scpi_plugin_doctor_reports_invalid_toml(tmp_path):
     assert has_scpi_doctor_errors(records)
     assert records[0][0] == "error"
     assert str(path) in records[0][1]
+
+
+def test_probe_scpi_plugin_queries_only_declared_idn_query(tmp_path):
+    path = tmp_path / "plugin.toml"
+    write_scpi_plugin(path)
+    calls = []
+
+    class FakeTransport:
+        def query(self, command):
+            calls.append(command)
+            return "Example,EX1,123"
+
+        def close(self):
+            calls.append("close")
+
+    def fake_factory(config, logger):
+        assert config.resource == "TCPIP::192.0.2.10::INSTR"
+        assert config.timeout_ms == 250
+        assert logger is not None
+        return FakeTransport()
+
+    result = probe_scpi_plugin(
+        path,
+        resource="TCPIP::192.0.2.10::INSTR",
+        timeout_ms=250,
+        transport_factory=fake_factory,
+    )
+
+    assert calls == ["*IDN?", "close"]
+    assert result.driver_id == "example.scope"
+    assert result.response == "Example,EX1,123"
+    assert result.matched
+
+
+def test_probe_scpi_plugin_reports_idn_mismatch(tmp_path):
+    path = tmp_path / "plugin.toml"
+    write_scpi_plugin(path)
+
+    class FakeTransport:
+        def query(self, command):
+            return "Other,MODEL,123"
+
+        def close(self):
+            pass
+
+    result = probe_scpi_plugin(
+        path,
+        resource="TCPIP::192.0.2.10::INSTR",
+        transport_factory=lambda config, logger: FakeTransport(),
+    )
+
+    assert not result.matched
+
+
+def test_probe_scpi_plugin_rejects_unsafe_query_before_opening_transport(tmp_path):
+    path = tmp_path / "plugin.toml"
+    write_scpi_plugin(
+        path,
+        """
+driver_id = "example.scope"
+kind = "scope"
+display_name = "Example Scope"
+manufacturer = "Example"
+models = ["EX1"]
+capabilities = ["scope.idn"]
+summary = "Example declarative SCPI plugin."
+
+[scpi]
+idn_query = "*IDN?;OUTP ON"
+""".strip(),
+    )
+
+    def fake_factory(config, logger):
+        raise AssertionError("transport must not open for unsafe query")
+
+    with pytest.raises(ConfigError, match="must not contain command separators"):
+        probe_scpi_plugin(
+            path,
+            resource="TCPIP::192.0.2.10::INSTR",
+            transport_factory=fake_factory,
+        )
