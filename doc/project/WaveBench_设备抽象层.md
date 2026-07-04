@@ -25,14 +25,16 @@ class Instrument:
 
 这种类会很快变成垃圾桶。
 
-### 不先做插件系统
+### 插件系统只做 metadata 起步
 
-当前只确定：
+WaveBench 现在已经有轻量插件注册表，但当前只管理仪器驱动 metadata：
 
-- R&S RTM2032 示波器；
-- 后续接入普源信号发生器。
+- 内置驱动注册为只读能力目录；
+- `plugin list/info` 只展示 metadata；
+- `plugin doctor` 只检查 metadata 与 entry point 加载错误；
+- 默认不导入第三方插件，必须显式传入 `--include-entry-points`。
 
-为了两个设备写完整插件系统太重。
+它还不是完整插件化执行层。service 层仍直接使用现有 driver，不通过插件动态调度真实仪器控制。
 
 ### 不让裸 SCPI 散落在业务代码里
 
