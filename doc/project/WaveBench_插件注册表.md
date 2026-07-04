@@ -41,7 +41,7 @@ summary        简短说明
 api_version    当前为 wavebench.instrument.v1
 package        来源包名
 origin         builtin / entry_point / local
-idn_patterns   可用于后续自动匹配的 IDN 片段
+idn_patterns   用于 IDN 匹配的片段
 config_fields  相关配置字段
 ```
 
