@@ -305,6 +305,38 @@ max_source_vpp = 2.0
         self.assertEqual(args.config, "wavebench.toml")
         self.assertEqual(args.plan, "plans/example.toml")
 
+    def test_plugin_list_accepts_kind_filter(self):
+        args = build_parser().parse_args(["plugin", "list", "--kind", "source"])
+        self.assertEqual(args.domain, "plugin")
+        self.assertEqual(args.command, "list")
+        self.assertEqual(args.kind, "source")
+
+    def test_plugin_info_accepts_driver_id(self):
+        args = build_parser().parse_args(["plugin", "info", "rigol.dg4202"])
+        self.assertEqual(args.domain, "plugin")
+        self.assertEqual(args.command, "info")
+        self.assertEqual(args.driver_id, "rigol.dg4202")
+
+    def test_plugin_list_prints_builtin_plugins(self):
+        stdout = io.StringIO()
+        with redirect_stdout(stdout):
+            code = main(["plugin", "list", "--kind", "source"])
+        self.assertEqual(code, 0)
+        output = stdout.getvalue()
+        self.assertIn("driver_id	kind	origin	models	capabilities", output)
+        self.assertIn("rigol.dg4202", output)
+        self.assertIn("source.set_frequency", output)
+
+    def test_plugin_info_prints_metadata(self):
+        stdout = io.StringIO()
+        with redirect_stdout(stdout):
+            code = main(["plugin", "info", "rigol.dp800"])
+        self.assertEqual(code, 0)
+        output = stdout.getvalue()
+        self.assertIn("driver_id=rigol.dp800", output)
+        self.assertIn("kind=power", output)
+        self.assertIn("power.protection", output)
+
     def test_net_discover_accepts_scan_options(self):
         args = build_parser().parse_args([
             "net", "discover",

@@ -20,6 +20,8 @@ from .cli_output import (
     _print_dmm_function_set,
     _print_dmm_function_status,
     _print_dmm_reading,
+    _print_plugin_info,
+    _print_plugin_list,
     _print_power_protection_status,
     _print_power_status,
     _print_run_plan_summary,
@@ -32,6 +34,7 @@ from .mcp_http import (
     resolve_mcp_token,
     serve_mcp_http,
 )
+from .plugins.registry import builtin_plugin_registry
 from .services.scope_service import ScopeService
 from .services.source_service import SourceService
 from .services.power_service import PowerService
@@ -140,6 +143,14 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     try:
+        if args.domain == "plugin":
+            registry = builtin_plugin_registry()
+            if args.command == "list":
+                _print_plugin_list(registry.list_plugins(kind=args.kind))
+                return 0
+            if args.command == "info":
+                _print_plugin_info(registry.get(args.driver_id))
+                return 0
         if args.domain == "net":
             if args.command == "discover":
                 results = discover_instruments(

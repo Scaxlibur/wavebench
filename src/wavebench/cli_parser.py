@@ -25,6 +25,7 @@ def build_parser() -> argparse.ArgumentParser:
     mcp_parser = subparsers.add_parser("mcp", help="HTTP MCP server / HTTP MCP 服务")
     tui_parser = subparsers.add_parser("tui", help="Launch terminal UI / 启动终端界面")
     net_parser = subparsers.add_parser("net", help="Network discovery helpers / 网络发现工具")
+    plugin_parser = subparsers.add_parser("plugin", help="Plugin registry commands / 插件注册表命令")
     tui_parser.add_argument("--config", default="wavebench.toml", help="Path to wavebench TOML config")
     tui_parser.add_argument("--resource", help="Override power VISA resource / 覆盖电源 VISA 资源")
     tui_parser.add_argument(
@@ -43,6 +44,23 @@ def build_parser() -> argparse.ArgumentParser:
         default="data/tui/wavebench-tui.log",
         help="Persist TUI debug log to this file / TUI 调试日志文件",
     )
+
+    plugin_sub = plugin_parser.add_subparsers(dest="command", required=True)
+    plugin_list = plugin_sub.add_parser(
+        "list",
+        help="List available instrument plugins / 列出可用仪器插件",
+    )
+    plugin_list.add_argument(
+        "--kind",
+        choices=("scope", "source", "power", "dmm"),
+        default=None,
+        help="Filter plugins by instrument kind / 按仪器类型过滤",
+    )
+    plugin_info = plugin_sub.add_parser(
+        "info",
+        help="Show one plugin metadata record / 显示单个插件元数据",
+    )
+    plugin_info.add_argument("driver_id", help="Plugin driver id, e.g. rigol.dg4202")
 
     net_sub = net_parser.add_subparsers(dest="command", required=True)
     net_discover = net_sub.add_parser(

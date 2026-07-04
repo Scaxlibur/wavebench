@@ -18,8 +18,39 @@ from .drivers.dm3000 import DmmReading
 from .drivers.dp800 import PowerProtectionStatus, PowerStatus
 from .drivers.rtm2032 import WaveformData
 from .errors import ConfigError
+from .plugins.api import InstrumentPlugin
 from .services.run_plan import RunPlan, RunStep
 
+
+
+
+def _print_plugin_list(plugins: list[InstrumentPlugin]) -> None:
+    if not plugins:
+        print("no_plugins_found / 未发现插件")
+        return
+    print("driver_id	kind	origin	models	capabilities")
+    for plugin in plugins:
+        print(
+            f"{plugin.driver_id}	{plugin.kind}	{plugin.origin}	"
+            f"{plugin.model_text}	{plugin.capability_text}"
+        )
+
+
+def _print_plugin_info(plugin: InstrumentPlugin) -> None:
+    print(f"driver_id={plugin.driver_id}")
+    print(f"kind={plugin.kind}")
+    print(f"display_name={plugin.display_name}")
+    print(f"manufacturer={plugin.manufacturer}")
+    print(f"models={plugin.model_text}")
+    print(f"origin={plugin.origin}")
+    print(f"package={plugin.package}")
+    print(f"api_version={plugin.api_version}")
+    print(f"summary={plugin.summary}")
+    print("capabilities=" + plugin.capability_text)
+    if plugin.idn_patterns:
+        print("idn_patterns=" + ", ".join(plugin.idn_patterns))
+    if plugin.config_fields:
+        print("config_fields=" + ", ".join(plugin.config_fields))
 
 def _format_step_summary(step: RunStep) -> str:
     if not step.fields:
