@@ -2,10 +2,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
 from pathlib import Path
+import time
 from typing import Protocol
 
 from wavebench.config import WaveBenchConfig, load_config
-from wavebench.drivers.dg4202 import SourceStatus
+from wavebench.drivers.dg4202 import DG4202Source, SourceStatus
+from wavebench.errors import WaveBenchError
 from wavebench.logging import CommandLogger
 from wavebench.services.source_service import SourceService
 from wavebench.tui.state import SourcePanelState, source_state_from_status
@@ -33,6 +35,7 @@ class SourceServicePanelAdapter:
     service: SourceService
     _instrument_id: str | None = None
     _default_channel: int | None = None
+    _source_session: DG4202Source | None = None
 
     @classmethod
     def from_config(
@@ -44,24 +47,86 @@ class SourceServicePanelAdapter:
         return cls(service=SourceService(config=config, logger=CommandLogger()))
 
     def refresh(self) -> SourcePanelState:
-        status = self.service.status(channel=self._channel())
+        session = self._persistent_session()
+        if session is None:
+            status = self.service.status(channel=self._channel())
+        else:
+            status = self._with_session(lambda source: source.get_status(self._channel()))
         return self._to_panel_state(status)
 
     def set_output(self, enabled: bool) -> SourcePanelState:
-        status = self.service.set_output(channel=self._channel(), enabled=enabled)
+        session = self._persistent_session()
+        if session is None:
+            status = self.service.set_output(channel=self._channel(), enabled=enabled)
+        else:
+            source_cfg = self.service._source_config()
+            channel = self._channel()
+            if enabled:
+                current_status = self._with_session(lambda source: source.get_status(channel))
+                self.service._check_source_vpp(
+                    current_status.amplitude,
+                    field="source output amplitude / 信号源输出幅度",
+                )
+            status = self._with_session(
+                lambda source: source.set_output(channel, enabled, check_errors=source_cfg.check_errors)
+            )
         return self._to_panel_state(status)
 
     def set_function(self, function: str) -> SourcePanelState:
-        status = self.service.set_function(channel=self._channel(), function=function)
+        session = self._persistent_session()
+        if session is None:
+            status = self.service.set_function(channel=self._channel(), function=function)
+        else:
+            source_cfg = self.service._source_config()
+            status = self._with_session(
+                lambda source: source.set_function(
+                    self._channel(),
+                    function,
+                    check_errors=source_cfg.check_errors,
+                )
+            )
         return self._to_panel_state(status)
 
     def set_frequency(self, value_hz: float) -> SourcePanelState:
-        status = self.service.set_frequency(channel=self._channel(), value_hz=value_hz)
+        session = self._persistent_session()
+        if session is None:
+            status = self.service.set_frequency(channel=self._channel(), value_hz=value_hz)
+        else:
+            source_cfg = self.service._source_config()
+            channel = self._channel()
+            status = self._with_session(
+                lambda source: source.set_frequency(
+                    channel,
+                    value_hz,
+                    ensure_fix_mode=source_cfg.ensure_fix_mode_on_set_frequency,
+                    check_errors=False,
+                )
+            )
+            if source_cfg.settle_ms_after_set_frequency:
+                time.sleep(source_cfg.settle_ms_after_set_frequency / 1000.0)
+                status = self._with_session(lambda source: source.get_status(channel))
+            if source_cfg.check_errors:
+                self._with_session(lambda source: source.assert_no_errors())
         return self._to_panel_state(status)
 
     def set_amplitude_vpp(self, value_vpp: float) -> SourcePanelState:
-        status = self.service.set_amplitude_vpp(channel=self._channel(), value_vpp=value_vpp)
+        session = self._persistent_session()
+        if session is None:
+            status = self.service.set_amplitude_vpp(channel=self._channel(), value_vpp=value_vpp)
+        else:
+            source_cfg = self.service._source_config()
+            self.service._check_source_vpp(value_vpp, field="source amplitude / 信号源幅度")
+            status = self._with_session(
+                lambda source: source.set_amplitude_vpp(
+                    self._channel(),
+                    value_vpp,
+                    check_errors=source_cfg.check_errors,
+                )
+            )
         return self._to_panel_state(status)
+
+    def close(self) -> None:
+        self._close_session()
 
     def _channel(self) -> int | None:
         if self._default_channel is None:
@@ -71,13 +136,45 @@ class SourceServicePanelAdapter:
 
     def _to_panel_state(self, status: SourceStatus) -> SourcePanelState:
         if self._instrument_id is None:
-            self._instrument_id = self.service.idn()
+            self._instrument_id = self._idn()
         return build_source_panel_state(
             config=self.service.config,
             instrument_id=self._instrument_id,
             status=status,
             log_lines=_logger_lines(self.service.logger),
         )
+
+    def _idn(self) -> str:
+        session = self._persistent_session()
+        if session is None:
+            return self.service.idn()
+        return self._with_session(lambda source: source.idn())
+
+    def _persistent_session(self) -> DG4202Source | None:
+        open_session = getattr(self.service, "open_session", None)
+        if open_session is None:
+            return None
+        if self._source_session is None:
+            self._source_session = open_session()
+        return self._source_session
+
+    def _with_session(self, operation):
+        session = self._persistent_session()
+        if session is None:
+            raise WaveBenchError("source session is not available / 信号源会话不可用")
+        try:
+            return operation(session)
+        except Exception:
+            self._close_session()
+            raise
+
+    def _close_session(self) -> None:
+        if self._source_session is None:
+            return
+        try:
+            self._source_session.close()
+        finally:
+            self._source_session = None
 
 
 @dataclass

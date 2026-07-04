@@ -3,6 +3,8 @@ from __future__ import annotations
 import time
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import Mock
 
 from wavebench.config import (
     AutoscaleConfig,
@@ -16,7 +18,9 @@ from wavebench.config import (
     WaveformConfig,
 )
 from wavebench.drivers.dg4202 import SourceStatus
-from wavebench.tui.source import FakeSourcePanelAdapter, build_source_panel_state
+from wavebench.logging import CommandLogger
+from wavebench.services.source_service import SourceService
+from wavebench.tui.source import FakeSourcePanelAdapter, SourceServicePanelAdapter, build_source_panel_state
 from wavebench.tui.state import SOURCE_TABLE_COLUMNS, source_config_status, source_state_from_status
 
 from wavebench.tui import app as tui_app
@@ -159,6 +163,56 @@ class TuiSourceTests(unittest.TestCase):
         app = tui_app.build_app(fake=True, refresh_interval_s=10.0)
         self.assertEqual(type(app.source_adapter).__name__, "FakeSourcePanelAdapter")
 
+    def test_service_source_adapter_reuses_persistent_session(self):
+        service = SourceService(config=make_config(), logger=CommandLogger())
+        session = SimpleNamespace(
+            idn=Mock(return_value="RIGOL,DG4202,SN,FW"),
+            get_status=Mock(return_value=make_status()),
+            set_frequency=Mock(return_value=make_status(frequency_hz=2000.0)),
+            set_amplitude_vpp=Mock(return_value=make_status(amplitude=3.3)),
+            assert_no_errors=Mock(),
+            close=Mock(),
+        )
+        service.open_session = Mock(return_value=session)  # type: ignore[method-assign]
+
+        adapter = SourceServicePanelAdapter(service=service)
+        refreshed = adapter.refresh()
+        freq_state = adapter.set_frequency(2000.0)
+        vpp_state = adapter.set_amplitude_vpp(3.3)
+
+        self.assertEqual(refreshed.instrument_status, "仪器 / Instrument: RIGOL,DG4202,SN,FW")
+        self.assertEqual(freq_state.frequency_hz, "2000")
+        self.assertEqual(vpp_state.amplitude_vpp, "3.3")
+        service.open_session.assert_called_once_with()
+        session.idn.assert_called_once_with()
+        self.assertEqual(session.get_status.call_count, 1)
+        session.set_frequency.assert_called_once_with(
+            2,
+            2000.0,
+            ensure_fix_mode=True,
+            check_errors=False,
+        )
+        session.set_amplitude_vpp.assert_called_once_with(2, 3.3, check_errors=True)
+        session.close.assert_not_called()
+
+        adapter.close()
+        session.close.assert_called_once_with()
+
+    def test_service_source_adapter_closes_bad_session_on_error(self):
+        service = SourceService(config=make_config(), logger=CommandLogger())
+        session = SimpleNamespace(
+            get_status=Mock(side_effect=RuntimeError("LAN timeout")),
+            close=Mock(),
+        )
+        service.open_session = Mock(return_value=session)  # type: ignore[method-assign]
+
+        adapter = SourceServicePanelAdapter(service=service)
+        with self.assertRaisesRegex(RuntimeError, "LAN timeout"):
+            adapter.refresh()
+
+        session.close.assert_called_once_with()
+        self.assertIsNone(adapter._source_session)
+
 
 @unittest.skipIf(tui_app._TEXTUAL_IMPORT_ERROR is not None, "Textual extra is not installed")
 class TuiSourceBusyBehaviorTests(unittest.IsolatedAsyncioTestCase):
@@ -241,6 +295,24 @@ class TuiSourceBusyBehaviorTests(unittest.IsolatedAsyncioTestCase):
             await pilot.pause(0.6)
             self.assertEqual(source.frequency_calls, [2500.0])
             self.assertFalse(app.query_one("#source-set-freq", Button).disabled)
+
+    async def test_quit_closes_source_adapter(self):
+        class ClosableSourceAdapter(FakeSourcePanelAdapter):
+            def __init__(self):
+                super().__init__()
+                self.close = Mock()
+
+        source = ClosableSourceAdapter()
+        app = tui_app.WaveBenchTuiApp(
+            power_adapter=tui_app.FakePowerPanelAdapter(),
+            dmm_adapter=tui_app.FakeDmmPanelAdapter(),
+            source_adapter=source,
+            refresh_interval_s=60.0,
+        )
+        async with app.run_test() as pilot:
+            await pilot.pause(0.25)
+            await app.action_quit()
+            source.close.assert_called_once_with()
 
 
 if __name__ == "__main__":
