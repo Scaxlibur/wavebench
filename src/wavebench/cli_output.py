@@ -18,7 +18,7 @@ from .drivers.dm3000 import DmmReading
 from .drivers.dp800 import PowerProtectionStatus, PowerStatus
 from .drivers.rtm2032 import WaveformData
 from .errors import ConfigError
-from .plugins.api import InstrumentPlugin
+from .plugins.api import InstrumentPlugin, PluginDoctorRecord
 from .services.run_plan import RunPlan, RunStep
 
 
@@ -51,6 +51,11 @@ def _print_plugin_info(plugin: InstrumentPlugin) -> None:
         print("idn_patterns=" + ", ".join(plugin.idn_patterns))
     if plugin.config_fields:
         print("config_fields=" + ", ".join(plugin.config_fields))
+
+
+def _print_plugin_doctor(records: list[PluginDoctorRecord]) -> None:
+    for record in records:
+        print(f"{record.severity}\t{record.subject}\t{record.message}")
 
 def _format_step_summary(step: RunStep) -> str:
     if not step.fields:

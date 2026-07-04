@@ -56,11 +56,30 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Filter plugins by instrument kind / 按仪器类型过滤",
     )
+    plugin_list.add_argument(
+        "--include-entry-points",
+        action="store_true",
+        help="Also load Python entry points from wavebench.drivers / 同时加载 wavebench.drivers 入口点",
+    )
     plugin_info = plugin_sub.add_parser(
         "info",
         help="Show one plugin metadata record / 显示单个插件元数据",
     )
     plugin_info.add_argument("driver_id", help="Plugin driver id, e.g. rigol.dg4202")
+    plugin_info.add_argument(
+        "--include-entry-points",
+        action="store_true",
+        help="Also load Python entry points from wavebench.drivers / 同时加载 wavebench.drivers 入口点",
+    )
+    plugin_doctor = plugin_sub.add_parser(
+        "doctor",
+        help="Validate plugin registry metadata / 检查插件注册表元数据",
+    )
+    plugin_doctor.add_argument(
+        "--include-entry-points",
+        action="store_true",
+        help="Also load Python entry points from wavebench.drivers / 同时加载 wavebench.drivers 入口点",
+    )
 
     net_sub = net_parser.add_subparsers(dest="command", required=True)
     net_discover = net_sub.add_parser(

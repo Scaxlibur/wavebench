@@ -5,6 +5,10 @@ from typing import Literal
 
 PluginKind = Literal["scope", "source", "power", "dmm"]
 PluginOrigin = Literal["builtin", "entry_point", "local"]
+DiagnosticSeverity = Literal["ok", "warning", "error"]
+
+SUPPORTED_PLUGIN_API_VERSION = "wavebench.instrument.v1"
+VALID_PLUGIN_KINDS: tuple[str, ...] = ("scope", "source", "power", "dmm")
 
 
 @dataclass(frozen=True)
@@ -16,7 +20,7 @@ class InstrumentPlugin:
     models: tuple[str, ...]
     capabilities: tuple[str, ...]
     summary: str
-    api_version: str = "wavebench.instrument.v1"
+    api_version: str = SUPPORTED_PLUGIN_API_VERSION
     package: str = "wavebench"
     origin: PluginOrigin = "builtin"
     idn_patterns: tuple[str, ...] = field(default_factory=tuple)
@@ -37,3 +41,16 @@ class InstrumentPlugin:
     @property
     def capability_text(self) -> str:
         return ", ".join(self.capabilities)
+
+
+@dataclass(frozen=True)
+class PluginLoadError:
+    source: str
+    message: str
+
+
+@dataclass(frozen=True)
+class PluginDoctorRecord:
+    severity: DiagnosticSeverity
+    subject: str
+    message: str

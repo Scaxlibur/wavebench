@@ -20,6 +20,7 @@ from .cli_output import (
     _print_dmm_function_set,
     _print_dmm_function_status,
     _print_dmm_reading,
+    _print_plugin_doctor,
     _print_plugin_info,
     _print_plugin_list,
     _print_power_protection_status,
@@ -34,7 +35,7 @@ from .mcp_http import (
     resolve_mcp_token,
     serve_mcp_http,
 )
-from .plugins.registry import builtin_plugin_registry
+from .plugins.registry import build_plugin_registry, has_doctor_errors, plugin_doctor_records
 from .services.scope_service import ScopeService
 from .services.source_service import SourceService
 from .services.power_service import PowerService
@@ -144,13 +145,18 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         if args.domain == "plugin":
-            registry = builtin_plugin_registry()
+            result = build_plugin_registry(include_entry_points=getattr(args, "include_entry_points", False))
+            registry = result.registry
             if args.command == "list":
                 _print_plugin_list(registry.list_plugins(kind=args.kind))
                 return 0
             if args.command == "info":
                 _print_plugin_info(registry.get(args.driver_id))
                 return 0
+            if args.command == "doctor":
+                records = plugin_doctor_records(registry, load_errors=result.load_errors)
+                _print_plugin_doctor(records)
+                return 2 if has_doctor_errors(records) else 0
         if args.domain == "net":
             if args.command == "discover":
                 results = discover_instruments(

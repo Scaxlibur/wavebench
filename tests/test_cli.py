@@ -9,6 +9,37 @@ from unittest.mock import patch
 import numpy as np
 
 from wavebench.cli import build_parser, main
+from wavebench.plugins.api import InstrumentPlugin
+
+
+class FakePluginEntryPoint:
+    def __init__(self, name, loaded, *, group="wavebench.drivers"):
+        self.name = name
+        self.group = group
+        self._loaded = loaded
+        self.dist = None
+
+    def load(self):
+        if isinstance(self._loaded, Exception):
+            raise self._loaded
+        return self._loaded
+
+
+class FakePluginEntryPoints(list):
+    def select(self, *, group):
+        return [entry_point for entry_point in self if entry_point.group == group]
+
+
+def make_cli_plugin(driver_id="example.scope"):
+    return InstrumentPlugin(
+        driver_id=driver_id,
+        kind="scope",
+        display_name="Example Scope",
+        manufacturer="Example",
+        models=("EX1",),
+        capabilities=("scope.idn",),
+        summary="Example plugin.",
+    )
 
 
 class CliTests(unittest.TestCase):
@@ -306,16 +337,24 @@ max_source_vpp = 2.0
         self.assertEqual(args.plan, "plans/example.toml")
 
     def test_plugin_list_accepts_kind_filter(self):
-        args = build_parser().parse_args(["plugin", "list", "--kind", "source"])
+        args = build_parser().parse_args(["plugin", "list", "--kind", "source", "--include-entry-points"])
         self.assertEqual(args.domain, "plugin")
         self.assertEqual(args.command, "list")
         self.assertEqual(args.kind, "source")
+        self.assertTrue(args.include_entry_points)
 
     def test_plugin_info_accepts_driver_id(self):
-        args = build_parser().parse_args(["plugin", "info", "rigol.dg4202"])
+        args = build_parser().parse_args(["plugin", "info", "rigol.dg4202", "--include-entry-points"])
         self.assertEqual(args.domain, "plugin")
         self.assertEqual(args.command, "info")
         self.assertEqual(args.driver_id, "rigol.dg4202")
+        self.assertTrue(args.include_entry_points)
+
+    def test_plugin_doctor_accepts_entry_point_flag(self):
+        args = build_parser().parse_args(["plugin", "doctor", "--include-entry-points"])
+        self.assertEqual(args.domain, "plugin")
+        self.assertEqual(args.command, "doctor")
+        self.assertTrue(args.include_entry_points)
 
     def test_plugin_list_prints_builtin_plugins(self):
         stdout = io.StringIO()
@@ -336,6 +375,33 @@ max_source_vpp = 2.0
         self.assertIn("driver_id=rigol.dp800", output)
         self.assertIn("kind=power", output)
         self.assertIn("power.protection", output)
+
+    def test_plugin_doctor_prints_ok_records(self):
+        stdout = io.StringIO()
+        with redirect_stdout(stdout):
+            code = main(["plugin", "doctor"])
+        self.assertEqual(code, 0)
+        output = stdout.getvalue()
+        self.assertIn("ok\trigol.dg4202\tmetadata valid", output)
+        self.assertIn("ok\trohde-schwarz.rtm2032\tmetadata valid", output)
+
+    def test_plugin_list_can_include_entry_points(self):
+        entry_points = FakePluginEntryPoints([FakePluginEntryPoint("example", make_cli_plugin())])
+        stdout = io.StringIO()
+        with patch("wavebench.plugins.registry.entry_points", return_value=entry_points):
+            with redirect_stdout(stdout):
+                code = main(["plugin", "list", "--include-entry-points"])
+        self.assertEqual(code, 0)
+        self.assertIn("example.scope\tscope\tentry_point", stdout.getvalue())
+
+    def test_plugin_doctor_reports_bad_entry_point_and_exits_nonzero(self):
+        entry_points = FakePluginEntryPoints([FakePluginEntryPoint("broken", RuntimeError("boom"))])
+        stdout = io.StringIO()
+        with patch("wavebench.plugins.registry.entry_points", return_value=entry_points):
+            with redirect_stdout(stdout):
+                code = main(["plugin", "doctor", "--include-entry-points"])
+        self.assertEqual(code, 2)
+        self.assertIn("error\tentry_point:broken\tboom", stdout.getvalue())
 
     def test_net_discover_accepts_scan_options(self):
         args = build_parser().parse_args([
