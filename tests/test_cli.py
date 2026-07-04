@@ -376,6 +376,20 @@ max_source_vpp = 2.0
         self.assertEqual(args.plugin_id, "wavebench-rigol-dg4202")
         self.assertEqual(args.index, "market.json")
 
+    def test_plugin_scpi_check_accepts_path(self):
+        args = build_parser().parse_args(["plugin", "scpi", "check", "plugin.toml"])
+        self.assertEqual(args.domain, "plugin")
+        self.assertEqual(args.command, "scpi")
+        self.assertEqual(args.scpi_command, "check")
+        self.assertEqual(args.path, "plugin.toml")
+
+    def test_plugin_scpi_info_accepts_path(self):
+        args = build_parser().parse_args(["plugin", "scpi", "info", "plugin.toml"])
+        self.assertEqual(args.domain, "plugin")
+        self.assertEqual(args.command, "scpi")
+        self.assertEqual(args.scpi_command, "info")
+        self.assertEqual(args.path, "plugin.toml")
+
     def test_plugin_list_prints_builtin_plugins(self):
         stdout = io.StringIO()
         with redirect_stdout(stdout):
@@ -441,6 +455,23 @@ max_source_vpp = 2.0
         self.assertIn("plugin_id=wavebench-rs-rtm2032", output)
         self.assertIn("driver_id=rohde-schwarz.rtm2032", output)
         self.assertIn("capabilities=scope.idn", output)
+
+    def test_plugin_scpi_check_prints_ok(self):
+        stdout = io.StringIO()
+        with redirect_stdout(stdout):
+            code = main(["plugin", "scpi", "check", "doc/project/scpi-plugin.example.toml"])
+        self.assertEqual(code, 0)
+        self.assertIn("ok\texample.scope\tmetadata valid", stdout.getvalue())
+
+    def test_plugin_scpi_info_prints_metadata(self):
+        stdout = io.StringIO()
+        with redirect_stdout(stdout):
+            code = main(["plugin", "scpi", "info", "doc/project/scpi-plugin.example.toml"])
+        self.assertEqual(code, 0)
+        output = stdout.getvalue()
+        self.assertIn("driver_id=example.scope", output)
+        self.assertIn("origin=local", output)
+        self.assertIn("scpi_idn_query=*IDN?", output)
 
     def test_net_discover_accepts_scan_options(self):
         args = build_parser().parse_args([

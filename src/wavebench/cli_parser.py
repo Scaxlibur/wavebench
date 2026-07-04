@@ -103,6 +103,21 @@ def build_parser() -> argparse.ArgumentParser:
         "--index",
         help="Path to a local plugin market JSON index / 本地插件市场 JSON 索引路径",
     )
+    plugin_scpi = plugin_sub.add_parser(
+        "scpi",
+        help="Validate local declarative SCPI plugins / 检查本地声明式 SCPI 插件",
+    )
+    plugin_scpi_sub = plugin_scpi.add_subparsers(dest="scpi_command", required=True)
+    plugin_scpi_check = plugin_scpi_sub.add_parser(
+        "check",
+        help="Validate a local SCPI plugin TOML file / 检查本地 SCPI 插件 TOML",
+    )
+    plugin_scpi_check.add_argument("path", help="Path to a SCPI plugin TOML file / SCPI 插件 TOML 路径")
+    plugin_scpi_info = plugin_scpi_sub.add_parser(
+        "info",
+        help="Show a local SCPI plugin TOML file / 显示本地 SCPI 插件 TOML",
+    )
+    plugin_scpi_info.add_argument("path", help="Path to a SCPI plugin TOML file / SCPI 插件 TOML 路径")
 
     net_sub = net_parser.add_subparsers(dest="command", required=True)
     net_discover = net_sub.add_parser(

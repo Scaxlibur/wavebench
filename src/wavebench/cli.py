@@ -25,6 +25,8 @@ from .cli_output import (
     _print_plugin_doctor,
     _print_plugin_info,
     _print_plugin_list,
+    _print_scpi_doctor,
+    _print_scpi_plugin_info,
     _print_power_protection_status,
     _print_power_status,
     _print_run_plan_summary,
@@ -39,6 +41,7 @@ from .mcp_http import (
 )
 from .plugins.market import load_market_index
 from .plugins.registry import build_plugin_registry, has_doctor_errors, plugin_doctor_records
+from .plugins.scpi import has_scpi_doctor_errors, load_scpi_plugin, scpi_plugin_doctor_records
 from .services.scope_service import ScopeService
 from .services.source_service import SourceService
 from .services.power_service import PowerService
@@ -167,6 +170,14 @@ def main(argv: list[str] | None = None) -> int:
                     return 0
                 if args.market_command == "info":
                     _print_market_plugin_info(market.get(args.plugin_id))
+                    return 0
+            if args.command == "scpi":
+                if args.scpi_command == "check":
+                    records = scpi_plugin_doctor_records(args.path)
+                    _print_scpi_doctor(records)
+                    return 2 if has_scpi_doctor_errors(records) else 0
+                if args.scpi_command == "info":
+                    _print_scpi_plugin_info(load_scpi_plugin(args.path))
                     return 0
         if args.domain == "net":
             if args.command == "discover":

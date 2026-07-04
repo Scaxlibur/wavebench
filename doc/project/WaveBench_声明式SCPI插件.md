@@ -1,0 +1,102 @@
+# WaveBench 声明式 SCPI 插件
+
+本文档记录 WaveBench 当前本地声明式 SCPI 插件 TOML 的格式、命令和安全边界。
+
+当前声明式 SCPI 插件只用于 metadata 校验和展示。它不会连接仪器，不会发送 SCPI，不会把插件注册到真实执行路径。
+
+## 命令
+
+检查本地 TOML：
+
+```bash
+python -m wavebench plugin scpi check doc/project/scpi-plugin.example.toml
+```
+
+查看本地 TOML：
+
+```bash
+python -m wavebench plugin scpi info doc/project/scpi-plugin.example.toml
+```
+
+## 示例
+
+示例文件位于：
+
+```text
+doc/project/scpi-plugin.example.toml
+```
+
+内容：
+
+```toml
+driver_id = "example.scope"
+kind = "scope"
+display_name = "Example Scope"
+manufacturer = "Example"
+models = ["EX1"]
+capabilities = ["scope.idn"]
+summary = "Example local declarative SCPI plugin metadata."
+idn_patterns = ["EXAMPLE,EX1"]
+config_fields = ["resource"]
+
+[scpi]
+idn_query = "*IDN?"
+```
+
+## 字段
+
+必填字段：
+
+```text
+driver_id
+kind
+display_name
+manufacturer
+models
+capabilities
+summary
+```
+
+可选字段：
+
+```text
+api_version
+package
+idn_patterns
+config_fields
+scpi.idn_query
+```
+
+默认值：
+
+```text
+api_version = "wavebench.instrument.v1"
+package = "local"
+scpi.idn_query = "*IDN?"
+```
+
+## 校验规则
+
+`plugin scpi check` 会复用插件注册表 metadata 校验：
+
+- `api_version` 必须是当前支持版本；
+- `kind` 必须是 `scope`、`source`、`power` 或 `dmm`；
+- capability 必须是点分小写标识符；
+- capability 必须以插件 `kind` 作为前缀。
+
+同时会检查 `scpi.idn_query`：
+
+- 必须是单行命令；
+- 不能包含 `;` 分隔符；
+- 必须以 `?` 结尾。
+
+## 安全边界
+
+当前实现只读 TOML：
+
+- 不连接仪器；
+- 不发送 SCPI；
+- 不写配置；
+- 不导入 Python 包；
+- 不把本地 TOML 注册成可执行 driver；
+- 不改变 service 层真实仪器控制路径。
