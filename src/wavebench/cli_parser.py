@@ -25,7 +25,14 @@ def build_parser() -> argparse.ArgumentParser:
     mcp_parser = subparsers.add_parser("mcp", help="HTTP MCP server / HTTP MCP 服务")
     tui_parser = subparsers.add_parser("tui", help="Launch terminal UI / 启动终端界面")
     net_parser = subparsers.add_parser("net", help="Network discovery helpers / 网络发现工具")
+    doctor_parser = subparsers.add_parser("doctor", help="Diagnose configured instruments / 诊断已配置仪器")
     plugin_parser = subparsers.add_parser("plugin", help="Plugin registry commands / 插件注册表命令")
+    doctor_parser.add_argument("--config", default="wavebench.toml", help="Path to wavebench TOML config")
+    doctor_parser.add_argument(
+        "--timeout-ms",
+        type=int,
+        help="Per-instrument IDN query timeout in milliseconds / 每台仪器 IDN 查询超时毫秒数",
+    )
     tui_parser.add_argument("--config", default="wavebench.toml", help="Path to wavebench TOML config")
     tui_parser.add_argument("--resource", help="Override power VISA resource / 覆盖电源 VISA 资源")
     tui_parser.add_argument(

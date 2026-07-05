@@ -301,6 +301,16 @@ def _print_discovery_results(results: list[Any]) -> None:
         )
 
 
+def _print_doctor_records(records: list[Any]) -> None:
+    print("severity\ttarget\tdriver\tresource\tidn\tmessage\tsuggestion")
+    for item in records:
+        idn = "" if item.idn is None else item.idn
+        print(
+            f"{item.severity}\t{item.target}\t{item.driver}\t{item.resource}\t"
+            f"{idn}\t{item.message}\t{item.suggestion}"
+        )
+
+
 def _print_arbitrary_probe_results(results: list[Any]) -> None:
     for item in results:
         response = "" if item.response is None else item.response

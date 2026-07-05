@@ -7,6 +7,7 @@ import sys
 from .config import load_config, vertical_scale_from_vpp
 from .data.packages import load_capture_package, load_run_package
 from .discovery import discover_instruments
+from .doctor import doctor_records, has_doctor_errors as has_config_doctor_errors
 from .report.html import write_run_report_html
 from .report.index import write_report_index
 from .errors import ConfigError, WaveBenchError
@@ -17,6 +18,7 @@ from .cli_output import (
     _print_capture_fft_summary,
     _print_capture_package_summary,
     _print_discovery_results,
+    _print_doctor_records,
     _print_dmm_function_set,
     _print_dmm_function_status,
     _print_dmm_reading,
@@ -216,6 +218,10 @@ def main(argv: list[str] | None = None) -> int:
                 )
                 _print_discovery_results(results)
                 return 0
+        if args.domain == "doctor":
+            records = doctor_records(load_config(args.config), timeout_ms=args.timeout_ms)
+            _print_doctor_records(records)
+            return 2 if has_config_doctor_errors(records) else 0
         if args.domain == "tui":
             if args.refresh_interval <= 0:
                 raise ConfigError("--refresh-interval must be > 0 / 刷新间隔必须 > 0")

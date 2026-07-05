@@ -132,6 +132,32 @@ class CliTests(unittest.TestCase):
         self.assertEqual(args.voltage, 3.3)
         self.assertEqual(args.current_limit, 0.2)
 
+    def test_doctor_accepts_config_and_timeout(self):
+        args = build_parser().parse_args(["doctor", "--config", "bench.toml", "--timeout-ms", "500"])
+        self.assertEqual(args.domain, "doctor")
+        self.assertEqual(args.config, "bench.toml")
+        self.assertEqual(args.timeout_ms, 500)
+
+    def test_doctor_prints_records_and_returns_error_status(self):
+        class StubRecord:
+            severity = "error"
+            target = "scope"
+            driver = "rtm2032"
+            resource = "TCPIP::192.168.1.115::INSTR"
+            idn = None
+            message = "no *IDN? response / 没有 *IDN? 响应"
+            suggestion = "check cable / 检查网线"
+
+        stdout = io.StringIO()
+        with patch("wavebench.cli.load_config", return_value=object()):
+            with patch("wavebench.cli.doctor_records", return_value=[StubRecord()]):
+                with redirect_stdout(stdout):
+                    code = main(["doctor", "--config", "bench.toml"])
+        self.assertEqual(code, 2)
+        output = stdout.getvalue()
+        self.assertIn("severity\ttarget\tdriver", output)
+        self.assertIn("scope\trtm2032", output)
+
     def test_power_output_accepts_on_off(self):
         args = build_parser().parse_args(["power", "output", "--channel", "1", "off"])
         self.assertEqual(args.domain, "power")
