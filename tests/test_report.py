@@ -386,6 +386,72 @@ class RunReportTests(unittest.TestCase):
             self.assertIn("<td>fft.peak_frequency_hz</td>", html)
             self.assertIn("<td>fft.harmonic_2_amplitude_v</td>", html)
 
+    def test_run_report_renders_sweep_summary_table(self):
+        with TemporaryDirectory() as tmp:
+            run_dir = Path(tmp) / "data" / "runs" / "run_sweep"
+            run_dir.mkdir(parents=True)
+            (run_dir / "run.json").write_text(
+                json.dumps(
+                    {
+                        "status": "ok",
+                        "steps": [
+                            {
+                                "index": 6,
+                                "kind": "scope.capture",
+                                "status": "ok",
+                                "fields": {"label": "sweep_100hz"},
+                                "artifact": {
+                                    "quality": {
+                                        "status": "ok",
+                                        "frequency_estimate_hz": 100.0,
+                                        "voltage_vpp_v": 1.008,
+                                    },
+                                    "expect": {"status": "ok"},
+                                    "expect_fft": {"status": "ok"},
+                                    "fft": {
+                                        "peak_frequency_hz": 100.0,
+                                        "peak_amplitude_v": 0.494,
+                                        "thd_ratio": 0.003,
+                                    },
+                                },
+                            },
+                            {
+                                "index": 9,
+                                "kind": "scope.capture",
+                                "status": "ok",
+                                "fields": {"label": "sweep_1k"},
+                                "artifact": {
+                                    "quality": {
+                                        "status": "ok",
+                                        "frequency_estimate_hz": 1000.0,
+                                        "voltage_vpp_v": 1.0,
+                                    },
+                                    "expect": {"status": "ok"},
+                                    "expect_fft": {"status": "ok"},
+                                    "fft": {
+                                        "peak_frequency_hz": 1000.0,
+                                        "peak_amplitude_v": 0.5,
+                                        "thd_ratio": 0.004,
+                                    },
+                                },
+                            },
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            html = render_run_report_html(load_run_package(run_dir), output_dir=run_dir)
+
+            self.assertIn("<h2>扫频摘要 / Sweep summary</h2>", html)
+            self.assertIn("<th>FFT 主频 / FFT peak</th>", html)
+            self.assertIn('<tr class="ok"><td>6</td><td>sweep_100hz</td><td class="ok">ok</td>', html)
+            self.assertIn("<td>100 Hz</td>", html)
+            self.assertIn("<td>1.008 V</td>", html)
+            self.assertIn("<td>0.3%</td>", html)
+            self.assertIn('<tr class="ok"><td>9</td><td>sweep_1k</td><td class="ok">ok</td>', html)
+            self.assertIn("<td>1000 Hz</td>", html)
+
     def test_run_report_renders_dmm_reading_cards(self):
         with TemporaryDirectory() as tmp:
             run_dir = Path(tmp) / "data" / "runs" / "run_dmm"

@@ -97,6 +97,21 @@ class ReportDmmReading:
 
 
 @dataclass(frozen=True)
+class ReportSweepRow:
+    step_index: str
+    label: str
+    status: str
+    quality_status: str
+    expect_status: str
+    fft_status: str
+    frequency_hz: str
+    vpp_v: str
+    fft_peak_hz: str
+    fft_peak_amplitude_v: str
+    thd_ratio: str
+
+
+@dataclass(frozen=True)
 class ReportWaveformPreview:
     step_index: str
     package: str
@@ -137,6 +152,7 @@ def render_run_report_html(run: RunPackage, output_dir: str | Path | None = None
     signals = _collect_signal_summaries(run)
     expectations = _collect_expectation_rows(run)
     dmm_readings = _collect_dmm_readings(run)
+    sweep_rows = _collect_sweep_rows(run)
     waveform_previews = _collect_waveform_previews(run)
     evidence = _build_evidence_summary(run, expectations, dmm_readings, screenshots, waveform_previews)
     artifact_links = _collect_artifact_links(run, report_output_dir, screenshots)
@@ -150,6 +166,7 @@ def render_run_report_html(run: RunPackage, output_dir: str | Path | None = None
     acceptance_block = _acceptance_block(expectations)
     expectations_block = _expectations_block(expectations)
     dmm_block = _dmm_readings_block(dmm_readings)
+    sweep_block = _sweep_summary_block(sweep_rows)
     artifact_links_block = _artifact_links_block(artifact_links)
     signals_block = _signals_block(signals)
     waveform_previews_block = _waveform_previews_block(waveform_previews)
@@ -259,6 +276,7 @@ code {{ background: #f0f4f8; padding: 0.1rem 0.3rem; border-radius: 5px; }}
 </table>
 </div>
 {dmm_block}
+{sweep_block}
 {acceptance_block}
 {expectations_block}
 {signals_block}
@@ -611,6 +629,40 @@ def _dmm_reading_card(reading: ReportDmmReading) -> str:
 """
 
 
+def _sweep_summary_block(rows: list[ReportSweepRow]) -> str:
+    if not rows:
+        return ""
+    body = "\n".join(_sweep_summary_row(row) for row in rows)
+    return f"""<h2>扫频摘要 / Sweep summary</h2>
+<div class="table compact-table"><table>
+<thead><tr><th>步骤 / Step</th><th>标签 / Label</th><th>状态 / Status</th><th>质量 / Quality</th><th>预期 / Expect</th><th>FFT / FFT</th><th>频率 / Frequency</th><th>Vpp</th><th>FFT 主频 / FFT peak</th><th>主幅度 / Peak amp</th><th>THD</th></tr></thead>
+<tbody>
+{body}
+</tbody>
+</table>
+</div>
+"""
+
+
+def _sweep_summary_row(row: ReportSweepRow) -> str:
+    status = escape(row.status)
+    return (
+        f'<tr class="{status}">'
+        f"<td>{escape(row.step_index)}</td>"
+        f"<td>{escape(row.label)}</td>"
+        f'<td class="{status}">{escape(row.status)}</td>'
+        f"<td>{escape(row.quality_status)}</td>"
+        f"<td>{escape(row.expect_status)}</td>"
+        f"<td>{escape(row.fft_status)}</td>"
+        f"<td>{escape(row.frequency_hz)}</td>"
+        f"<td>{escape(row.vpp_v)}</td>"
+        f"<td>{escape(row.fft_peak_hz)}</td>"
+        f"<td>{escape(row.fft_peak_amplitude_v)}</td>"
+        f"<td>{escape(row.thd_ratio)}</td>"
+        "</tr>"
+    )
+
+
 def _metric_label(metric: str) -> str:
     labels = {
         "frequency_estimate_hz": "频率 / Frequency",
@@ -754,6 +806,39 @@ def _collect_dmm_readings(run: RunPackage) -> list[ReportDmmReading]:
             )
         )
     return readings
+
+
+def _collect_sweep_rows(run: RunPackage) -> list[ReportSweepRow]:
+    rows: list[ReportSweepRow] = []
+    for step in run.steps:
+        if step.get("kind") != "scope.capture":
+            continue
+        fields = step.get("fields", {}) if isinstance(step.get("fields"), dict) else {}
+        artifact = step.get("artifact", {}) if isinstance(step.get("artifact"), dict) else {}
+        quality = artifact.get("quality", {}) if isinstance(artifact.get("quality"), dict) else {}
+        expect = artifact.get("expect", {}) if isinstance(artifact.get("expect"), dict) else {}
+        expect_fft = artifact.get("expect_fft", {}) if isinstance(artifact.get("expect_fft"), dict) else {}
+        fft = artifact.get("fft", {}) if isinstance(artifact.get("fft"), dict) else {}
+        if not (quality or expect or expect_fft):
+            continue
+        rows.append(
+            ReportSweepRow(
+                step_index=str(step.get("index", "")),
+                label=str(fields.get("label") or _step_display_name(step)),
+                status=str(step.get("status", "")),
+                quality_status=str(quality.get("status", "")),
+                expect_status=str(expect.get("status", "")),
+                fft_status=str(expect_fft.get("status", "")),
+                frequency_hz=_format_metric(quality.get("frequency_estimate_hz"), "Hz"),
+                vpp_v=_format_metric(quality.get("voltage_vpp_v"), "V"),
+                fft_peak_hz=_format_metric(fft.get("peak_frequency_hz"), "Hz"),
+                fft_peak_amplitude_v=_format_metric(fft.get("peak_amplitude_v"), "V"),
+                thd_ratio=_format_percent(fft.get("thd_ratio")),
+            )
+        )
+    if len(rows) < 2 and not any("sweep" in row.label.lower() for row in rows):
+        return []
+    return rows
 
 
 def _dmm_value_check(expect: dict[str, Any]) -> dict[str, Any]:
