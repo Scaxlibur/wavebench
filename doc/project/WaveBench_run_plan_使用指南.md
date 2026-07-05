@@ -22,6 +22,56 @@ python -m wavebench run plan  --config wavebench.toml --plan plans/example_scope
 
 `run check` 只解析 plan 并打印摘要，不连接仪器。`run plan` 才会真实执行。
 
+## 不想手写时先用模板
+
+`run template` 只负责生成标准 TOML plan，不连接仪器、不改配置、不覆盖已有文件（除非传 `--force`）。生成后仍然走普通流程：`run check`、`run verify`、`run plan`、`run report`。
+
+常用模板：
+
+```powershell
+python -m wavebench run template --list
+
+python -m wavebench run template source-scope-sine ^
+  --frequency 1000 ^
+  --vpp 1.0 ^
+  --source-channel 1 ^
+  --scope-channel 1 ^
+  --output plans/source_scope_sine_1k.toml
+
+python -m wavebench run template source-scope-sweep ^
+  --frequencies 100,1000,10000 ^
+  --vpp 1.0 ^
+  --source-channel 1 ^
+  --scope-channel 1 ^
+  --output plans/source_scope_sweep.toml
+
+python -m wavebench run template dmm-acv-source ^
+  --frequency 1000 ^
+  --vpp 1.0 ^
+  --source-channel 2 ^
+  --output plans/dmm_acv_source_smoke.toml
+
+python -m wavebench run template power-dmm-dcv ^
+  --voltage 3.3 ^
+  --current-limit 0.1 ^
+  --power-channel 1 ^
+  --output plans/power_dmm_dcv_smoke.toml
+```
+
+模板边界：
+
+- `source-scope-sine`：生成单频点 DG4202 -> RTM2032 闭环 plan，带 source restore、scope safety、质量检查、`[steps.expect]` 和 `[steps.expect_fft]`。
+- `source-scope-sweep`：把 `--frequencies` 里的频点展开成多组 `source.set_freq` + `scope.capture`，每个频点都有独立 label、expect 和 FFT expect。它不是新的执行器，只是 run plan 展开器。
+- `dmm-acv-source`：生成 DG4202 -> DMM ACV smoke plan，ACV 期望值按 `Vpp / (2 * sqrt(2))` 自动缩放。
+- `power-dmm-dcv`：生成 DP800 电压设置 + DMM DCV 读回 plan，只设置电压/限流，不自动打开或关闭电源输出。
+
+模板生成后建议立刻跑：
+
+```powershell
+python -m wavebench run check  --config wavebench.toml --plan plans/source_scope_sweep.toml
+python -m wavebench run verify --config wavebench.toml --plan plans/source_scope_sweep.toml
+```
+
 ## 一个 step 只做一件事
 
 例如设置电源电压不会顺手打开输出：
@@ -191,6 +241,35 @@ data/runs/YYYYMMDD_HHMMSS_<label>/
 | `expect_failures` | 断言失败原因摘要。 |
 
 后续分析脚本应优先读取 `run.json`。`summary.csv` 适合快速查看和导入表格软件。
+
+## 生成离线报告
+
+跑完 run 后，用：
+
+```powershell
+python -m wavebench run report data/runs/<run_dir>
+```
+
+`run report` 只读已有 `run.json`、`summary.csv`、采集包 `metadata.json`、`ch*.npy` 和截图，不连接仪器，也不修改原始采集数据。
+
+HTML 报告当前会汇总：
+
+- `摘要 / Summary`：run 状态、失败步骤、采集数量、警告、恢复状态、主频率和主 Vpp。
+- `实验证据摘要 / Run evidence summary`：source 步骤、scope capture、DMM 读数、run.json、summary.csv、截图和波形预览数量。
+- `证据时间线 / Evidence timeline`：按 step 展示 source/scope/DMM/sleep 的证据摘要。
+- `扫频摘要 / Sweep summary`：当 run 里有多点 `scope.capture` 或 sweep label 时显示，列出每个频点的 label、status、quality、expect、FFT、frequency、Vpp、FFT peak、peak amplitude 和 THD。
+- `验收摘要 / Acceptance summary` 与 `预期 vs 实测 / Expected vs measured`：汇总 `[steps.expect]` 和 `[steps.expect_fft]` 的验收结果。
+- `DMM 读数 / DMM readings`、`信号分析 / Signal analysis`、`波形预览 / Waveform previews`、`截图 / Screenshots`。
+
+典型 sweep 流程：
+
+```powershell
+python -m wavebench run template source-scope-sweep --frequencies 100,1000,10000 --output plans/source_scope_sweep.toml
+python -m wavebench run check  --config wavebench.toml --plan plans/source_scope_sweep.toml
+python -m wavebench run verify --config wavebench.toml --plan plans/source_scope_sweep.toml
+python -m wavebench run plan   --config wavebench.toml --plan plans/source_scope_sweep.toml
+python -m wavebench run report data/runs/<run_dir>
+```
 
 ## 现场写 plan 的顺序
 
