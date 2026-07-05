@@ -9,6 +9,7 @@ from wavebench.config import (
     WaveBenchConfig,
     WaveformConfig,
 )
+from wavebench.discovery import DiscoveryResult
 from wavebench.doctor import doctor_records, has_doctor_errors
 
 
@@ -83,3 +84,62 @@ def test_doctor_reports_idn_mismatch_as_warning():
 
     assert [record.severity for record in records] == ["warning", "warning"]
     assert not has_doctor_errors(records)
+
+
+def test_doctor_appends_candidate_for_unreachable_matching_idn():
+    def discoverer(**kwargs):
+        assert kwargs["subnet"] == "192.168.1.0/24"
+        return [
+            DiscoveryResult(
+                address="192.168.1.225",
+                port=None,
+                protocol="visa",
+                resource="TCPIP::192.168.1.225::INSTR",
+                source="network",
+                status="idn",
+                idn="Rigol Technologies,DG4202,DG4E,00.01.14",
+            ),
+            DiscoveryResult(
+                address="192.168.1.226",
+                port=None,
+                protocol="visa",
+                resource="TCPIP::192.168.1.226::INSTR",
+                source="network",
+                status="idn",
+                idn="Rohde&Schwarz,RTM2032,123,06.010",
+            ),
+        ]
+
+    records = doctor_records(
+        make_config(),
+        idn_probe=lambda resource, timeout_ms: None,
+        discover_subnet="192.168.1.0/24",
+        discoverer=discoverer,
+    )
+
+    candidates = [record for record in records if record.severity == "candidate"]
+    assert [(record.target, record.resource) for record in candidates] == [
+        ("scope", "TCPIP::192.168.1.226::INSTR"),
+        ("source", "TCPIP::192.168.1.225::INSTR"),
+    ]
+
+
+def test_doctor_does_not_suggest_candidate_for_healthy_target():
+    records = doctor_records(
+        make_config(),
+        idn_probe=lambda resource, timeout_ms: "Rigol Technologies,DG4202,DG4E,00.01.14",
+        discover_subnet="192.168.1.0/24",
+        discoverer=lambda **kwargs: [
+            DiscoveryResult(
+                address="192.168.1.225",
+                port=None,
+                protocol="visa",
+                resource="TCPIP::192.168.1.225::INSTR",
+                source="network",
+                status="idn",
+                idn="Rigol Technologies,DG4202,DG4E,00.01.14",
+            )
+        ],
+    )
+
+    assert not [record for record in records if record.severity == "candidate"]

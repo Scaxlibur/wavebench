@@ -219,7 +219,16 @@ def main(argv: list[str] | None = None) -> int:
                 _print_discovery_results(results)
                 return 0
         if args.domain == "doctor":
-            records = doctor_records(load_config(args.config), timeout_ms=args.timeout_ms)
+            records = doctor_records(
+                load_config(args.config),
+                timeout_ms=args.timeout_ms,
+                discover_subnet=args.discover_subnet,
+                discover_ports=args.discover_ports,
+                discover_timeout_ms=args.discover_timeout_ms,
+                discover_workers=args.discover_workers,
+                discover_max_hosts=args.discover_max_hosts,
+                include_visa=not args.no_visa,
+            )
             _print_doctor_records(records)
             return 2 if has_config_doctor_errors(records) else 0
         if args.domain == "tui":

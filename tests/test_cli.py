@@ -133,10 +133,33 @@ class CliTests(unittest.TestCase):
         self.assertEqual(args.current_limit, 0.2)
 
     def test_doctor_accepts_config_and_timeout(self):
-        args = build_parser().parse_args(["doctor", "--config", "bench.toml", "--timeout-ms", "500"])
+        args = build_parser().parse_args([
+            "doctor",
+            "--config",
+            "bench.toml",
+            "--timeout-ms",
+            "500",
+            "--discover-subnet",
+            "192.168.1.0/24",
+            "--discover-ports",
+            "5025,111",
+            "--discover-timeout-ms",
+            "300",
+            "--discover-workers",
+            "8",
+            "--discover-max-hosts",
+            "32",
+            "--no-visa",
+        ])
         self.assertEqual(args.domain, "doctor")
         self.assertEqual(args.config, "bench.toml")
         self.assertEqual(args.timeout_ms, 500)
+        self.assertEqual(args.discover_subnet, "192.168.1.0/24")
+        self.assertEqual(args.discover_ports, "5025,111")
+        self.assertEqual(args.discover_timeout_ms, 300)
+        self.assertEqual(args.discover_workers, 8)
+        self.assertEqual(args.discover_max_hosts, 32)
+        self.assertTrue(args.no_visa)
 
     def test_doctor_prints_records_and_returns_error_status(self):
         class StubRecord:

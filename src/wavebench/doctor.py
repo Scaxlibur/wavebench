@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable
+from typing import Callable, Sequence
 
 from .config import WaveBenchConfig
+from .discovery import DEFAULT_DISCOVERY_PORTS, DiscoveryResult, discover_instruments
 
 
 @dataclass(frozen=True)
@@ -26,6 +27,7 @@ class DoctorRecord:
 
 
 IdnProbe = Callable[[str, int], str | None]
+InstrumentDiscoverer = Callable[..., list[DiscoveryResult]]
 
 
 def doctor_records(
@@ -33,10 +35,31 @@ def doctor_records(
     *,
     timeout_ms: int | None = None,
     idn_probe: IdnProbe | None = None,
+    discover_subnet: str | None = None,
+    discover_ports: str | Sequence[int] = DEFAULT_DISCOVERY_PORTS,
+    discover_timeout_ms: int | None = None,
+    discover_workers: int = 64,
+    discover_max_hosts: int = 256,
+    include_visa: bool = True,
+    discoverer: InstrumentDiscoverer | None = None,
 ) -> list[DoctorRecord]:
     timeout = timeout_ms or config.connection.timeout_ms
     probe = idn_probe or query_resource_idn
-    return [_doctor_target(target, timeout_ms=timeout, idn_probe=probe) for target in _doctor_targets(config)]
+    targets = _doctor_targets(config)
+    records = [_doctor_target(target, timeout_ms=timeout, idn_probe=probe) for target in targets]
+    if discover_subnet:
+        discovery_results = (discoverer or discover_instruments)(
+            subnet=discover_subnet,
+            ports=discover_ports,
+            timeout_ms=discover_timeout_ms or timeout,
+            workers=discover_workers,
+            max_hosts=discover_max_hosts,
+            query_idn=True,
+            idn_only=True,
+            include_visa=include_visa,
+        )
+        records.extend(_candidate_records(targets, records, discovery_results))
+    return records
 
 
 def has_doctor_errors(records: list[DoctorRecord]) -> bool:
@@ -158,6 +181,37 @@ def _doctor_targets(config: WaveBenchConfig) -> list[DoctorTarget]:
     return targets
 
 
+def _candidate_records(
+    targets: list[DoctorTarget],
+    records: list[DoctorRecord],
+    discovery_results: list[DiscoveryResult],
+) -> list[DoctorRecord]:
+    candidates: list[DoctorRecord] = []
+    needs_candidate = {record.target for record in records if record.severity != "ok"}
+    for target in targets:
+        if target.name not in needs_candidate or not target.expected_idn_tokens:
+            continue
+        for result in discovery_results:
+            if not result.idn:
+                continue
+            if result.resource == target.resource:
+                continue
+            if not _idn_matches(result.idn, target.expected_idn_tokens):
+                continue
+            candidates.append(
+                DoctorRecord(
+                    severity="candidate",
+                    target=target.name,
+                    driver=target.driver,
+                    resource=result.resource,
+                    idn=result.idn,
+                    message="candidate replacement resource / 可能的替代资源",
+                    suggestion=f"consider updating {_resource_config_key(target.name)} to {result.resource} / 可考虑更新配置资源",
+                )
+            )
+    return candidates
+
+
 def _scope_expected_tokens(driver: str, model_hint: str | None) -> tuple[str, ...]:
     if model_hint:
         return (model_hint,)
@@ -197,3 +251,9 @@ def _resource_suggestion(resource: str) -> str:
     if resource.upper().startswith("ASRL") or resource.startswith("/dev/"):
         return "check serial device path, USB adapter, baudrate, and permissions / 检查串口路径、转接器、波特率和权限"
     return "check resource string and instrument connection / 检查资源字符串和仪器连接"
+
+
+def _resource_config_key(target_name: str) -> str:
+    if target_name == "scope":
+        return "connection.resource"
+    return f"{target_name}.resource"

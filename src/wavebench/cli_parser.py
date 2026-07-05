@@ -33,6 +33,32 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         help="Per-instrument IDN query timeout in milliseconds / 每台仪器 IDN 查询超时毫秒数",
     )
+    doctor_parser.add_argument(
+        "--discover-subnet",
+        help="Also scan this subnet for IDN-matching replacement resources / 同时扫描网段寻找 IDN 匹配的替代资源",
+    )
+    doctor_parser.add_argument(
+        "--discover-ports",
+        default=",".join(str(port) for port in DEFAULT_DISCOVERY_PORTS),
+        help="Comma-separated TCP ports for doctor discovery / doctor 发现使用的 TCP 端口",
+    )
+    doctor_parser.add_argument(
+        "--discover-timeout-ms",
+        type=int,
+        help="Per-discovery connection timeout in milliseconds / 发现阶段每次连接超时毫秒数",
+    )
+    doctor_parser.add_argument("--discover-workers", type=int, default=64, help="Discovery workers / 发现并发数")
+    doctor_parser.add_argument(
+        "--discover-max-hosts",
+        type=int,
+        default=256,
+        help="Maximum hosts allowed in the discovery scan / 发现扫描允许的最大主机数",
+    )
+    doctor_parser.add_argument(
+        "--no-visa",
+        action="store_true",
+        help="Skip PyVISA resource-manager discovery / 跳过 PyVISA 资源枚举",
+    )
     tui_parser.add_argument("--config", default="wavebench.toml", help="Path to wavebench TOML config")
     tui_parser.add_argument("--resource", help="Override power VISA resource / 覆盖电源 VISA 资源")
     tui_parser.add_argument(
