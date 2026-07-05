@@ -12,6 +12,18 @@ python -m wavebench run schema
 
 它会列出当前代码真正支持的 step kind、必填字段和可选字段。文档可能会落后，`run schema` 以当前代码为准。
 
+接线或 IP 可能变动时，先跑只读 doctor：
+
+```powershell
+python -m wavebench doctor --config wavebench.toml
+
+python -m wavebench doctor --config wavebench.toml ^
+  --discover-subnet 192.168.1.0/24 ^
+  --discover-timeout-ms 500
+```
+
+`doctor` 会对配置里的 scope/source/power/dmm 做只读 `*IDN?` 检查，确认资源可达、型号匹配，并给出排错建议。`--discover-subnet` 只在配置资源不可达或型号不匹配时扫描候选资源；它只建议替代 `resource`，不会修改配置。
+
 最小流程：
 
 ```powershell
@@ -21,6 +33,16 @@ python -m wavebench run plan  --config wavebench.toml --plan plans/example_scope
 ```
 
 `run check` 只解析 plan 并打印摘要，不连接仪器。`run plan` 才会真实执行。
+
+## run plan 的 session 生命周期
+
+`run plan` 会在一次 run 开始时为 plan 需要的仪器统一打开 session，并在 safety guard、snapshot/restore 和所有 step 之间复用这些 session。run 成功、step 失败、safety guard 失败或 restore 失败时，都会统一关闭已经打开的 session。
+
+这和普通 CLI one-shot 命令不同：
+
+- `power status`、`source set-freq` 这类单次 CLI 命令仍然是一次操作打开一次、结束关闭。
+- `run plan` 是整次实验持有 session，减少同一 plan 内反复连接/断开的开销，也让 safety、采集和 restore 使用同一批仪器连接。
+- 当前第一版不做长 session 断线自动重建；如果 run 中途断线，应该让 run 失败并留下 `run.json` 证据，而不是偷偷重连后继续。
 
 ## 不想手写时先用模板
 
