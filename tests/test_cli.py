@@ -181,6 +181,32 @@ class CliTests(unittest.TestCase):
         self.assertIn("severity\ttarget\tdriver", output)
         self.assertIn("scope\trtm2032", output)
 
+    def test_run_template_accepts_list_output_print_and_force(self):
+        args = build_parser().parse_args([
+            "run",
+            "template",
+            "source-scope-sine",
+            "--output",
+            "plans/new.toml",
+            "--print",
+            "--force",
+        ])
+
+        self.assertEqual(args.domain, "run")
+        self.assertEqual(args.command, "template")
+        self.assertEqual(args.template, "source-scope-sine")
+        self.assertEqual(args.output, "plans/new.toml")
+        self.assertTrue(args.print_template)
+        self.assertTrue(args.force)
+
+    def test_run_template_list_prints_available_templates(self):
+        stdout = io.StringIO()
+        with redirect_stdout(stdout):
+            code = main(["run", "template", "--list"])
+
+        self.assertEqual(code, 0)
+        self.assertIn("source-scope-sine", stdout.getvalue())
+
     def test_power_output_accepts_on_off(self):
         args = build_parser().parse_args(["power", "output", "--channel", "1", "off"])
         self.assertEqual(args.domain, "power")
