@@ -24,7 +24,7 @@ SCPI = 仪器听得懂的话
 
 已知事实：
 
-- DG4202 已通过 PyVISA/NI-VISA 连接，`TCPIP::192.168.123.3::INSTR` 可用。
+- DG4202 已通过 PyVISA/NI-VISA 连接，`TCPIP::<dg4202-ip>::INSTR` 可用。
 - 当前 WaveBench 已支持 DG4202 的 IDN、status、function、frequency、Vpp、output、square duty。
 - DG4000 系列是函数 / 任意波形发生器，硬件类别支持任意波形。
 

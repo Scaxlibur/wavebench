@@ -8,8 +8,8 @@
 
 ```text
 DG4202 CH1 -> RTM2032 CH1
-source resource = TCPIP::192.168.123.3::INSTR
-scope resource  = TCPIP::192.168.123.2::INSTR
+source resource = TCPIP::<dg4202-ip>::INSTR
+scope resource  = TCPIP::<rtm2032-ip>::INSTR
 ```
 
 计划：
@@ -21,17 +21,17 @@ plans/closure_sine_1k_fft.toml
 运行：
 
 ```bash
-python -m wavebench run check --config /tmp/wavebench-lab.toml --plan plans/closure_sine_1k_fft.toml
-python -m wavebench run plan  --config /tmp/wavebench-lab.toml --plan plans/closure_sine_1k_fft.toml
-python -m wavebench run report data/runs/20260501_021455_closure_sine_1k_fft
+python -m wavebench run check --config <local-config.toml> --plan plans/closure_sine_1k_fft.toml
+python -m wavebench run plan  --config <local-config.toml> --plan plans/closure_sine_1k_fft.toml
+python -m wavebench run report data/runs/<run_dir>
 ```
 
 结果：
 
 ```text
-run=data/runs/20260501_021455_closure_sine_1k_fft
-capture=data/raw/20260501_021456_closure_sine_1k
-report=data/runs/20260501_021455_closure_sine_1k_fft/report.html
+run=data/runs/<run_dir>
+capture=data/raw/<capture_dir>
+report=data/runs/<run_dir>/report.html
 run status=ok
 ```
 

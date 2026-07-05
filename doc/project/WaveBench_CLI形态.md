@@ -9,7 +9,7 @@ WaveBench 从第一阶段开始就支持两种使用方式：
 
 两种模式必须共用同一套底层逻辑，不能各写一套采集流程。
 
-当前阶段只考虑 **LAN 连接**，暂不考虑 USB / GPIB / Serial。
+早期 scope MVP 只考虑 **LAN 连接**，暂不考虑 USB / GPIB / Serial；当前主线已经为部分设备保留 serial transport skeleton。
 
 ## 命令入口
 
@@ -229,20 +229,15 @@ wavebench scope capture --channel 1
 
 `auto` 是显式操作；`fetch` / `capture` 默认保持保守，不偷偷修改前面板主要设置。
 
-## LAN-only 约束
+## 早期 scope MVP 的 LAN-only 约束
 
-当前阶段只支持 LAN VISA 资源：
+本节记录早期 scope MVP 的连接约束。当时只支持 LAN VISA 资源：
 
 ```text
 TCPIP::<instrument-ip>::INSTR
 ```
 
-暂不支持：
-
-- USBTMC；
-- GPIB；
-- Serial；
-- VXI-11 之外的特殊资源写法。
+早期 scope MVP 暂不支持 USBTMC、GPIB、Serial 或 VXI-11 之外的特殊资源写法。当前主线已经为 DM3000/DM3058 保留 serial transport skeleton；具体可用性以配置文档和驱动指南为准。
 
 ## 配置文件示例
 

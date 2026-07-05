@@ -37,7 +37,7 @@ DM3058 LAN 路径（当前优先）：
 [dmm]
 driver = "dm3058"
 backend = "lan"
-resource = "TCPIP::192.168.123.5::INSTR"
+resource = "TCPIP::192.0.2.13::INSTR"
 timeout_ms = 3000
 ```
 
@@ -71,10 +71,10 @@ Rigol Technologies,DM3058,DM3L184650025,01.01.00.02.03.01
 LAN / DM3058：
 
 ```bash
-wavebench dmm idn --resource TCPIP::192.168.123.5::INSTR
-wavebench dmm read dcv --resource TCPIP::192.168.123.5::INSTR
-wavebench dmm read acv --resource TCPIP::192.168.123.5::INSTR
-wavebench dmm read res --resource TCPIP::192.168.123.5::INSTR
+wavebench dmm idn --resource TCPIP::192.0.2.13::INSTR
+wavebench dmm read dcv --resource TCPIP::192.0.2.13::INSTR
+wavebench dmm read acv --resource TCPIP::192.0.2.13::INSTR
+wavebench dmm read res --resource TCPIP::192.0.2.13::INSTR
 ```
 
 RS232 / DM3000 skeleton：
@@ -86,8 +86,8 @@ wavebench dmm read dcv --resource /dev/ttyUSB0
 
 `read` 的返回保持窄而清楚：函数、数值、单位、原始字符串。
 
-## 暂不做
+## 当前边界
 
 - 不做自动扫描所有串口并盲发命令。串口设备可能不是万用表。
-- 不把 DMM 测量直接塞进 scope/source/power 的 service。
-- 不在 run plan 中加入 DMM step，等单独 `dmm idn/read` 实机验证后再接入。
+- 不把 DMM 测量直接塞进 scope/source/power 的 service；DMM 仍然通过独立 DMM service 和 run-plan step 参与实验。
+- run plan 可显式读取 DMM；但不会把 DMM 读数隐式附加到 scope/source/power 步骤里。

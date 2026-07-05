@@ -161,8 +161,8 @@ python -m wavebench plugin market search rigol
 python -m wavebench plugin market info wavebench-rigol-dg4202
 python -m wavebench plugin scpi check doc/project/scpi-plugin.example.toml
 python -m wavebench plugin scpi info doc/project/scpi-plugin.example.toml
-python -m wavebench plugin scpi probe doc/project/scpi-dp800.example.toml --resource TCPIP::192.168.1.161::INSTR
-python -m wavebench plugin scpi doctor doc/project/scpi-dp800.example.toml --probe --resource TCPIP::192.168.1.161::INSTR
+python -m wavebench plugin scpi probe doc/project/scpi-dp800.example.toml --resource TCPIP::192.0.2.12::INSTR
+python -m wavebench plugin scpi doctor doc/project/scpi-dp800.example.toml --probe --resource TCPIP::192.0.2.12::INSTR
 ```
 
 ## 仍然不做的事

@@ -2,6 +2,8 @@
 
 这页写给“要自己写 plan 的人”。目标不是展示所有内部实现，而是让人能在现场快速写、快速检查、看懂失败原因。
 
+除非单独标注，带 `^` 的多行命令示例使用 PowerShell 续行；bash / zsh 可把 `^` 换成 `\`，或直接写成一行。
+
 ## 先看 schema，再写 plan
 
 先运行：
@@ -18,7 +20,7 @@ python -m wavebench run schema
 python -m wavebench doctor --config wavebench.toml
 
 python -m wavebench doctor --config wavebench.toml ^
-  --discover-subnet 192.168.1.0/24 ^
+  --discover-subnet 192.0.2.0/24 ^
   --discover-timeout-ms 500
 ```
 
@@ -28,11 +30,12 @@ python -m wavebench doctor --config wavebench.toml ^
 
 ```powershell
 python -m wavebench run schema
-python -m wavebench run check --config wavebench.toml --plan plans/example_scope_expect_quality.toml
-python -m wavebench run plan  --config wavebench.toml --plan plans/example_scope_expect_quality.toml
+python -m wavebench run check  --config wavebench.toml --plan plans/example_scope_expect_quality.toml
+python -m wavebench run verify --config wavebench.toml --plan plans/example_scope_expect_quality.toml
+python -m wavebench run plan   --config wavebench.toml --plan plans/example_scope_expect_quality.toml
 ```
 
-`run check` 只解析 plan 并打印摘要，不连接仪器。`run plan` 才会真实执行。
+`run check` 只解析 plan 并打印摘要，不连接仪器；`run verify` 执行只读资源和安全预检；`run plan` 才会真实执行。
 
 ## run plan 的 session 生命周期
 

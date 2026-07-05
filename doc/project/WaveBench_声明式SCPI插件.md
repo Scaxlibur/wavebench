@@ -16,7 +16,7 @@ python -m wavebench plugin scpi check doc/project/scpi-plugin.example.toml
 
 ```bash
 python -m wavebench plugin scpi doctor doc/project/scpi-dp800.example.toml
-python -m wavebench plugin scpi doctor doc/project/scpi-dp800.example.toml --probe --resource TCPIP::192.168.1.161::INSTR
+python -m wavebench plugin scpi doctor doc/project/scpi-dp800.example.toml --probe --resource TCPIP::192.0.2.12::INSTR
 ```
 
 查看本地 TOML：
@@ -28,7 +28,7 @@ python -m wavebench plugin scpi info doc/project/scpi-plugin.example.toml
 对一个显式资源执行只读 IDN 查询：
 
 ```bash
-python -m wavebench plugin scpi probe doc/project/scpi-dp800.example.toml --resource TCPIP::192.168.1.161::INSTR
+python -m wavebench plugin scpi probe doc/project/scpi-dp800.example.toml --resource TCPIP::192.0.2.12::INSTR
 ```
 
 ## 示例

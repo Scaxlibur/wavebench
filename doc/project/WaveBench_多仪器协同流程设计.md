@@ -49,12 +49,14 @@ wavebench run plan --config wavebench.toml --plan plans/dp800_scope_probe_voltag
 可选命令：
 
 ```text
-wavebench run check --config wavebench.toml --plan plans/dp800_scope_probe_voltage_steps.toml
+wavebench run check  --config wavebench.toml --plan plans/dp800_scope_probe_voltage_steps.toml
+wavebench run verify --config wavebench.toml --plan plans/dp800_scope_probe_voltage_steps.toml
 ```
 
 其中：
 
-- `run check`：只解析计划并检查资源；若计划显式声明离线安全 guard，则只做离线结构校验，不写仪器；
+- `run check`：只解析计划并打印摘要，不连接仪器；
+- `run verify`：只读查询计划涉及的仪器资源、`*IDN?` 和显式 safety guard，用于执行前预检；
 - `run plan`：执行计划。
 
 `run` 是独立 domain，不塞进 `scope` / `source` / `power`。

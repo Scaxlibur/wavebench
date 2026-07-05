@@ -104,11 +104,13 @@ class VisaTransport:
     def query_float_list(self, command: str) -> list[float]: ...
 ```
 
-当前阶段 Transport 只支持 LAN：
+早期 scope MVP 的 Transport 只支持 LAN：
 
 ```text
 TCPIP::<instrument-ip>::INSTR
 ```
+
+当前主线已经允许不同设备选择不同 transport，例如 DM3000/DM3058 可保留 serial skeleton；新增设备时以驱动指南和配置文档为准。
 
 ## Device Driver 层
 
