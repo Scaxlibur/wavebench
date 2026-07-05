@@ -253,6 +253,10 @@ def build_parser() -> argparse.ArgumentParser:
     run_template.add_argument("--print", action="store_true", dest="print_template", help="Print template to stdout")
     run_template.add_argument("--force", action="store_true", help="Overwrite --output when it already exists")
     run_template.add_argument("--frequency", type=float, default=1000.0, help="Template signal frequency in Hz")
+    run_template.add_argument(
+        "--frequencies",
+        help="Comma-separated template sweep frequencies in Hz, e.g. 100,1000,10000",
+    )
     run_template.add_argument("--vpp", type=float, default=1.0, help="Template source amplitude in Vpp")
     run_template.add_argument("--source-channel", type=int, default=None, help="Template source channel")
     run_template.add_argument("--scope-channel", type=int, default=None, help="Template scope channel")

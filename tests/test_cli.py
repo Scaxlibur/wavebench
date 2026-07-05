@@ -192,6 +192,8 @@ class CliTests(unittest.TestCase):
             "--force",
             "--frequency",
             "10000",
+            "--frequencies",
+            "100,1000,10000",
             "--vpp",
             "3.3",
             "--source-channel",
@@ -213,6 +215,7 @@ class CliTests(unittest.TestCase):
         self.assertTrue(args.print_template)
         self.assertTrue(args.force)
         self.assertEqual(args.frequency, 10000.0)
+        self.assertEqual(args.frequencies, "100,1000,10000")
         self.assertEqual(args.vpp, 3.3)
         self.assertEqual(args.source_channel, 2)
         self.assertEqual(args.scope_channel, 1)

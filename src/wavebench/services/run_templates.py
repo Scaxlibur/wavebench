@@ -18,6 +18,7 @@ class RunTemplate:
 @dataclass(frozen=True)
 class RunTemplateOptions:
     frequency_hz: float = 1000.0
+    frequencies_hz: tuple[float, ...] = ()
     vpp: float = 1.0
     source_channel: int | None = None
     scope_channel: int | None = None
@@ -43,6 +44,8 @@ def render_run_template(name: str, options: RunTemplateOptions | None = None) ->
     opts = _validate_options(options or RunTemplateOptions())
     if name == "source-scope-sine":
         return _render_source_scope_sine(opts)
+    if name == "source-scope-sweep":
+        return _render_source_scope_sweep(opts)
     if name == "dmm-acv-source":
         return _render_dmm_acv_source(opts)
     if name == "power-dmm-dcv":
@@ -70,6 +73,10 @@ RUN_TEMPLATES = {
         name="source-scope-sine",
         description="DG4202 source -> RTM2032 scope sine closure with FFT expectations",
     ),
+    "source-scope-sweep": RunTemplate(
+        name="source-scope-sweep",
+        description="DG4202 source -> RTM2032 scope multi-frequency sine sweep as an expanded run plan",
+    ),
     "dmm-acv-source": RunTemplate(
         name="dmm-acv-source",
         description="DG4202 source -> DMM ACV smoke with source-state restore",
@@ -79,6 +86,24 @@ RUN_TEMPLATES = {
         description="DP800 voltage-set plus DMM DCV readback; output state is not changed",
     ),
 }
+
+
+def parse_frequencies(value: str | None) -> tuple[float, ...]:
+    if value is None or not value.strip():
+        return ()
+    frequencies: list[float] = []
+    for item in value.split(","):
+        stripped = item.strip()
+        if not stripped:
+            raise ConfigError("--frequencies must not contain empty items")
+        try:
+            frequency = float(stripped)
+        except ValueError as exc:
+            raise ConfigError(f"invalid --frequencies item: {stripped}") from exc
+        if frequency <= 0:
+            raise ConfigError("--frequencies items must be > 0")
+        frequencies.append(frequency)
+    return tuple(frequencies)
 
 
 def _render_source_scope_sine(options: RunTemplateOptions) -> str:
@@ -166,6 +191,105 @@ def _render_source_scope_sine(options: RunTemplateOptions) -> str:
         thd_ratio = {{ max = 0.08 }}
         """
     )
+
+
+def _render_source_scope_sweep(options: RunTemplateOptions) -> str:
+    source_channel = options.source_channel or 1
+    scope_channel = options.scope_channel or 1
+    frequencies = options.frequencies_hz or (100.0, 1000.0, 10000.0)
+    label = f"source_scope_sweep_{_frequency_label(frequencies[0])}_to_{_frequency_label(frequencies[-1])}"
+    steps = "\n\n".join(
+        _render_source_scope_sweep_point(freq, options.vpp, source_channel, scope_channel) for freq in frequencies
+    )
+    header = _clean(
+        f"""
+        # WaveBench template: DG4202 CH{source_channel} -> RTM2032 CH{scope_channel}, sine sweep, {_fmt(options.vpp)} Vpp.
+        # Confirm bench wiring before execution. This plan enables the source output
+        # and restores the original source state afterwards.
+
+        [experiment]
+        name = "{label}"
+        label = "{label}"
+
+        [safety]
+        scope_guard_channel = {scope_channel}
+        require_scope_coupling_not = ["DC", "AC"]
+
+        [restore]
+        source_state = true
+        source_channel = {source_channel}
+
+        [[steps]]
+        kind = "source.status"
+        channel = {source_channel}
+
+        [[steps]]
+        kind = "source.set_func"
+        channel = {source_channel}
+        function = "sin"
+
+        [[steps]]
+        kind = "source.set_vpp"
+        channel = {source_channel}
+        value_vpp = {_fmt(options.vpp)}
+
+        [[steps]]
+        kind = "source.output"
+        channel = {source_channel}
+        state = "on"
+        """
+    )
+    return header + "\n" + steps + "\n"
+
+
+def _render_source_scope_sweep_point(frequency_hz: float, vpp: float, source_channel: int, scope_channel: int) -> str:
+    label = f"sweep_{_frequency_label(frequency_hz)}"
+    freq_min = frequency_hz * 0.95
+    freq_max = frequency_hz * 1.05
+    fft_min = frequency_hz * 0.99
+    fft_max = frequency_hz * 1.01
+    vpp_min = vpp * 0.8
+    vpp_max = vpp * 1.2
+    peak_min = vpp * 0.40
+    peak_max = vpp * 0.60
+    return textwrap.dedent(
+        f"""
+        [[steps]]
+        kind = "source.set_freq"
+        channel = {source_channel}
+        frequency_hz = {_fmt(frequency_hz)}
+
+        [[steps]]
+        kind = "sleep"
+        duration_s = 0.3
+
+        [[steps]]
+        kind = "scope.capture"
+        channel = {scope_channel}
+        label = "{label}"
+        points = "def"
+        window_frequency_hz = {_fmt(frequency_hz)}
+        target_cycles = 10
+        expect_frequency_hz = {_fmt(frequency_hz)}
+        frequency_tolerance = 0.05
+        target_vpp = {_fmt(vpp)}
+        save_csv = false
+        save_npy = true
+        screenshot = true
+        quality_gate = true
+        auto_recover = true
+
+        [steps.expect]
+        frequency_estimate_hz = {{ min = {_fmt(freq_min)}, max = {_fmt(freq_max)} }}
+        frequency_error_ratio = {{ max = 0.05 }}
+        voltage_vpp_v = {{ min = {_fmt(vpp_min)}, max = {_fmt(vpp_max)} }}
+
+        [steps.expect_fft]
+        peak_frequency_hz = {{ min = {_fmt(fft_min)}, max = {_fmt(fft_max)} }}
+        peak_amplitude_v = {{ min = {_fmt(peak_min)}, max = {_fmt(peak_max)} }}
+        thd_ratio = {{ max = 0.08 }}
+        """
+    ).strip()
 
 
 def _render_dmm_acv_source(options: RunTemplateOptions) -> str:
@@ -264,6 +388,9 @@ def _render_power_dmm_dcv(options: RunTemplateOptions) -> str:
 def _validate_options(options: RunTemplateOptions) -> RunTemplateOptions:
     if options.frequency_hz <= 0:
         raise ConfigError("--frequency must be > 0")
+    for frequency in options.frequencies_hz:
+        if frequency <= 0:
+            raise ConfigError("--frequencies items must be > 0")
     if options.vpp <= 0:
         raise ConfigError("--vpp must be > 0")
     if options.voltage_v <= 0:

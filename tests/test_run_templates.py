@@ -4,16 +4,22 @@ import pytest
 
 from wavebench.errors import ConfigError
 from wavebench.services.run_plan import load_run_plan
-from wavebench.services.run_templates import RunTemplateOptions, list_run_templates, render_run_template, write_run_template
+from wavebench.services.run_templates import (
+    RunTemplateOptions,
+    list_run_templates,
+    parse_frequencies,
+    render_run_template,
+    write_run_template,
+)
 
 
 def test_list_run_templates_includes_public_names():
     names = [item.name for item in list_run_templates()]
 
-    assert names == ["dmm-acv-source", "power-dmm-dcv", "source-scope-sine"]
+    assert names == ["dmm-acv-source", "power-dmm-dcv", "source-scope-sine", "source-scope-sweep"]
 
 
-@pytest.mark.parametrize("name", ["source-scope-sine", "dmm-acv-source", "power-dmm-dcv"])
+@pytest.mark.parametrize("name", ["source-scope-sine", "source-scope-sweep", "dmm-acv-source", "power-dmm-dcv"])
 def test_run_templates_render_valid_plans(tmp_path: Path, name: str):
     output = write_run_template(name, tmp_path / f"{name}.toml")
 
@@ -55,6 +61,40 @@ def test_source_scope_template_applies_frequency_vpp_and_channels(tmp_path: Path
     assert "value_vpp = 3.3" in text
     assert "source_channel = 2" in text
     assert any(step.kind == "scope.capture" and step.fields["target_vpp"] == 3.3 for step in plan.steps)
+
+
+def test_source_scope_sweep_template_expands_frequency_points(tmp_path: Path):
+    output = write_run_template(
+        "source-scope-sweep",
+        tmp_path / "sweep.toml",
+        options=RunTemplateOptions(frequencies_hz=(100.0, 1000.0, 10000.0), vpp=1.0),
+    )
+
+    text = output.read_text(encoding="utf-8")
+    plan = load_run_plan(output)
+
+    assert plan.name == "source_scope_sweep_100hz_to_10k"
+    assert [step.fields.get("frequency_hz") for step in plan.steps if step.kind == "source.set_freq"] == [
+        100.0,
+        1000.0,
+        10000.0,
+    ]
+    assert [step.fields.get("label") for step in plan.steps if step.kind == "scope.capture"] == [
+        "sweep_100hz",
+        "sweep_1k",
+        "sweep_10k",
+    ]
+    assert text.count("[steps.expect_fft]") == 3
+
+
+def test_parse_frequencies_accepts_comma_separated_values():
+    assert parse_frequencies("100, 1000,10000") == (100.0, 1000.0, 10000.0)
+
+
+@pytest.mark.parametrize("value", ["100,,1000", "abc", "0"])
+def test_parse_frequencies_rejects_invalid_values(value: str):
+    with pytest.raises(ConfigError):
+        parse_frequencies(value)
 
 
 def test_dmm_acv_template_scales_rms_expectation():

@@ -278,6 +278,7 @@ python -m wavebench run schema
 python -m wavebench run template --list
 python -m wavebench run template source-scope-sine --output plans/source_scope_sine_1k.toml
 python -m wavebench run template source-scope-sine --frequency 10000 --vpp 3.3 --source-channel 2 --scope-channel 1 --output plans/source_scope_sine_10k.toml
+python -m wavebench run template source-scope-sweep --frequencies 100,1000,10000 --vpp 1.0 --source-channel 1 --scope-channel 1 --output plans/source_scope_sweep.toml
 python -m wavebench run check --plan plans/example_scope_expect_quality.toml
 python -m wavebench run check --plan plans/closure_sine_1k.toml
 python -m wavebench run check --plan plans/closure_triangle_1k.toml
