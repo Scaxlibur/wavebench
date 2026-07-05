@@ -190,6 +190,20 @@ class CliTests(unittest.TestCase):
             "plans/new.toml",
             "--print",
             "--force",
+            "--frequency",
+            "10000",
+            "--vpp",
+            "3.3",
+            "--source-channel",
+            "2",
+            "--scope-channel",
+            "1",
+            "--power-channel",
+            "3",
+            "--voltage",
+            "5",
+            "--current-limit",
+            "0.2",
         ])
 
         self.assertEqual(args.domain, "run")
@@ -198,6 +212,13 @@ class CliTests(unittest.TestCase):
         self.assertEqual(args.output, "plans/new.toml")
         self.assertTrue(args.print_template)
         self.assertTrue(args.force)
+        self.assertEqual(args.frequency, 10000.0)
+        self.assertEqual(args.vpp, 3.3)
+        self.assertEqual(args.source_channel, 2)
+        self.assertEqual(args.scope_channel, 1)
+        self.assertEqual(args.power_channel, 3)
+        self.assertEqual(args.voltage, 5.0)
+        self.assertEqual(args.current_limit, 0.2)
 
     def test_run_template_list_prints_available_templates(self):
         stdout = io.StringIO()

@@ -50,7 +50,7 @@ from .services.source_service import SourceService
 from .services.power_service import PowerService
 from .services.dmm_service import DmmService
 from .services.run_plan import format_run_plan_schema, load_run_plan
-from .services.run_templates import list_run_templates, render_run_template, write_run_template
+from .services.run_templates import RunTemplateOptions, list_run_templates, render_run_template, write_run_template
 from .services.run_service import RunService
 from .services.sweep_service import SweepService, parse_frequency_list
 
@@ -301,10 +301,19 @@ def main(argv: list[str] | None = None) -> int:
                     raise ConfigError("run template requires a template name or --list")
                 if not args.output and not args.print_template:
                     raise ConfigError("run template requires --output or --print")
+                template_options = RunTemplateOptions(
+                    frequency_hz=args.frequency,
+                    vpp=args.vpp,
+                    source_channel=args.source_channel,
+                    scope_channel=args.scope_channel,
+                    power_channel=args.power_channel,
+                    voltage_v=args.voltage,
+                    current_limit_a=args.current_limit,
+                )
                 if args.print_template:
-                    print(render_run_template(args.template), end="")
+                    print(render_run_template(args.template, options=template_options), end="")
                 if args.output:
-                    output = write_run_template(args.template, args.output, force=args.force)
+                    output = write_run_template(args.template, args.output, force=args.force, options=template_options)
                     print(f"template={args.template}")
                     print(f"output={output}")
                 return 0
