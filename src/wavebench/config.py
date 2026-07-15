@@ -512,8 +512,8 @@ def load_config(path: str | Path = "wavebench.toml") -> WaveBenchConfig:
         raise ConfigError("connection.read_retry_attempts must be >= 0")
     if config.connection.read_retry_delay_ms < 0:
         raise ConfigError("connection.read_retry_delay_ms must be >= 0")
-    if config.scope.driver.lower() != "rtm2032":
-        raise ConfigError("MVP-1 only supports driver = 'rtm2032'")
+    if config.scope.driver.lower() not in {"rtm2032", "ds1104", "ds1000z"}:
+        raise ConfigError("scope.driver must be 'rtm2032', 'ds1104', or 'ds1000z'")
     if config.scope.default_channel < 1:
         raise ConfigError("scope.default_channel must be >= 1")
     if config.waveform.time_range_s is not None and config.waveform.time_range_s <= 0:

@@ -7,19 +7,33 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 import numpy as np
 
 from wavebench.config import WaveBenchConfig
 from wavebench.data.package import new_package_dir
+from wavebench.drivers.ds1104 import DS1104Scope
 from wavebench.drivers.rtm2032 import RTM2032Scope, WaveformData
 from wavebench.errors import ConfigError, WaveBenchError
 from wavebench.logging import CommandLogger
+from wavebench.transport.pyvisa_transport import PyVisaTransport
 from wavebench.transport.rsinstrument_transport import RsInstrumentTransport
 
 HIGH_IMPEDANCE_COUPLINGS = {"DCL", "DCLIMIT", "ACL", "ACLIMIT"}
 LOW_IMPEDANCE_COUPLINGS = {"DC", "AC"}
+RIGOL_DS1000Z_DRIVERS = {"ds1104", "ds1000z"}
+
+
+class ScopeDriver(Protocol):
+    def idn(self) -> str: ...
+    def errors(self, limit: int = 16) -> list[str]: ...
+    def channel_coupling(self, channel: int) -> str: ...
+    def autoscale(self, wait_opc: bool = True, check_errors: bool = True) -> None: ...
+    def fetch_waveform(self, channel: int, points: str = "dmax", check_errors: bool = True) -> WaveformData: ...
+    def capture_waveform(self, channel: int, points: str = "dmax", check_errors: bool = True, time_range_s: float | None = None, vertical_scale_v_per_div: float | None = None) -> WaveformData: ...
+    def screenshot_png(self, *, include_menu: bool = False, color_scheme: str = "COL") -> bytes: ...
+    def close(self) -> None: ...
 
 
 def normalize_coupling(value: str) -> str:
@@ -30,8 +44,22 @@ def is_high_impedance_coupling(value: str) -> bool:
     return normalize_coupling(value) in HIGH_IMPEDANCE_COUPLINGS
 
 
-def assert_scope_high_impedance(coupling: str, *, channel: int, allow_50ohm: bool = False) -> str:
+def assert_scope_high_impedance(
+    coupling: str,
+    *,
+    channel: int,
+    allow_50ohm: bool = False,
+    driver: str = "rtm2032",
+) -> str:
     normalized = normalize_coupling(coupling)
+    if driver.strip().lower() in RIGOL_DS1000Z_DRIVERS:
+        if normalized in {"AC", "DC", "GND"}:
+            return normalized
+        raise ConfigError(
+            f"scope CH{channel} coupling {normalized!r} is not recognized for RIGOL DS1000Z; "
+            "expected AC, DC, or GND. / "
+            f"示波器 CH{channel} 耦合值 {normalized!r} 不是已知的 RIGOL DS1000Z 耦合方式。"
+        )
     if normalized in HIGH_IMPEDANCE_COUPLINGS:
         return normalized
     if allow_50ohm and normalized in LOW_IMPEDANCE_COUPLINGS:
@@ -74,17 +102,23 @@ class MultiCaptureResult:
 class ScopeService:
     config: WaveBenchConfig
     logger: CommandLogger
-    session: RTM2032Scope | None = None
+    session: ScopeDriver | None = None
 
-    def _open_scope(self) -> RTM2032Scope:
+    def _open_scope(self) -> ScopeDriver:
+        if self.config.scope.driver.strip().lower() in RIGOL_DS1000Z_DRIVERS:
+            transport = PyVisaTransport.open(self.config.connection, logger=self.logger)
+            return DS1104Scope(
+                transport=transport,
+                check_errors_after_ops=self.config.scope.check_errors,
+            )
         transport = RsInstrumentTransport.open(self.config.connection, logger=self.logger)
         return RTM2032Scope(transport=transport, check_errors_after_ops=self.config.scope.check_errors)
 
-    def open_session(self) -> RTM2032Scope:
+    def open_session(self) -> ScopeDriver:
         return self._open_scope()
 
     @contextmanager
-    def _scope_session(self) -> Iterator[RTM2032Scope]:
+    def _scope_session(self) -> Iterator[ScopeDriver]:
         if self.session is not None:
             yield self.session
             return
@@ -108,7 +142,12 @@ class ScopeService:
 
     def require_high_impedance(self, channel: int, *, allow_50ohm: bool = False) -> str:
         coupling = self.channel_coupling(channel)
-        return assert_scope_high_impedance(coupling, channel=channel, allow_50ohm=allow_50ohm)
+        return assert_scope_high_impedance(
+            coupling,
+            channel=channel,
+            allow_50ohm=allow_50ohm,
+            driver=self.config.scope.driver,
+        )
 
     def autoscale(self) -> None:
         with self._scope_session() as scope:
@@ -147,7 +186,7 @@ class ScopeService:
         return files
 
 
-    def _write_screenshot_file(self, package_dir: Path, scope: RTM2032Scope) -> tuple[Path | None, dict[str, str] | None]:
+    def _write_screenshot_file(self, package_dir: Path, scope: ScopeDriver) -> tuple[Path | None, dict[str, str] | None]:
         if not self.config.output.save_screenshot:
             return None, None
         screenshot_path = package_dir / "screenshot.png"

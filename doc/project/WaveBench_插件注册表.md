@@ -60,6 +60,7 @@ dmm.read
 
 ```text
 rohde-schwarz.rtm2032  scope   R&S RTM2000-series scope capture driver
+rigol.ds1104           scope   RIGOL DS1104Z/DS1000Z scope capture driver
 rigol.dg4202           source  RIGOL DG4000-series signal source driver
 rigol.dp800            power   RIGOL DP800-series power supply driver
 rigol.dm3000           dmm     RIGOL DM3000/DM3058 multimeter driver

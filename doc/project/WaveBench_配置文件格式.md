@@ -227,6 +227,21 @@ byte_order = "lsbf"
 points = "dmax"
 ```
 
+RIGOL DS1104Z/DS1000Z 可将 scope 段改为：
+
+```toml
+[scope]
+driver = "ds1104" # 也接受别名 "ds1000z"
+model_hint = "DS1104Z"
+default_channel = 1
+reset_before_run = false
+check_errors = true
+```
+
+DS1104Z 上 `waveform.points = "def"` 对应 NORM 屏幕波形，`"max"`/`"dmax"`
+对应停止状态下的 RAW 存储波形。RAW 使用 BYTE 格式并按 250000 点分块读取；
+`waveform.time_range_s` 是总时间窗口，驱动会除以 12 后写入主时基的 s/div。
+
 对应命令方向：
 
 ```text

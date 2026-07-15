@@ -7,7 +7,7 @@
 backend = "lan"
 
 # VISA resource string for the oscilloscope.
-# Replace the IP address with your RTM2032 LAN address.
+# Replace the IP address with your oscilloscope LAN address.
 resource = "TCPIP::192.0.2.10::INSTR"
 
 # General VISA I/O timeout in milliseconds.
@@ -24,7 +24,7 @@ read_retry_attempts = 1
 read_retry_delay_ms = 200
 
 [scope]
-# Device driver name. MVP-1 only supports "rtm2032".
+# Device driver name: "rtm2032" or "ds1104" ("ds1000z" is an alias).
 driver = "rtm2032"
 
 # Optional model hint used for friendly checks and messages.
@@ -53,10 +53,11 @@ check_errors = true
 format = "real"
 
 # Binary byte order for waveform transfer. RTM2000 examples use LSBF.
+# DS1104 uses BYTE transfer and ignores this field after validation.
 byte_order = "lsbf"
 
-# Sample range for waveform transfer.
-# "dmax" means maximum memory data in the displayed time range.
+# Sample range for waveform transfer. On DS1104, "def" reads the displayed
+# NORM waveform; "max" and "dmax" read stopped RAW memory in chunks.
 points = "dmax"
 
 [output]
@@ -175,7 +176,7 @@ backend = "lan"
 
 # DM3058 LAN resource verified from WSL. The RS232 skeleton remains available
 # with backend="serial" and resource="/dev/ttyUSB0" when the wiring is reliable.
-resource = "TCPIP::192.168.123.5::INSTR"
+resource = "TCPIP::192.0.2.15::INSTR"
 
 # Serial-only settings. Ignored by LAN/VISA backends, kept here so switching
 # back to RS232 is an explicit config edit rather than a code change.

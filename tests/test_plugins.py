@@ -48,6 +48,7 @@ def test_builtin_registry_lists_expected_drivers():
     assert driver_ids == [
         "rigol.dm3000",
         "rigol.dp800",
+        "rigol.ds1104",
         "rohde-schwarz.rtm2032",
         "rigol.dg4202",
     ]
@@ -58,6 +59,7 @@ def test_builtin_registry_filters_by_kind():
 
     assert [plugin.driver_id for plugin in registry.list_plugins(kind="source")] == ["rigol.dg4202"]
     assert [plugin.driver_id for plugin in registry.list_plugins(kind="scope")] == [
+        "rigol.ds1104",
         "rohde-schwarz.rtm2032"
     ]
 

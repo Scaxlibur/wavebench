@@ -23,8 +23,8 @@
 
 - 找不到 `wavebench.toml`，也没有通过 CLI 提供 `--resource`；
 - `backend` 不是 `lan`；
-- `driver` 不是 `rtm2032`；
-- `default_channel` 不是 1 或 2；
+- `scope.driver` 不是 `rtm2032`、`ds1104` 或 `ds1000z`；
+- RTM2032 的 `default_channel` 不是 1 或 2，或 DS1104/DS1000Z 的通道不在 1–4；
 - `format` 不是 `real`；
 - `points` 不是 `dmax`。
 

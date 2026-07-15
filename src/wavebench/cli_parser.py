@@ -465,7 +465,12 @@ def build_parser() -> argparse.ArgumentParser:
     capture.add_argument("--channel", type=int, action="append", default=None, help="Capture channel; repeat for multiple channels")
     capture.add_argument("--label", default="capture")
     capture.add_argument("--points", default=None, help="Override waveform points: def, max, or dmax")
-    capture.add_argument("--time-range", type=float, default=None, help="Set total acquisition time across 10 divisions, in seconds")
+    capture.add_argument(
+        "--time-range",
+        type=float,
+        default=None,
+        help="Set the total acquisition window in seconds; the driver converts it to s/div",
+    )
     capture.add_argument("--expect-frequency", type=float, default=None, help="Expected signal frequency in Hz for metadata quality checks")
     capture.add_argument("--window-frequency", type=float, default=None, help="Frequency in Hz used only to compute target-cycle time range")
     capture.add_argument("--target-cycles", type=float, default=None, help="Set time range to target_cycles / window_frequency")

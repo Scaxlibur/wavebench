@@ -222,6 +222,8 @@ def _driver_expected_tokens(driver: str) -> tuple[str, ...]:
     normalized = driver.lower()
     if normalized == "rtm2032":
         return ("RTM2032",)
+    if normalized in {"ds1104", "ds1000z"}:
+        return ("DS1104", "DS1000Z")
     if normalized == "dg4202":
         return ("DG4202",)
     if normalized == "dp800":
