@@ -322,8 +322,19 @@ class RunService:
         service = self._scope_service_for_capture(plan, step, services=services)
         channel = step.fields.get("channel", self.config.scope.default_channel)
         label = step.fields.get("label", f"{plan.label}_{step.index:02d}_capture")
+        autoscale_before_capture = step.fields.get("autoscale_before_capture", False)
+        autoscale_settle_s = step.fields.get("autoscale_settle_s", 0.0)
+        autoscale_record: dict[str, Any] | None = None
+        if autoscale_before_capture:
+            service.autoscale()
+            if autoscale_settle_s:
+                time.sleep(autoscale_settle_s)
+            autoscale_record = {"status": "completed", "settle_s": autoscale_settle_s}
+
         capture = service.capture_waveform(channel=channel, label=label)
         artifact = self._capture_artifact(capture, service)
+        if autoscale_record is not None:
+            artifact["autoscale_before_capture"] = autoscale_record
 
         quality_gate = step.fields.get("quality_gate", False)
         auto_recover = step.fields.get("auto_recover", False)

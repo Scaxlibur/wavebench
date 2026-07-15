@@ -698,6 +698,34 @@ save_csv = false
                 self.assertFalse(capture_config.output.save_csv)
                 scope_cls.return_value.capture_waveform.assert_called_once_with(channel=1, label="with_screen")
 
+    def test_scope_capture_can_autoscale_before_capture(self):
+        with TemporaryDirectory() as tmp:
+            plan = load_run_plan(
+                write_plan(
+                    tmp,
+                    """
+[[steps]]
+kind = "scope.capture"
+label = "after_auto"
+autoscale_before_capture = true
+autoscale_settle_s = 0
+""",
+                )
+            )
+            capture = fake_capture(tmp, "after_auto")
+            with patch("wavebench.services.run_service.ScopeService") as scope_cls:
+                scope = scope_cls.return_value
+                scope.capture_waveform.return_value = capture
+
+                result = RunService(config=make_config(tmp), logger=CommandLogger()).run(plan)
+
+                scope.autoscale.assert_called_once_with()
+                scope.capture_waveform.assert_called_once_with(channel=1, label="after_auto")
+                self.assertEqual(
+                    result.steps[0].artifact["autoscale_before_capture"],
+                    {"status": "completed", "settle_s": 0.0},
+                )
+
     def test_allows_safety_guard_on_configured_ch1_when_coupling_is_safe(self):
         with TemporaryDirectory() as tmp:
             plan = load_run_plan(

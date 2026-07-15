@@ -57,6 +57,8 @@ _OPTIONAL_FIELDS = {
         "screenshot",
         "quality_gate",
         "auto_recover",
+        "autoscale_before_capture",
+        "autoscale_settle_s",
         "expect",
         "expect_fft",
     },
@@ -346,9 +348,23 @@ def _normalize_step_fields(index: int, kind: str, fields: dict[str, Any]) -> Non
                 )
             if "time_range_s" not in fields:
                 fields["time_range_s"] = fields["target_cycles"] / window_frequency
-        for field in ("save_csv", "save_npy", "screenshot", "quality_gate", "auto_recover"):
+        for field in (
+            "save_csv",
+            "save_npy",
+            "screenshot",
+            "quality_gate",
+            "auto_recover",
+            "autoscale_before_capture",
+        ):
             if field in fields and not isinstance(fields[field], bool):
                 raise ConfigError(f"{prefix}.{field} must be true or false")
+        if "autoscale_settle_s" in fields:
+            autoscale_settle_s = _finite_float(
+                fields["autoscale_settle_s"], f"{prefix}.autoscale_settle_s"
+            )
+            if autoscale_settle_s < 0:
+                raise ConfigError(f"{prefix}.autoscale_settle_s must be >= 0")
+            fields["autoscale_settle_s"] = autoscale_settle_s
         if "expect" in fields:
             fields["expect"] = _parse_expect(fields["expect"], f"{prefix}.expect")
         if "expect_fft" in fields:

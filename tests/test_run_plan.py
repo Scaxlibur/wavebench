@@ -334,6 +334,34 @@ auto_recover = true
         self.assertTrue(plan.steps[0].fields["quality_gate"])
         self.assertTrue(plan.steps[0].fields["auto_recover"])
 
+    def test_scope_capture_accepts_autoscale_before_capture_fields(self):
+        path = self._write_plan("""
+[[steps]]
+kind = "scope.capture"
+autoscale_before_capture = true
+autoscale_settle_s = 0
+""")
+        plan = load_run_plan(path)
+        self.assertTrue(plan.steps[0].fields["autoscale_before_capture"])
+        self.assertEqual(plan.steps[0].fields["autoscale_settle_s"], 0.0)
+
+    def test_scope_capture_rejects_invalid_autoscale_before_capture_fields(self):
+        path = self._write_plan("""
+[[steps]]
+kind = "scope.capture"
+autoscale_before_capture = "yes"
+""")
+        with self.assertRaisesRegex(ConfigError, "autoscale_before_capture"):
+            load_run_plan(path)
+
+        path = self._write_plan("""
+[[steps]]
+kind = "scope.capture"
+autoscale_settle_s = -0.1
+""")
+        with self.assertRaisesRegex(ConfigError, "autoscale_settle_s"):
+            load_run_plan(path)
+
 
     def test_scope_capture_accepts_screenshot_flag(self):
         path = self._write_plan("""
