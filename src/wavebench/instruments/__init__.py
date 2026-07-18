@@ -1,3 +1,4 @@
+from .api import DriverContext, InstrumentDescriptor, OptionSpec
 from .contracts import DmmDriver, InstrumentDriver, PowerDriver, ScopeDriver, SourceDriver
 from .models import (
     DmmReading,
@@ -12,7 +13,10 @@ from .models import (
 __all__ = [
     "DmmDriver",
     "DmmReading",
+    "DriverContext",
     "InstrumentDriver",
+    "InstrumentDescriptor",
+    "OptionSpec",
     "PowerDriver",
     "PowerMeasurement",
     "PowerProtectionStatus",
