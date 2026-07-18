@@ -1,149 +1,146 @@
-# WaveBench 插件开发指南
+# WaveBench 可执行仪器插件开发指南
 
-这页写给想扩展 WaveBench 插件 metadata、插件市场索引或声明式 SCPI TOML 的人。
+WaveBench 支持两条互不替代的插件路径：
 
-先说清楚边界：当前插件系统不是“把任意第三方代码接进真实仪器执行路径”的入口。它主要用于描述仪器能力、做只读诊断、展示插件信息、维护本地 marketplace index，以及对本地声明式 SCPI TOML 做安全受限的 `*IDN?` probe。
+- `wavebench.drivers` / `wavebench.instrument.v1`：只读 metadata，保留向后兼容。
+- `wavebench.instruments` / `wavebench.instrument.v2`：可信 Python 包提供真实仪器 driver factory。
 
-如果目标是让一个新仪器真正参与 `run plan`、`doctor`、CLI 控制或 service 执行，请看 [[WaveBench_新增仪器驱动指南]]。
+V2 插件只替换设备差异层。transport 创建、resource、timeout、命令日志、安全限制、Service、run plan 和 artifact 仍由 WaveBench 核心掌握。声明式 SCPI TOML 仍只用于校验和显式只读 IDN probe，不能进入真实执行路径。
 
-## 插件系统能做什么
+## 最小目录
 
-- 列出内置仪器 metadata：`plugin list` / `plugin info`。
-- 显式加载 Python entry point metadata：`plugin list --include-entry-points`。
-- 诊断 metadata API 版本、能力命名、重复 driver id 和加载错误：`plugin doctor`。
-- 查询只读本地 marketplace JSON index：`plugin market search/info`。
-- 校验本地声明式 SCPI TOML：`plugin scpi check/info/doctor`。
-- 对显式指定的 resource 执行受限只读 IDN probe：`plugin scpi probe` 或 `plugin scpi doctor --probe --resource ...`。
+仓库中的 DS1000Z 试点包可作为完整模板：
 
-## 插件系统不做什么
-
-- 不自动下载、安装或启用插件。
-- 默认不加载第三方 Python entry points。
-- 不把声明式 SCPI TOML 注册成真实 driver。
-- 不自动实例化仪器，不进入 service / run-plan 执行路径。
-- 不支持任意 SCPI 下发；当前 probe 只允许安全受限的 IDN 查询。
-- 不修改 `wavebench.toml`，不打开或关闭任何仪器输出。
-
-## 代码入口
-
-| 入口 | 作用 |
-|---|---|
-| `src/wavebench/plugins/api.py` | `InstrumentPlugin` 数据结构、API 版本和诊断记录类型。 |
-| `src/wavebench/plugins/builtin.py` | 内置插件 metadata 列表。 |
-| `src/wavebench/plugins/registry.py` | 注册表构建、entry point 显式加载、metadata doctor。 |
-| `src/wavebench/plugins/market.py` | 本地 marketplace JSON index 读取和 search/info。 |
-| `src/wavebench/plugins/scpi.py` | 声明式 SCPI TOML 校验、info、只读 probe。 |
-| `src/wavebench/cli_parser.py` | `plugin ...` 子命令参数定义。 |
-| `src/wavebench/cli.py` | `plugin ...` 子命令处理逻辑。 |
-| `tests/test_plugins.py` | 插件注册表与 doctor 测试。 |
-| `tests/test_plugin_market.py` | marketplace index 测试。 |
-| `tests/test_plugin_scpi.py` | 声明式 SCPI TOML 与 probe 测试。 |
-
-## `InstrumentPlugin` 字段
-
-`InstrumentPlugin` 只描述 metadata，不代表真实 driver 已接入执行路径。
-
-| 字段 | 说明 |
-|---|---|
-| `driver_id` | 稳定唯一 ID，例如 `rigol.dg4202`。 |
-| `kind` | 仪器类别：`scope`、`source`、`power`、`dmm`。 |
-| `display_name` | 面向人的名称。 |
-| `manufacturer` | 厂商名称。 |
-| `models` | 适配型号列表。 |
-| `capabilities` | 能力列表，建议以 `kind.` 为前缀，例如 `source.set_frequency`。 |
-| `summary` | 简短说明。 |
-| `api_version` | 当前为 `wavebench.instrument.v1`。 |
-| `package` | 所属 Python 包，内置插件通常是 `wavebench`。 |
-| `origin` | `builtin`、`entry_point` 或 `local`。 |
-| `idn_patterns` | 用于 `doctor` 或人工判断的 IDN 匹配线索。 |
-| `config_fields` | 关联配置字段提示。 |
-
-## 内置插件
-
-新增或更新内置 metadata 时：
-
-1. 修改 `src/wavebench/plugins/builtin.py`。
-2. 确保 `driver_id` 不与已有插件冲突。
-3. `capabilities` 至少有一项，并使用清晰的 `kind.` 前缀。
-4. 补充或更新 `tests/test_plugins.py`。
-5. 运行：
-
-```bash
-python -m wavebench plugin list
-python -m wavebench plugin info <driver_id>
-python -m wavebench plugin doctor
-python -m pytest tests/test_plugins.py
+```text
+packages/plugins/wavebench-rigol-ds1000z/
+├── pyproject.toml
+└── src/wavebench_rigol_ds1000z/
+    ├── __init__.py
+    ├── descriptor.py
+    └── driver.py
 ```
 
-## Entry Point 插件
+最小 `pyproject.toml`：
 
-Entry point 插件只在用户显式传入 `--include-entry-points` 时加载。
+```toml
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
 
-目的：避免普通 `plugin list/info/doctor` 因第三方包导入副作用而执行外部代码。
+[project]
+name = "wavebench-example-scope"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = ["wavebench>=0.7,<1"]
 
-约束：
-
-- entry point 加载失败不能让 CLI 崩溃；失败应进入 `plugin doctor --include-entry-points` 诊断。
-- third-party metadata 只能描述能力，不能绕过 service / driver 层直接执行仪器动作。
-- 若 entry point 的 `driver_id` 与内置插件冲突，doctor 应报告 error。
-
-## Marketplace Index
-
-当前 marketplace 是只读本地 JSON index，用于发现可安装/可参考的插件信息。
-
-它不做：
-
-- 自动安装。
-- 签名校验。
-- 网络下载。
-- trust chain。
-
-相关命令：
-
-```bash
-python -m wavebench plugin market search rigol
-python -m wavebench plugin market info wavebench-rigol-dg4202
+[project.entry-points."wavebench.instruments"]
+"example.scope" = "wavebench_example_scope:descriptor"
 ```
 
-## 声明式 SCPI TOML
+entry point 名必须等于 canonical `driver_id`。普通配置解析只读取 entry point 名；只有配置真正选中该 ID、显式查看详情，或运行 `plugin ... --load` 时才导入插件。
 
-声明式 SCPI 插件适合记录一个仪器的只读识别信息、能力和 IDN 查询方式。它不能把任意 SCPI 变成 WaveBench 执行能力。
+## Descriptor 与 factory
 
-常用命令：
+插件导出一个 `InstrumentDescriptor` 或返回它的无参函数：
 
-```bash
-python -m wavebench plugin scpi check doc/project/scpi-plugin.example.toml
-python -m wavebench plugin scpi info doc/project/scpi-plugin.example.toml
-python -m wavebench plugin scpi doctor doc/project/scpi-dp800.example.toml
-python -m wavebench plugin scpi probe doc/project/scpi-dp800.example.toml --resource TCPIP::192.0.2.12::INSTR
-python -m wavebench plugin scpi doctor doc/project/scpi-dp800.example.toml --probe --resource TCPIP::192.0.2.12::INSTR
+```python
+from wavebench.instruments.api import InstrumentDescriptor, OptionSpec
+
+
+def _open_driver(context):
+    from .driver import ExampleScope
+
+    return ExampleScope(
+        transport=context.open_transport(),
+        check_errors=bool(context.settings["check_errors"]),
+        block_points=int(context.options["block_points"]),
+    )
+
+
+def descriptor():
+    return InstrumentDescriptor(
+        driver_id="example.scope",
+        kind="scope",
+        display_name="Example Scope",
+        manufacturer="Example",
+        models=("EX1",),
+        aliases=("example-scope",),
+        capabilities=("scope.idn", "scope.capture_waveform"),
+        idn_patterns=("EXAMPLE,EX1",),
+        backends=("pyvisa",),
+        option_specs=(OptionSpec("block_points", int, default=250000, minimum=1),),
+        permissions=("instrument.io", "configured-resource-only"),
+        factory=_open_driver,
+        wavebench_min_version="0.7.0",
+        wavebench_max_version="1.0.0",
+        scope_coupling_policy="unknown",
+    )
 ```
 
-Probe 安全规则：
+descriptor 至少声明 canonical ID、kind、API/兼容版本、厂商/型号、alias、capability、IDN pattern、backend、受限选项、权限提示和 factory。scope 插件还应准确声明 coupling policy；无法证明输入安全语义时保留 `unknown`，核心会默认拒绝采集。
 
-- 必须显式传 `--resource`。
-- 只发送 TOML 中的 `scpi.idn_query`。
-- `idn_query` 必须是单行查询，不能包含 `;`，必须以 `?` 结尾。
-- 不打开/关闭输出，不写仪器状态，不修改配置。
+插件模块导入时不得连接仪器、发送 SCPI、创建文件或修改全局状态。factory 才能调用 `context.open_transport()`。
 
-## 什么时候不要写插件
+## DriverContext
 
-如果你需要这些能力，应该写真实驱动而不是插件 metadata：
+核心传入的 `DriverContext` 只包含当前插件所需的窄上下文：
 
-- 新 CLI 命令会连接仪器并执行动作。
-- 新仪器需要进入 `wavebench.toml` 配置。
-- 新仪器要参与 `doctor`、`run verify` 或 `run plan`。
-- 新仪器会产生 artifact、读数、采集包或报告区块。
-- 需要 safety guard、restore、输出开关等危险状态控制。
+- 已解析的 canonical `driver_id` 与 `kind`；
+- 配置中选中的单个 `resource`；
+- 核心选定的 backend、timeout 与 OPC timeout；
+- `CommandLogger`；
+- 只读 core settings 与经过 `OptionSpec` 校验的插件 options；
+- 受控 transport factory。
 
-这类工作请走 [[WaveBench_新增仪器驱动指南]]。
+插件不应读取完整 WaveBench 配置，也不应持有 Service、TUI、RunService 或 artifact writer。
 
-## 提交前检查
+## Contracts 与 models
+
+按 `kind` 实现对应 Protocol：
+
+- `ScopeDriver`
+- `SourceDriver`
+- `PowerDriver`
+- `DmmDriver`
+
+公共返回类型来自 `wavebench.instruments.models`，包括 `WaveformHeader`、`WaveformData`、`SourceStatus`、`PowerStatus`、`PowerMeasurement`、`PowerProtectionStatus` 和 `DmmReading`。不要复制另一套不兼容的数据模型，也不要实现包含所有仪器方法的巨型接口。
+
+factory 返回对象缺少 contract 方法时，核心会拒绝启用该插件并尝试关闭已创建资源。
+
+## ID、alias 与兼容
+
+- canonical ID 和 alias 在已加载注册表中必须唯一。
+- 外部插件不能覆盖内置 canonical ID 或 alias。
+- entry point 名与 descriptor `driver_id` 必须一致。
+- `kind` 必须与配置槽位一致。
+- 当前 WaveBench 版本必须落在插件声明的半开兼容区间内。
+- 第一阶段不解决同一 Python 环境中互斥 vendor SDK 依赖；出现真实需求后再评估独立进程或 RPC。
+
+DS1000Z 试点保留内置 fallback，因此旧配置 alias `ds1104` / `ds1000z` 继续选择内置实现；安装试点 wheel 后，使用 canonical `rigol.ds1000z` 才会显式选择外部包。这避免外部包覆盖内置 alias，也便于卸载后安全恢复。
+
+## 测试门槛
+
+至少覆盖：
+
+- descriptor 构建不产生 I/O；
+- canonical ID、alias、kind、版本和冲突校验；
+- OptionSpec 默认值、类型、范围和未知字段；
+- fake transport 下的核心读写能力、错误队列和 close；
+- timeout、短 bin-block、坏 preamble、截图失败；
+- 坏插件不影响其他内置驱动；
+- wheel 在临时 venv 中安装、entry point 发现、重装和卸载；
+- 卸载后缺失提示或内置 fallback 行为。
+
+示例：
 
 ```bash
-python -m wavebench plugin doctor
-python -m wavebench plugin scpi check doc/project/scpi-plugin.example.toml
-python -m pytest tests/test_plugins.py tests/test_plugin_market.py tests/test_plugin_scpi.py
+python -m pytest -q tests/test_instrument_registry.py tests/test_ds1000z_plugin.py
+python -m ruff check packages/plugins/wavebench-rigol-ds1000z
+python -m wavebench plugin doctor --load
 ```
 
-公开文档里的 resource 示例使用保留网段，例如 `192.0.2.0/24` 或 `TCPIP::192.0.2.12::INSTR`，不要写真实实验室 IP。
+## 信任与发布边界
+
+Python entry point 是可信代码扩展，不是安全沙箱。安装插件等价于允许该包在当前 Python 用户权限下执行代码。WaveBench 不提供在线商店、自动下载、自动 `pip install`、插件评分或每插件进程隔离。
+
+建议每套 WaveBench 使用独立 venv，固定 WaveBench/插件版本，保存 lockfile，并在分发 wheel 时校验 hash。公开示例 resource 使用 RFC 5737 保留地址，例如 `TCPIP::192.0.2.20::INSTR`，不得提交真实实验室地址、序列号、凭据、原始波形或命令日志。

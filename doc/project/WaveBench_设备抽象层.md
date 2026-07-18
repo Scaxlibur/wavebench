@@ -25,16 +25,11 @@ class Instrument:
 
 这种类会很快变成垃圾桶。
 
-### 插件系统只做 metadata 起步
+### Metadata 与可执行插件分层
 
-WaveBench 现在已经有轻量插件注册表，但当前只管理仪器驱动 metadata：
+`wavebench.drivers` V1 继续提供只读 metadata；`wavebench.instruments` V2 提供可信的可执行 driver factory。Service 只依赖 `ScopeDriver` / `SourceDriver` / `PowerDriver` / `DmmDriver` contracts，并通过统一 registry/factory 创建内置或外部 driver。
 
-- 内置驱动注册为只读能力目录；
-- `plugin list/info` 只展示 metadata；
-- `plugin doctor` 只检查 metadata 与 entry point 加载错误；
-- 默认不导入第三方插件，必须显式传入 `--include-entry-points`。
-
-它还不是完整插件化执行层。service 层仍直接使用现有 driver，不通过插件动态调度真实仪器控制。
+插件只负责设备差异。核心继续掌握 resource、transport factory、安全限制、Service、run plan 和 artifact。未选中的第三方插件默认不导入；`plugin ... --load` 才会显式加载并诊断全部可执行 descriptor。
 
 ### 不让裸 SCPI 散落在业务代码里
 
