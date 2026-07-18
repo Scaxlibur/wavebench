@@ -47,9 +47,11 @@ class DriverContext:
     opc_timeout_ms: int
     logger: CommandLogger
     _transport_factory: TransportFactory = field(repr=False, compare=False)
+    settings: Mapping[str, object] = field(default_factory=dict)
     options: Mapping[str, object] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
+        object.__setattr__(self, "settings", MappingProxyType(dict(self.settings)))
         object.__setattr__(self, "options", MappingProxyType(dict(self.options)))
 
     def open_transport(self) -> InstrumentTransport:

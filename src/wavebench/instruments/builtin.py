@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from wavebench import __version__
 
-from .api import InstrumentDescriptor, OptionSpec
+from .api import InstrumentDescriptor
 
 
 def _open_rtm2032(context):
@@ -10,7 +10,7 @@ def _open_rtm2032(context):
 
     return RTM2032Scope(
         transport=context.open_transport(),
-        check_errors_after_ops=bool(context.options["check_errors"]),
+        check_errors_after_ops=bool(context.settings["check_errors"]),
     )
 
 
@@ -19,7 +19,7 @@ def _open_ds1000z(context):
 
     return DS1104Scope(
         transport=context.open_transport(),
-        check_errors_after_ops=bool(context.options["check_errors"]),
+        check_errors_after_ops=bool(context.settings["check_errors"]),
     )
 
 
@@ -28,7 +28,7 @@ def _open_dg4202(context):
 
     return DG4202Source(
         transport=context.open_transport(),
-        check_errors_after_ops=bool(context.options["check_errors"]),
+        check_errors_after_ops=bool(context.settings["check_errors"]),
     )
 
 
@@ -37,7 +37,7 @@ def _open_dp800(context):
 
     return DP800Power(
         transport=context.open_transport(),
-        check_errors_after_ops=bool(context.options["check_errors"]),
+        check_errors_after_ops=bool(context.settings["check_errors"]),
     )
 
 
@@ -47,7 +47,6 @@ def _open_dm3000(context):
     return DM3000Dmm(transport=context.open_transport())
 
 
-_CHECK_ERRORS = (OptionSpec("check_errors", bool, default=True),)
 _INSTRUMENT_IO_PERMISSIONS = ("instrument.io", "configured-resource-only")
 
 BUILTIN_INSTRUMENTS: tuple[InstrumentDescriptor, ...] = (
@@ -69,7 +68,7 @@ BUILTIN_INSTRUMENTS: tuple[InstrumentDescriptor, ...] = (
         ),
         idn_patterns=("Rohde&Schwarz,RTM", "Rohde & Schwarz,RTM"),
         backends=("rsinstrument",),
-        option_specs=_CHECK_ERRORS,
+        option_specs=(),
         permissions=_INSTRUMENT_IO_PERMISSIONS,
         factory=_open_rtm2032,
         summary="R&S RTM2000-series scope capture driver.",
@@ -94,7 +93,7 @@ BUILTIN_INSTRUMENTS: tuple[InstrumentDescriptor, ...] = (
         ),
         idn_patterns=("RIGOL TECHNOLOGIES,DS1104", "RIGOL TECHNOLOGIES,DS1"),
         backends=("pyvisa",),
-        option_specs=_CHECK_ERRORS,
+        option_specs=(),
         permissions=_INSTRUMENT_IO_PERMISSIONS,
         factory=_open_ds1000z,
         summary="RIGOL DS1000Z-series scope driver with RAW chunking.",
@@ -122,7 +121,7 @@ BUILTIN_INSTRUMENTS: tuple[InstrumentDescriptor, ...] = (
         ),
         idn_patterns=("RIGOL TECHNOLOGIES,DG4",),
         backends=("pyvisa",),
-        option_specs=_CHECK_ERRORS,
+        option_specs=(),
         permissions=_INSTRUMENT_IO_PERMISSIONS,
         factory=_open_dg4202,
         summary="RIGOL DG4000-series signal source driver.",
@@ -145,7 +144,7 @@ BUILTIN_INSTRUMENTS: tuple[InstrumentDescriptor, ...] = (
         ),
         idn_patterns=("RIGOL TECHNOLOGIES,DP8",),
         backends=("pyvisa",),
-        option_specs=_CHECK_ERRORS,
+        option_specs=(),
         permissions=_INSTRUMENT_IO_PERMISSIONS,
         factory=_open_dp800,
         summary="RIGOL DP800-series power-supply driver.",

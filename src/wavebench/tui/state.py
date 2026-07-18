@@ -3,9 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from wavebench.config import WaveBenchConfig
-from wavebench.drivers.dg4202 import SourceStatus
-from wavebench.drivers.dm3000 import DmmReading
-from wavebench.drivers.dp800 import PowerProtectionStatus, PowerStatus
+from wavebench.instruments.models import DmmReading, PowerProtectionStatus, PowerStatus, SourceStatus
 
 
 @dataclass(frozen=True)

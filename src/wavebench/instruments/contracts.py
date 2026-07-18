@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any, Protocol, runtime_checkable
 
 from .models import (
+    ArbitraryQueryProbeResult,
     DmmReading,
     PowerMeasurement,
     PowerProtectionStatus,
@@ -102,7 +103,7 @@ class SourceDriver(InstrumentDriver, Protocol):
 
     def upload_dg4000_dac14_block(self, **kwargs: Any) -> SourceStatus: ...
 
-    def probe_arbitrary_queries(self, channel: int) -> list[Any]: ...
+    def probe_arbitrary_queries(self, channel: int) -> list[ArbitraryQueryProbeResult]: ...
 
 
 @runtime_checkable
@@ -131,5 +132,7 @@ class DmmDriver(InstrumentDriver, Protocol):
     def function_status(self) -> str: ...
 
     def set_function(self, function: str) -> str: ...
+
+    def apply_function(self, function: str) -> str: ...
 
     def read(self, function: str = "dcv") -> DmmReading: ...

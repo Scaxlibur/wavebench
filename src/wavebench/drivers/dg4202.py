@@ -4,22 +4,7 @@ from dataclasses import dataclass
 
 from wavebench.arbitrary import DG4000DacBlock
 from wavebench.errors import DataError, InstrumentError
-from wavebench.instruments.models import SourceStatus
-
-
-@dataclass(frozen=True)
-class ArbitraryQueryProbeResult:
-    label: str
-    command: str
-    response: str | None
-    errors: list[str]
-    exception: str | None = None
-
-    @property
-    def accepted(self) -> bool:
-        if self.exception is not None:
-            return False
-        return not [item for item in self.errors if not (item.startswith("0") or "No error" in item)]
+from wavebench.instruments.models import ArbitraryQueryProbeResult, SourceStatus
 
 
 ARBITRARY_QUERY_CANDIDATES: tuple[tuple[str, str], ...] = (

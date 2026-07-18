@@ -3,20 +3,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from wavebench.errors import DataError
+from wavebench.instruments.dmm import (
+    DMM_FUNCTION_ALIASES as DMM_FUNCTION_ALIASES,
+    normalize_dmm_function as normalize_dmm_function,
+)
 from wavebench.instruments.models import DmmReading
-
-
-DMM_FUNCTION_ALIASES = {
-    "vdc": "dcv",
-    "vac": "acv",
-    "idc": "dci",
-    "iac": "aci",
-    "ohm": "res",
-    "r": "res",
-    "2wr": "res",
-    "4wr": "fres",
-    "cont": "continuity",
-}
 
 DMM_FUNCTION_COMMANDS = {
     "dcv": ":MEASure:VOLTage:DC?",
@@ -128,8 +119,3 @@ class DM3000Dmm:
 
     def close(self) -> None:
         self.transport.close()
-
-
-def normalize_dmm_function(function: str) -> str:
-    key = function.strip().lower()
-    return DMM_FUNCTION_ALIASES.get(key, key)

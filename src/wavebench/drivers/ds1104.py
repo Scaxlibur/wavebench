@@ -4,8 +4,8 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from wavebench.drivers.rtm2032 import WaveformData, WaveformHeader
 from wavebench.errors import DataError, InstrumentError, OperationTimeout
+from wavebench.instruments.models import WaveformData, WaveformHeader
 from wavebench.transport.base import InstrumentTransport
 
 

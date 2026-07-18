@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Protocol
 
 from wavebench.config import WaveBenchConfig, load_config
-from wavebench.drivers.dg4202 import SourceStatus
+from wavebench.instruments.models import SourceStatus
 from wavebench.logging import CommandLogger
 from wavebench.services.source_service import SourceService
 from wavebench.tui.state import SourcePanelState, source_state_from_status

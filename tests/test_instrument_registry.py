@@ -4,6 +4,7 @@ import pytest
 
 from wavebench.errors import ConfigError
 from wavebench.instruments.api import DriverContext, InstrumentDescriptor, OptionSpec
+from wavebench.instruments.factory import open_instrument_driver
 from wavebench.instruments.registry import InstrumentRegistry, build_instrument_registry
 from wavebench.logging import CommandLogger
 
@@ -132,9 +133,84 @@ def test_driver_context_exposes_only_fixed_resource_and_transport_factory():
         opc_timeout_ms=2000,
         logger=CommandLogger(),
         _transport_factory=lambda: sentinel,
+        settings={"check_errors": True},
         options={"check_errors": True},
     )
 
     assert context.open_transport() is sentinel
     with pytest.raises(TypeError):
+        context.settings["check_errors"] = False
+    with pytest.raises(TypeError):
         context.options["check_errors"] = False
+
+
+def test_core_factory_builds_context_and_validates_driver_contract(monkeypatch):
+    captured = {}
+    transport = object()
+
+    def factory(context):
+        captured["context"] = context
+        captured["transport"] = context.open_transport()
+        return _ScopeDriver()
+
+    descriptor = make_descriptor(factory=factory, option_specs=())
+    monkeypatch.setattr(
+        "wavebench.instruments.factory.resolve_instrument_descriptor",
+        lambda reference, expected_kind: descriptor,
+    )
+    monkeypatch.setattr(
+        "wavebench.instruments.factory.PyVisaTransport.open",
+        lambda connection, logger: transport,
+    )
+
+    opened = open_instrument_driver(
+        driver_reference="example.scope",
+        expected_kind="scope",
+        resource="configured-resource",
+        configured_backend="lan",
+        timeout_ms=1000,
+        opc_timeout_ms=2000,
+        read_retry_attempts=1,
+        read_retry_delay_ms=10,
+        logger=CommandLogger(),
+        settings={"check_errors": True},
+    )
+
+    assert opened.driver.__class__ is _ScopeDriver
+    assert captured["transport"] is transport
+    assert captured["context"].resource == "configured-resource"
+    assert captured["context"].backend == "pyvisa"
+    assert captured["context"].settings == {"check_errors": True}
+
+
+class _ScopeDriver:
+    def idn(self):
+        return "EXAMPLE,EX1"
+
+    def close(self):
+        pass
+
+    def errors(self, limit=16):
+        return []
+
+    def channel_coupling(self, channel):
+        return "DC"
+
+    def autoscale(self, wait_opc=True, check_errors=True):
+        pass
+
+    def fetch_waveform(self, channel, points="dmax", check_errors=True):
+        return None
+
+    def capture_waveform(
+        self,
+        channel,
+        points="dmax",
+        check_errors=True,
+        time_range_s=None,
+        vertical_scale_v_per_div=None,
+    ):
+        return None
+
+    def screenshot_png(self, *, include_menu=False, color_scheme="COL"):
+        return b""

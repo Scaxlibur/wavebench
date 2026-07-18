@@ -6,43 +6,48 @@ from dataclasses import dataclass
 import time
 
 from wavebench.arbitrary import build_dg4000_dac14_binary_block, load_arbitrary_waveform
-from wavebench.config import ConnectionConfig, SourceConfig, WaveBenchConfig
-from wavebench.drivers.dg4202 import ArbitraryQueryProbeResult, DG4202Source, SourceStatus
+from wavebench.config import SourceConfig, WaveBenchConfig
 from wavebench.errors import ConfigError
+from wavebench.instruments.contracts import SourceDriver
+from wavebench.instruments.factory import open_instrument_driver
+from wavebench.instruments.models import ArbitraryQueryProbeResult, SourceStatus
 from wavebench.logging import CommandLogger
 from wavebench.services.source_state import RestorableSourceState
-from wavebench.transport.pyvisa_transport import PyVisaTransport
 
 
 @dataclass
 class SourceService:
     config: WaveBenchConfig
     logger: CommandLogger
-    session: DG4202Source | None = None
+    session: SourceDriver | None = None
 
     def _source_config(self) -> SourceConfig:
         if self.config.source is None or not self.config.source.resource:
             raise ConfigError("source resource is not configured. Set [source].resource or pass --resource.")
         return self.config.source
 
-    def _open_source(self) -> DG4202Source:
+    def _open_source(self) -> SourceDriver:
         source = self._source_config()
-        connection = ConnectionConfig(
-            backend=self.config.connection.backend,
-            resource=source.resource,
+        opened = open_instrument_driver(
+            driver_reference=source.driver,
+            expected_kind="source",
+            resource=source.resource or "",
+            configured_backend=self.config.connection.backend,
             timeout_ms=self.config.connection.timeout_ms,
             opc_timeout_ms=self.config.connection.opc_timeout_ms,
             read_retry_attempts=self.config.connection.read_retry_attempts,
             read_retry_delay_ms=self.config.connection.read_retry_delay_ms,
+            logger=self.logger,
+            settings={"check_errors": source.check_errors},
+            options=getattr(source, "options", {}),
         )
-        transport = PyVisaTransport.open(connection, logger=self.logger)
-        return DG4202Source(transport=transport, check_errors_after_ops=source.check_errors)
+        return opened.driver
 
-    def open_session(self) -> DG4202Source:
+    def open_session(self) -> SourceDriver:
         return self._open_source()
 
     @contextmanager
-    def _source_session(self) -> Iterator[DG4202Source]:
+    def _source_session(self) -> Iterator[SourceDriver]:
         if self.session is not None:
             yield self.session
             return

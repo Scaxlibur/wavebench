@@ -6,7 +6,9 @@ import time
 from typing import Protocol
 
 from wavebench.config import WaveBenchConfig, load_config
-from wavebench.drivers.dm3000 import DM3000Dmm, DmmReading, normalize_dmm_function
+from wavebench.instruments.contracts import DmmDriver
+from wavebench.instruments.dmm import normalize_dmm_function
+from wavebench.instruments.models import DmmReading
 from wavebench.logging import CommandLogger
 from wavebench.services.dmm_service import DmmService
 from wavebench.tui.state import DmmPanelState, dmm_state_from_reading
@@ -28,7 +30,7 @@ class DmmServicePanelAdapter:
     service: DmmService
     _instrument_id: str | None = None
     _active_function: str = "dcv"
-    _dmm_session: DM3000Dmm | None = None
+    _dmm_session: DmmDriver | None = None
 
     @classmethod
     def from_config(
@@ -103,7 +105,7 @@ class DmmServicePanelAdapter:
             return self.service.idn()
         return self._with_session(lambda dmm: dmm.idn())
 
-    def _persistent_session(self) -> DM3000Dmm | None:
+    def _persistent_session(self) -> DmmDriver | None:
         open_session = getattr(self.service, "open_session", None)
         if open_session is None:
             return None

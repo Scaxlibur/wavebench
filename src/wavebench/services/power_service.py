@@ -4,42 +4,47 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 
-from wavebench.config import ConnectionConfig, PowerConfig, WaveBenchConfig
-from wavebench.drivers.dp800 import DP800Power, PowerMeasurement, PowerProtectionStatus, PowerStatus
+from wavebench.config import PowerConfig, WaveBenchConfig
 from wavebench.errors import ConfigError
+from wavebench.instruments.contracts import PowerDriver
+from wavebench.instruments.factory import open_instrument_driver
+from wavebench.instruments.models import PowerMeasurement, PowerProtectionStatus, PowerStatus
 from wavebench.logging import CommandLogger
-from wavebench.transport.pyvisa_transport import PyVisaTransport
 
 
 @dataclass
 class PowerService:
     config: WaveBenchConfig
     logger: CommandLogger
-    session: DP800Power | None = None
+    session: PowerDriver | None = None
 
     def _power_config(self) -> PowerConfig:
         if self.config.power is None or not self.config.power.resource:
             raise ConfigError("power resource is not configured. Set [power].resource or pass --resource.")
         return self.config.power
 
-    def _open_power(self) -> DP800Power:
+    def _open_power(self) -> PowerDriver:
         power = self._power_config()
-        connection = ConnectionConfig(
-            backend=self.config.connection.backend,
-            resource=power.resource,
+        opened = open_instrument_driver(
+            driver_reference=power.driver,
+            expected_kind="power",
+            resource=power.resource or "",
+            configured_backend=self.config.connection.backend,
             timeout_ms=self.config.connection.timeout_ms,
             opc_timeout_ms=self.config.connection.opc_timeout_ms,
             read_retry_attempts=self.config.connection.read_retry_attempts,
             read_retry_delay_ms=self.config.connection.read_retry_delay_ms,
+            logger=self.logger,
+            settings={"check_errors": power.check_errors},
+            options=getattr(power, "options", {}),
         )
-        transport = PyVisaTransport.open(connection, logger=self.logger)
-        return DP800Power(transport=transport, check_errors_after_ops=power.check_errors)
+        return opened.driver
 
-    def open_session(self) -> DP800Power:
+    def open_session(self) -> PowerDriver:
         return self._open_power()
 
     @contextmanager
-    def _power_session(self) -> Iterator[DP800Power]:
+    def _power_session(self) -> Iterator[PowerDriver]:
         if self.session is not None:
             yield self.session
             return

@@ -5,8 +5,9 @@ from pathlib import Path
 from typing import Protocol
 
 from wavebench.config import WaveBenchConfig, load_config
-from wavebench.drivers.dp800 import DP800Power, PowerMeasurement, PowerProtectionStatus, PowerStatus
 from wavebench.errors import WaveBenchError
+from wavebench.instruments.contracts import PowerDriver
+from wavebench.instruments.models import PowerMeasurement, PowerProtectionStatus, PowerStatus
 from wavebench.logging import CommandLogger
 from wavebench.services.power_service import PowerService
 from wavebench.tui.state import PowerPanelState, channel_state_from_status, config_status
@@ -51,7 +52,7 @@ class PowerServicePanelAdapter:
     _protections: dict[int, PowerProtectionStatus] = field(default_factory=dict)
     _ui_log_lines: list[str] = field(default_factory=list)
     _needs_full_refresh: bool = True
-    _power_session: DP800Power | None = None
+    _power_session: PowerDriver | None = None
 
     @classmethod
     def from_config(
@@ -228,7 +229,7 @@ class PowerServicePanelAdapter:
             return self.service.protection_status(channel=channel)
         return self._with_session(lambda power: power.get_protection_status(channel))
 
-    def _persistent_session(self) -> DP800Power | None:
+    def _persistent_session(self) -> PowerDriver | None:
         open_session = getattr(self.service, "open_session", None)
         if open_session is None:
             return None

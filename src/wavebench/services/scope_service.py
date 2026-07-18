@@ -13,20 +13,16 @@ import numpy as np
 
 from wavebench.config import WaveBenchConfig
 from wavebench.data.package import new_package_dir
-from wavebench.drivers.ds1104 import DS1104Scope
-from wavebench.drivers.rtm2032 import RTM2032Scope
 from wavebench.errors import ConfigError, WaveBenchError
+from wavebench.instruments.api import InstrumentDescriptor, ScopeCouplingPolicy
 from wavebench.instruments.contracts import ScopeDriver
+from wavebench.instruments.factory import open_instrument_driver
 from wavebench.instruments.models import WaveformData
+from wavebench.instruments.registry import resolve_instrument_descriptor
 from wavebench.logging import CommandLogger
-from wavebench.transport.pyvisa_transport import PyVisaTransport
-from wavebench.transport.rsinstrument_transport import RsInstrumentTransport
 
 HIGH_IMPEDANCE_COUPLINGS = {"DCL", "DCLIMIT", "ACL", "ACLIMIT"}
 LOW_IMPEDANCE_COUPLINGS = {"DC", "AC"}
-RIGOL_DS1000Z_DRIVERS = {"ds1104", "ds1000z"}
-
-
 def normalize_coupling(value: str) -> str:
     return value.strip().upper()
 
@@ -41,9 +37,13 @@ def assert_scope_high_impedance(
     channel: int,
     allow_50ohm: bool = False,
     driver: str = "rtm2032",
+    coupling_policy: ScopeCouplingPolicy | None = None,
 ) -> str:
     normalized = normalize_coupling(coupling)
-    if driver.strip().lower() in RIGOL_DS1000Z_DRIVERS:
+    policy = coupling_policy
+    if policy is None:
+        policy = resolve_instrument_descriptor(driver, expected_kind="scope").scope_coupling_policy
+    if policy == "fixed-high-impedance":
         if normalized in {"AC", "DC", "GND"}:
             return normalized
         raise ConfigError(
@@ -51,11 +51,11 @@ def assert_scope_high_impedance(
             "expected AC, DC, or GND. / "
             f"示波器 CH{channel} 耦合值 {normalized!r} 不是已知的 RIGOL DS1000Z 耦合方式。"
         )
-    if normalized in HIGH_IMPEDANCE_COUPLINGS:
+    if policy == "switchable-termination" and normalized in HIGH_IMPEDANCE_COUPLINGS:
         return normalized
-    if allow_50ohm and normalized in LOW_IMPEDANCE_COUPLINGS:
+    if policy == "switchable-termination" and allow_50ohm and normalized in LOW_IMPEDANCE_COUPLINGS:
         return normalized
-    if normalized in LOW_IMPEDANCE_COUPLINGS:
+    if policy == "switchable-termination" and normalized in LOW_IMPEDANCE_COUPLINGS:
         raise ConfigError(
             f"scope CH{channel} coupling is {normalized}, which may use 50 ohm termination; "
             "default capture requires high impedance. Pass --allow-50ohm or set "
@@ -94,16 +94,24 @@ class ScopeService:
     config: WaveBenchConfig
     logger: CommandLogger
     session: ScopeDriver | None = None
+    descriptor: InstrumentDescriptor | None = None
 
     def _open_scope(self) -> ScopeDriver:
-        if self.config.scope.driver.strip().lower() in RIGOL_DS1000Z_DRIVERS:
-            transport = PyVisaTransport.open(self.config.connection, logger=self.logger)
-            return DS1104Scope(
-                transport=transport,
-                check_errors_after_ops=self.config.scope.check_errors,
-            )
-        transport = RsInstrumentTransport.open(self.config.connection, logger=self.logger)
-        return RTM2032Scope(transport=transport, check_errors_after_ops=self.config.scope.check_errors)
+        opened = open_instrument_driver(
+            driver_reference=self.config.scope.driver,
+            expected_kind="scope",
+            resource=self.config.connection.resource,
+            configured_backend=self.config.connection.backend,
+            timeout_ms=self.config.connection.timeout_ms,
+            opc_timeout_ms=self.config.connection.opc_timeout_ms,
+            read_retry_attempts=self.config.connection.read_retry_attempts,
+            read_retry_delay_ms=self.config.connection.read_retry_delay_ms,
+            logger=self.logger,
+            settings={"check_errors": self.config.scope.check_errors},
+            options=getattr(self.config.scope, "options", {}),
+        )
+        self.descriptor = opened.descriptor
+        return opened.driver
 
     def open_session(self) -> ScopeDriver:
         return self._open_scope()
@@ -133,11 +141,16 @@ class ScopeService:
 
     def require_high_impedance(self, channel: int, *, allow_50ohm: bool = False) -> str:
         coupling = self.channel_coupling(channel)
+        descriptor = self.descriptor or resolve_instrument_descriptor(
+            self.config.scope.driver,
+            expected_kind="scope",
+        )
         return assert_scope_high_impedance(
             coupling,
             channel=channel,
             allow_50ohm=allow_50ohm,
             driver=self.config.scope.driver,
+            coupling_policy=descriptor.scope_coupling_policy,
         )
 
     def autoscale(self) -> None:

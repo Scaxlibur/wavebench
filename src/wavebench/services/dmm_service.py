@@ -5,51 +5,47 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 import time
 
-from wavebench.config import ConnectionConfig, DmmConfig, WaveBenchConfig
-from wavebench.drivers.dm3000 import DM3000Dmm, DmmReading
+from wavebench.config import DmmConfig, WaveBenchConfig
 from wavebench.errors import ConfigError
+from wavebench.instruments.contracts import DmmDriver
+from wavebench.instruments.factory import open_instrument_driver
+from wavebench.instruments.models import DmmReading
 from wavebench.logging import CommandLogger
-from wavebench.transport.pyvisa_transport import PyVisaTransport
-from wavebench.transport.serial_transport import SerialTransport
 
 
 @dataclass
 class DmmService:
     config: WaveBenchConfig
     logger: CommandLogger
-    session: DM3000Dmm | None = None
+    session: DmmDriver | None = None
 
     def _dmm_config(self) -> DmmConfig:
         if self.config.dmm is None or not self.config.dmm.resource:
             raise ConfigError("dmm resource is not configured. Set [dmm].resource or pass --resource.")
         return self.config.dmm
 
-    def _open_dmm(self) -> DM3000Dmm:
+    def _open_dmm(self) -> DmmDriver:
         dmm = self._dmm_config()
-        backend = dmm.backend.strip().lower()
-        if backend == "serial":
-            transport = SerialTransport.open(dmm, logger=self.logger)
-        elif backend in {"lan", "visa", "pyvisa"}:
-            transport = PyVisaTransport.open(
-                ConnectionConfig(
-                    backend="lan",
-                    resource=dmm.resource or "",
-                    timeout_ms=dmm.timeout_ms,
-                    opc_timeout_ms=dmm.timeout_ms,
-                    read_retry_attempts=self.config.connection.read_retry_attempts,
-                    read_retry_delay_ms=self.config.connection.read_retry_delay_ms,
-                ),
-                logger=self.logger,
-            )
-        else:
-            raise ConfigError("dmm.backend must be one of: serial, lan, visa, pyvisa")
-        return DM3000Dmm(transport=transport)
+        opened = open_instrument_driver(
+            driver_reference=dmm.driver,
+            expected_kind="dmm",
+            resource=dmm.resource or "",
+            configured_backend=dmm.backend,
+            timeout_ms=dmm.timeout_ms,
+            opc_timeout_ms=dmm.timeout_ms,
+            read_retry_attempts=self.config.connection.read_retry_attempts,
+            read_retry_delay_ms=self.config.connection.read_retry_delay_ms,
+            logger=self.logger,
+            options=getattr(dmm, "options", {}),
+            serial_config=dmm,
+        )
+        return opened.driver
 
-    def open_session(self) -> DM3000Dmm:
+    def open_session(self) -> DmmDriver:
         return self._open_dmm()
 
     @contextmanager
-    def _dmm_session(self) -> Iterator[DM3000Dmm]:
+    def _dmm_session(self) -> Iterator[DmmDriver]:
         if self.session is not None:
             yield self.session
             return

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from wavebench.drivers.dg4202 import SourceStatus
+from wavebench.instruments.models import SourceStatus
 from wavebench.errors import DataError
 
 

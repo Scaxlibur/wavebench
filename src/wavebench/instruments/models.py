@@ -101,6 +101,25 @@ class SourceStatus:
 
 
 @dataclass(frozen=True)
+class ArbitraryQueryProbeResult:
+    label: str
+    command: str
+    response: str | None
+    errors: list[str]
+    exception: str | None = None
+
+    @property
+    def accepted(self) -> bool:
+        if self.exception is not None:
+            return False
+        return not [
+            item
+            for item in self.errors
+            if not (item.startswith("0") or "No error" in item)
+        ]
+
+
+@dataclass(frozen=True)
 class PowerStatus:
     channel: int
     output: str

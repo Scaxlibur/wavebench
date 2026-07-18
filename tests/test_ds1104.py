@@ -213,7 +213,7 @@ def test_scope_service_routes_ds1104_driver():
         transport = FakeTransport()
         service = ScopeService(config=_service_config(tmp), logger=CommandLogger())
         with patch(
-            "wavebench.services.scope_service.PyVisaTransport.open",
+            "wavebench.instruments.factory.PyVisaTransport.open",
             return_value=transport,
         ):
             scope = service.open_session()

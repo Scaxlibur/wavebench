@@ -64,4 +64,4 @@ class _Power(_DynamicDriver):
 
 
 class _Dmm(_DynamicDriver):
-    idn = close = function_status = set_function = read = lambda *args, **kwargs: None
+    idn = close = function_status = set_function = apply_function = read = lambda *args, **kwargs: None
