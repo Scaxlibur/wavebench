@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 import tomllib
 
@@ -47,6 +47,7 @@ class ScopeConfig:
     default_channel: int
     reset_before_run: bool
     check_errors: bool
+    options: dict[str, object] = field(default_factory=dict)
 
 @dataclass(frozen=True)
 class AutoscaleConfig:
@@ -74,6 +75,7 @@ class SourceConfig:
     check_errors: bool
     ensure_fix_mode_on_set_frequency: bool
     settle_ms_after_set_frequency: int
+    options: dict[str, object] = field(default_factory=dict)
 
 @dataclass(frozen=True)
 class PowerConfig:
@@ -83,6 +85,7 @@ class PowerConfig:
     check_errors: bool
     settle_ms_after_set: int
     settle_ms_after_output: int
+    options: dict[str, object] = field(default_factory=dict)
 
 @dataclass(frozen=True)
 class DmmConfig:
@@ -96,6 +99,7 @@ class DmmConfig:
     timeout_ms: int
     settle_ms_before_read: int = 0
     settle_ms_after_function_change: int = 500
+    options: dict[str, object] = field(default_factory=dict)
 
 @dataclass(frozen=True)
 class OutputConfig:
@@ -135,6 +139,13 @@ def _optional_positive_float(raw: dict, key: str) -> float | None:
     if value <= 0:
         raise ConfigError(f"safety_limits.{key} must be > 0")
     return value
+
+
+def _instrument_options(raw: dict, section: str) -> dict[str, object]:
+    options = raw.get("options", {})
+    if not isinstance(options, dict):
+        raise ConfigError(f"{section}.options must be a TOML table")
+    return dict(options)
 
 @dataclass(frozen=True)
 class WaveBenchConfig:
@@ -296,6 +307,7 @@ class WaveBenchConfig:
                 check_errors=source.check_errors,
                 ensure_fix_mode_on_set_frequency=source.ensure_fix_mode_on_set_frequency,
                 settle_ms_after_set_frequency=source.settle_ms_after_set_frequency,
+                options=source.options,
             ),
             power=self.power,
             dmm=self.dmm,
@@ -328,6 +340,7 @@ class WaveBenchConfig:
                 check_errors=power.check_errors,
                 settle_ms_after_set=power.settle_ms_after_set,
                 settle_ms_after_output=power.settle_ms_after_output,
+                options=power.options,
             ),
             dmm=self.dmm,
             quality=self.quality,
@@ -369,6 +382,7 @@ class WaveBenchConfig:
                 timeout_ms=dmm.timeout_ms,
                 settle_ms_before_read=dmm.settle_ms_before_read,
                 settle_ms_after_function_change=dmm.settle_ms_after_function_change,
+                options=dmm.options,
             ),
             quality=self.quality,
             safety_limits=self.safety_limits,
@@ -405,6 +419,7 @@ def load_config(path: str | Path = "wavebench.toml") -> WaveBenchConfig:
                 check_errors=bool(src.get("check_errors", True)),
                 ensure_fix_mode_on_set_frequency=bool(src.get("ensure_fix_mode_on_set_frequency", True)),
                 settle_ms_after_set_frequency=int(src.get("settle_ms_after_set_frequency", 0)),
+                options=_instrument_options(src, "source"),
             )
         pwr = raw.get("power")
         power = None
@@ -416,6 +431,7 @@ def load_config(path: str | Path = "wavebench.toml") -> WaveBenchConfig:
                 check_errors=bool(pwr.get("check_errors", True)),
                 settle_ms_after_set=int(pwr.get("settle_ms_after_set", 2000)),
                 settle_ms_after_output=int(pwr.get("settle_ms_after_output", 1000)),
+                options=_instrument_options(pwr, "power"),
             )
         dmm_raw = raw.get("dmm")
         dmm = None
@@ -433,6 +449,7 @@ def load_config(path: str | Path = "wavebench.toml") -> WaveBenchConfig:
                 settle_ms_after_function_change=int(
                     dmm_raw.get("settle_ms_after_function_change", 500)
                 ),
+                options=_instrument_options(dmm_raw, "dmm"),
             )
         config = WaveBenchConfig(
             connection=ConnectionConfig(
@@ -449,6 +466,7 @@ def load_config(path: str | Path = "wavebench.toml") -> WaveBenchConfig:
                 default_channel=int(s.get("default_channel", 1)),
                 reset_before_run=bool(s.get("reset_before_run", False)),
                 check_errors=bool(s.get("check_errors", True)),
+                options=_instrument_options(s, "scope"),
             ),
             autoscale=AutoscaleConfig(
                 wait_opc=bool(a.get("wait_opc", True)),
@@ -512,8 +530,9 @@ def load_config(path: str | Path = "wavebench.toml") -> WaveBenchConfig:
         raise ConfigError("connection.read_retry_attempts must be >= 0")
     if config.connection.read_retry_delay_ms < 0:
         raise ConfigError("connection.read_retry_delay_ms must be >= 0")
-    if config.scope.driver.lower() not in {"rtm2032", "ds1104", "ds1000z"}:
-        raise ConfigError("scope.driver must be 'rtm2032', 'ds1104', or 'ds1000z'")
+    from wavebench.instruments.registry import validate_instrument_reference
+
+    validate_instrument_reference(config.scope.driver, expected_kind="scope")
     if config.scope.default_channel < 1:
         raise ConfigError("scope.default_channel must be >= 1")
     if config.waveform.time_range_s is not None and config.waveform.time_range_s <= 0:
@@ -549,15 +568,13 @@ def load_config(path: str | Path = "wavebench.toml") -> WaveBenchConfig:
     if config.tui.log_keep_lines_after_trim > config.tui.log_max_lines:
         raise ConfigError("tui.log_keep_lines_after_trim must be <= tui.log_max_lines")
     if config.source is not None:
-        if config.source.driver.lower() != "dg4202":
-            raise ConfigError("source.driver must be 'dg4202'")
+        validate_instrument_reference(config.source.driver, expected_kind="source")
         if config.source.default_channel < 1:
             raise ConfigError("source.default_channel must be >= 1")
         if config.source.settle_ms_after_set_frequency < 0:
             raise ConfigError("source.settle_ms_after_set_frequency must be >= 0")
     if config.dmm is not None:
-        if config.dmm.driver.lower() not in {"dm3000", "dm3058"}:
-            raise ConfigError("dmm.driver must be 'dm3000' or 'dm3058'")
+        validate_instrument_reference(config.dmm.driver, expected_kind="dmm")
         if config.dmm.backend.lower() not in {"serial", "lan", "visa", "pyvisa"}:
             raise ConfigError("dmm.backend must be one of: serial, lan, visa, pyvisa")
         if config.dmm.baudrate <= 0:
@@ -575,8 +592,7 @@ def load_config(path: str | Path = "wavebench.toml") -> WaveBenchConfig:
         if config.dmm.settle_ms_after_function_change < 0:
             raise ConfigError("dmm.settle_ms_after_function_change must be >= 0")
     if config.power is not None:
-        if config.power.driver.lower() != "dp800":
-            raise ConfigError("power.driver must be 'dp800'")
+        validate_instrument_reference(config.power.driver, expected_kind="power")
         if config.power.default_channel < 1:
             raise ConfigError("power.default_channel must be >= 1")
         if config.power.settle_ms_after_set < 0:

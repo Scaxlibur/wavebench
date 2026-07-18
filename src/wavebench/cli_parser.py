@@ -94,6 +94,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Also load Python entry points from wavebench.drivers / 同时加载 wavebench.drivers 入口点",
     )
+    plugin_list.add_argument(
+        "--load",
+        action="store_true",
+        help="Load executable wavebench.instruments plugins / 加载可执行仪器插件",
+    )
     plugin_info = plugin_sub.add_parser(
         "info",
         help="Show one plugin metadata record / 显示单个插件元数据",
@@ -104,6 +109,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Also load Python entry points from wavebench.drivers / 同时加载 wavebench.drivers 入口点",
     )
+    plugin_info.add_argument(
+        "--load",
+        action="store_true",
+        help="Load the selected executable instrument plugin / 加载选中的可执行仪器插件",
+    )
     plugin_doctor = plugin_sub.add_parser(
         "doctor",
         help="Validate plugin registry metadata / 检查插件注册表元数据",
@@ -112,6 +122,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--include-entry-points",
         action="store_true",
         help="Also load Python entry points from wavebench.drivers / 同时加载 wavebench.drivers 入口点",
+    )
+    plugin_doctor.add_argument(
+        "--load",
+        action="store_true",
+        help="Load and validate executable wavebench.instruments plugins / 加载并检查可执行仪器插件",
     )
     plugin_market = plugin_sub.add_parser(
         "market",

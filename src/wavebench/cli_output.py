@@ -13,11 +13,9 @@ from .arbitrary import (
     write_dg4000_dac14_binary_block,
 )
 from .data.fft import analyze_fft, fft_harmonics
-from .drivers.dg4202 import SourceStatus
-from .drivers.dm3000 import DmmReading
-from .drivers.dp800 import PowerProtectionStatus, PowerStatus
-from .drivers.rtm2032 import WaveformData
 from .errors import ConfigError
+from .instruments.api import InstrumentDescriptor
+from .instruments.models import DmmReading, PowerProtectionStatus, PowerStatus, SourceStatus, WaveformData
 from .plugins.api import InstrumentPlugin, PluginDoctorRecord
 from .plugins.market import MarketPlugin
 from .plugins.scpi import DeclarativeScpiPlugin, ScpiProbeResult
@@ -53,6 +51,21 @@ def _print_plugin_info(plugin: InstrumentPlugin) -> None:
         print("idn_patterns=" + ", ".join(plugin.idn_patterns))
     if plugin.config_fields:
         print("config_fields=" + ", ".join(plugin.config_fields))
+
+
+def _print_instrument_descriptor(descriptor: InstrumentDescriptor) -> None:
+    _print_plugin_info(descriptor.to_metadata())
+    print("aliases=" + ", ".join(descriptor.aliases))
+    print("backends=" + ", ".join(descriptor.backends))
+    print(f"executable_api={descriptor.api_version}")
+    print(
+        "wavebench_compat="
+        f">={descriptor.wavebench_min_version}, <{descriptor.wavebench_max_version}"
+    )
+    print(f"distribution={descriptor.distribution}")
+    print(f"distribution_version={descriptor.version}")
+    print(f"source={descriptor.source}")
+    print("permissions=" + ", ".join(descriptor.permissions))
 
 
 def _print_plugin_doctor(records: list[PluginDoctorRecord]) -> None:

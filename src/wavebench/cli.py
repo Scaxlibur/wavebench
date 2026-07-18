@@ -24,6 +24,7 @@ from .cli_output import (
     _print_dmm_reading,
     _print_market_plugin_info,
     _print_market_search_results,
+    _print_instrument_descriptor,
     _print_plugin_doctor,
     _print_plugin_info,
     _print_plugin_list,
@@ -38,11 +39,13 @@ from .cli_output import (
     _print_waveform_summary,
 )
 from .logging import CommandLogger
+from .instruments.registry import build_instrument_registry
 from .mcp_http import (
     resolve_mcp_token,
     serve_mcp_http,
 )
 from .plugins.market import load_market_index
+from .plugins.api import PluginDoctorRecord
 from .plugins.registry import build_plugin_registry, has_doctor_errors, plugin_doctor_records
 from .plugins.scpi import has_scpi_doctor_errors, load_scpi_plugin, probe_scpi_plugin, scpi_plugin_doctor_records
 from .services.scope_service import ScopeService
@@ -161,6 +164,38 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         if args.domain == "plugin":
+            if getattr(args, "load", False):
+                executable_registry = build_instrument_registry()
+                if args.command == "info":
+                    descriptor = executable_registry.resolve(args.driver_id)
+                    _print_instrument_descriptor(descriptor)
+                    return 0
+                loaded = executable_registry.load_all()
+                if args.command == "list":
+                    descriptors = loaded.descriptors
+                    if args.kind is not None:
+                        descriptors = tuple(item for item in descriptors if item.kind == args.kind)
+                    _print_plugin_list([item.to_metadata() for item in descriptors])
+                    for error in loaded.load_errors:
+                        print(f"error\t{error.source}\t{error.message}")
+                    return 2 if loaded.load_errors else 0
+                if args.command == "doctor":
+                    records = [
+                        *(
+                            PluginDoctorRecord("error", error.source, error.message)
+                            for error in loaded.load_errors
+                        ),
+                        *(
+                            PluginDoctorRecord(
+                                "ok",
+                                descriptor.driver_id,
+                                "executable descriptor valid / 可执行描述符有效",
+                            )
+                            for descriptor in loaded.descriptors
+                        ),
+                    ]
+                    _print_plugin_doctor(records)
+                    return 2 if loaded.load_errors else 0
             result = build_plugin_registry(include_entry_points=getattr(args, "include_entry_points", False))
             registry = result.registry
             if args.command == "list":

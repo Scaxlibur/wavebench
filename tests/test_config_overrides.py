@@ -489,3 +489,41 @@ settle_ms_after_function_change = -1
         updated = config.with_dmm_resource("TCPIP::192.168.123.5::INSTR")
         self.assertEqual(updated.dmm.settle_ms_before_read, 500)
         self.assertEqual(updated.dmm.settle_ms_after_function_change, 750)
+
+
+class InstrumentPluginConfigTests(unittest.TestCase):
+    def test_accepts_canonical_driver_id_and_plugin_options(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "wavebench.toml"
+            path.write_text(
+                '''
+[connection]
+resource = "TCPIP::scope::INSTR"
+[scope]
+driver = "rohde-schwarz.rtm2032"
+[scope.options]
+example_flag = true
+''',
+                encoding="utf-8",
+            )
+
+            config = load_config(path)
+
+            self.assertEqual(config.scope.driver, "rohde-schwarz.rtm2032")
+            self.assertEqual(config.scope.options, {"example_flag": True})
+
+    def test_rejects_missing_executable_plugin_with_actionable_error(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "wavebench.toml"
+            path.write_text(
+                '''
+[connection]
+resource = "TCPIP::scope::INSTR"
+[scope]
+driver = "missing.scope"
+''',
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(Exception, "scope.driver.*is not installed"):
+                load_config(path)

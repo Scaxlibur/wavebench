@@ -5,6 +5,8 @@ from typing import Callable, Sequence
 
 from .config import WaveBenchConfig
 from .discovery import DEFAULT_DISCOVERY_PORTS, DiscoveryResult, discover_instruments
+from .errors import ConfigError
+from .instruments.registry import resolve_instrument_descriptor
 
 
 @dataclass(frozen=True)
@@ -219,20 +221,10 @@ def _scope_expected_tokens(driver: str, model_hint: str | None) -> tuple[str, ..
 
 
 def _driver_expected_tokens(driver: str) -> tuple[str, ...]:
-    normalized = driver.lower()
-    if normalized == "rtm2032":
-        return ("RTM2032",)
-    if normalized in {"ds1104", "ds1000z"}:
-        return ("DS1104", "DS1000Z")
-    if normalized == "dg4202":
-        return ("DG4202",)
-    if normalized == "dp800":
-        return ("DP8",)
-    if normalized == "dm3058":
-        return ("DM3058",)
-    if normalized == "dm3000":
-        return ("DM3",)
-    return ()
+    try:
+        return resolve_instrument_descriptor(driver).idn_patterns
+    except ConfigError:
+        return ()
 
 
 def _idn_matches(idn: str, tokens: tuple[str, ...]) -> bool:

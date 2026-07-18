@@ -547,6 +547,25 @@ max_source_vpp = 2.0
         self.assertIn("ok\trigol.dg4202\tmetadata valid", output)
         self.assertIn("ok\trohde-schwarz.rtm2032\tmetadata valid", output)
 
+    def test_executable_plugin_info_loads_v2_descriptor(self):
+        stdout = io.StringIO()
+        with redirect_stdout(stdout):
+            code = main(["plugin", "info", "ds1000z", "--load"])
+
+        self.assertEqual(code, 0)
+        output = stdout.getvalue()
+        self.assertIn("driver_id=rigol.ds1104", output)
+        self.assertIn("aliases=ds1104, ds1000z", output)
+        self.assertIn("executable_api=wavebench.instrument.v2", output)
+
+    def test_executable_plugin_doctor_loads_descriptors(self):
+        stdout = io.StringIO()
+        with redirect_stdout(stdout):
+            code = main(["plugin", "doctor", "--load"])
+
+        self.assertEqual(code, 0)
+        self.assertIn("可执行描述符有效", stdout.getvalue())
+
     def test_plugin_list_can_include_entry_points(self):
         entry_points = FakePluginEntryPoints([FakePluginEntryPoint("example", make_cli_plugin())])
         stdout = io.StringIO()
