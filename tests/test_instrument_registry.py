@@ -183,6 +183,37 @@ def test_core_factory_builds_context_and_validates_driver_contract(monkeypatch):
     assert captured["context"].settings == {"check_errors": True}
 
 
+def test_core_factory_isolates_protocol_and_close_failures(monkeypatch):
+    class BrokenDriver:
+        def idn(self):
+            return "BROKEN"
+
+        def close(self):
+            raise RuntimeError("close failed")
+
+    descriptor = make_descriptor(
+        factory=lambda context: BrokenDriver(),
+        option_specs=(),
+    )
+    monkeypatch.setattr(
+        "wavebench.instruments.factory.resolve_instrument_descriptor",
+        lambda reference, expected_kind: descriptor,
+    )
+
+    with pytest.raises(ConfigError, match="does not satisfy the scope driver contract"):
+        open_instrument_driver(
+            driver_reference="example.scope",
+            expected_kind="scope",
+            resource="configured-resource",
+            configured_backend="lan",
+            timeout_ms=1000,
+            opc_timeout_ms=2000,
+            read_retry_attempts=1,
+            read_retry_delay_ms=10,
+            logger=CommandLogger(),
+        )
+
+
 class _ScopeDriver:
     def idn(self):
         return "EXAMPLE,EX1"

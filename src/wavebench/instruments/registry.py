@@ -70,8 +70,20 @@ class InstrumentRegistry:
         return descriptor
 
     def load_all(self) -> InstrumentRegistryLoadResult:
-        descriptors = list(self.builtins)
+        descriptors: list[InstrumentDescriptor] = []
         errors: list[PluginLoadError] = []
+        for descriptor in self.builtins:
+            try:
+                _validate_descriptor(descriptor, expected_kind=None)
+            except Exception as exc:
+                errors.append(
+                    PluginLoadError(
+                        source=f"builtin:{descriptor.driver_id}",
+                        message=str(exc),
+                    )
+                )
+                continue
+            descriptors.append(descriptor)
         for entry_point in self.external_entry_points:
             try:
                 descriptor = self._load_external(entry_point)

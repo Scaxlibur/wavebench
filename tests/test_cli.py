@@ -566,6 +566,26 @@ max_source_vpp = 2.0
         self.assertEqual(code, 0)
         self.assertIn("可执行描述符有效", stdout.getvalue())
 
+    def test_executable_plugin_doctor_isolates_bad_entry_point(self):
+        entry_points = FakePluginEntryPoints(
+            [
+                FakePluginEntryPoint(
+                    "broken.scope",
+                    RuntimeError("boom"),
+                    group="wavebench.instruments",
+                )
+            ]
+        )
+        stdout = io.StringIO()
+        with patch("wavebench.instruments.registry.entry_points", return_value=entry_points):
+            with redirect_stdout(stdout):
+                code = main(["plugin", "doctor", "--load"])
+
+        self.assertEqual(code, 2)
+        output = stdout.getvalue()
+        self.assertIn("error\tentry_point:broken.scope", output)
+        self.assertIn("ok\trohde-schwarz.rtm2032", output)
+
     def test_plugin_list_can_include_entry_points(self):
         entry_points = FakePluginEntryPoints([FakePluginEntryPoint("example", make_cli_plugin())])
         stdout = io.StringIO()
