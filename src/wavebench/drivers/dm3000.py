@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from wavebench.errors import DataError
+from wavebench.instruments.models import DmmReading
 
 
 DMM_FUNCTION_ALIASES = {
@@ -82,17 +83,6 @@ DMM_FUNCTION_QUERY_MAP = {
     "CAPACITANCE": "cap",
     "CAP": "cap",
 }
-
-
-@dataclass(frozen=True)
-class DmmReading:
-    function: str
-    value: float
-    unit: str
-    raw: str
-
-    def as_dict(self) -> dict[str, object]:
-        return {"function": self.function, "value": self.value, "unit": self.unit, "raw": self.raw}
 
 
 @dataclass

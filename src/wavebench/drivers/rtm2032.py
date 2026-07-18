@@ -4,60 +4,9 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from wavebench.data.quality import summarize_waveform
 from wavebench.errors import DataError, InstrumentError, OperationTimeout
+from wavebench.instruments.models import WaveformData, WaveformHeader
 from wavebench.transport.base import InstrumentTransport
-
-@dataclass(frozen=True)
-class WaveformHeader:
-    x_start: float
-    x_stop: float
-    points: int
-    segment: int | None = None
-
-    @property
-    def x_increment(self) -> float:
-        if self.points <= 1:
-            return 0.0
-        return (self.x_stop - self.x_start) / (self.points - 1)
-
-    @property
-    def duration(self) -> float:
-        return self.x_stop - self.x_start
-
-@dataclass(frozen=True)
-class WaveformData:
-    channel: int
-    header: WaveformHeader
-    voltages_v: np.ndarray
-
-    @property
-    def times_s(self) -> np.ndarray:
-        if self.header.points <= 1:
-            return np.array([self.header.x_start], dtype=np.float64)
-        return np.linspace(self.header.x_start, self.header.x_stop, self.header.points, dtype=np.float64)
-
-    @property
-    def sample_count(self) -> int:
-        return int(self.voltages_v.size)
-
-    def summary(
-        self, *, expected_frequency_hz: float | None = None, frequency_tolerance_ratio: float = 0.05
-    ) -> dict[str, object]:
-        quality = summarize_waveform(
-            self.times_s,
-            self.voltages_v,
-            expected_frequency_hz=expected_frequency_hz,
-            frequency_tolerance_ratio=frequency_tolerance_ratio,
-        )
-        return {
-            "channel": self.channel,
-            "samples": self.sample_count,
-            "x_start_s": self.header.x_start,
-            "x_stop_s": self.header.x_stop,
-            "x_increment_s": self.header.x_increment,
-            **quality.as_dict(),
-        }
 
 def parse_waveform_header(response: str) -> WaveformHeader:
     parts = [item.strip() for item in response.split(",")]

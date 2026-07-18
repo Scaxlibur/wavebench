@@ -7,15 +7,17 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any
 
 import numpy as np
 
 from wavebench.config import WaveBenchConfig
 from wavebench.data.package import new_package_dir
 from wavebench.drivers.ds1104 import DS1104Scope
-from wavebench.drivers.rtm2032 import RTM2032Scope, WaveformData
+from wavebench.drivers.rtm2032 import RTM2032Scope
 from wavebench.errors import ConfigError, WaveBenchError
+from wavebench.instruments.contracts import ScopeDriver
+from wavebench.instruments.models import WaveformData
 from wavebench.logging import CommandLogger
 from wavebench.transport.pyvisa_transport import PyVisaTransport
 from wavebench.transport.rsinstrument_transport import RsInstrumentTransport
@@ -23,17 +25,6 @@ from wavebench.transport.rsinstrument_transport import RsInstrumentTransport
 HIGH_IMPEDANCE_COUPLINGS = {"DCL", "DCLIMIT", "ACL", "ACLIMIT"}
 LOW_IMPEDANCE_COUPLINGS = {"DC", "AC"}
 RIGOL_DS1000Z_DRIVERS = {"ds1104", "ds1000z"}
-
-
-class ScopeDriver(Protocol):
-    def idn(self) -> str: ...
-    def errors(self, limit: int = 16) -> list[str]: ...
-    def channel_coupling(self, channel: int) -> str: ...
-    def autoscale(self, wait_opc: bool = True, check_errors: bool = True) -> None: ...
-    def fetch_waveform(self, channel: int, points: str = "dmax", check_errors: bool = True) -> WaveformData: ...
-    def capture_waveform(self, channel: int, points: str = "dmax", check_errors: bool = True, time_range_s: float | None = None, vertical_scale_v_per_div: float | None = None) -> WaveformData: ...
-    def screenshot_png(self, *, include_menu: bool = False, color_scheme: str = "COL") -> bytes: ...
-    def close(self) -> None: ...
 
 
 def normalize_coupling(value: str) -> str:

@@ -4,62 +4,7 @@ from dataclasses import dataclass
 import time
 
 from wavebench.errors import DataError, InstrumentError
-
-
-@dataclass(frozen=True)
-class PowerStatus:
-    channel: int
-    output: str
-    mode: str
-    rating: str | None
-    set_voltage_v: float | None
-    set_current_a: float | None
-    measured_voltage_v: float | None
-    measured_current_a: float | None
-    measured_power_w: float | None
-
-    def as_dict(self) -> dict[str, object]:
-        return {
-            "channel": self.channel,
-            "output": self.output,
-            "mode": self.mode,
-            "rating": self.rating,
-            "set_voltage_v": self.set_voltage_v,
-            "set_current_a": self.set_current_a,
-            "measured_voltage_v": self.measured_voltage_v,
-            "measured_current_a": self.measured_current_a,
-            "measured_power_w": self.measured_power_w,
-        }
-
-
-@dataclass(frozen=True)
-class PowerMeasurement:
-    channel: int
-    measured_voltage_v: float | None
-    measured_current_a: float | None
-    measured_power_w: float | None
-
-
-@dataclass(frozen=True)
-class PowerProtectionStatus:
-    channel: int
-    ovp_enabled: str
-    ovp_threshold_v: float | None
-    ovp_tripped: str
-    ocp_enabled: str
-    ocp_threshold_a: float | None
-    ocp_tripped: str
-
-    def as_dict(self) -> dict[str, object]:
-        return {
-            "channel": self.channel,
-            "ovp_enabled": self.ovp_enabled,
-            "ovp_threshold_v": self.ovp_threshold_v,
-            "ovp_tripped": self.ovp_tripped,
-            "ocp_enabled": self.ocp_enabled,
-            "ocp_threshold_a": self.ocp_threshold_a,
-            "ocp_tripped": self.ocp_tripped,
-        }
+from wavebench.instruments.models import PowerMeasurement, PowerProtectionStatus, PowerStatus
 
 
 def parse_apply_response(response: str) -> tuple[str | None, float | None, float | None]:

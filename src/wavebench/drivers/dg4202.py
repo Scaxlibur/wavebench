@@ -4,38 +4,7 @@ from dataclasses import dataclass
 
 from wavebench.arbitrary import DG4000DacBlock
 from wavebench.errors import DataError, InstrumentError
-
-
-@dataclass(frozen=True)
-class SourceStatus:
-    channel: int
-    output: str
-    function: str
-    frequency_hz: float | None
-    amplitude: float | None
-    amplitude_unit: str | None
-    offset_v: float | None
-    phase_deg: float | None
-    frequency_mode: str
-    sweep_enabled: str
-    apply_raw: str | None
-    square_duty_cycle_percent: float | None = None
-
-    def as_dict(self) -> dict[str, object]:
-        return {
-            "channel": self.channel,
-            "output": self.output,
-            "function": self.function,
-            "frequency_hz": self.frequency_hz,
-            "amplitude": self.amplitude,
-            "amplitude_unit": self.amplitude_unit,
-            "offset_v": self.offset_v,
-            "phase_deg": self.phase_deg,
-            "frequency_mode": self.frequency_mode,
-            "sweep_enabled": self.sweep_enabled,
-            "apply_raw": self.apply_raw,
-            "square_duty_cycle_percent": self.square_duty_cycle_percent,
-        }
+from wavebench.instruments.models import SourceStatus
 
 
 @dataclass(frozen=True)
