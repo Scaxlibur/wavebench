@@ -140,6 +140,12 @@ class RTM2032Scope:
                 self.set_vertical_scale(channel, vertical_scale_v_per_div)
             else:
                 self.transport.write(f"CHAN{channel}:STAT ON")
+            state = self.transport.query(f"CHAN{channel}:STAT?").strip().upper()
+            if state not in {"1", "ON"}:
+                raise DataError(
+                    f"channel {channel} did not become active before single acquisition: "
+                    f"CHAN{channel}:STAT? returned {state!r}"
+                )
         self.transport.write("SINGle")
         try:
             self.transport.query_opc()

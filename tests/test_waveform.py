@@ -117,6 +117,8 @@ class VerticalScaleTests(unittest.TestCase):
             def __init__(self):
                 super().__init__(
                     {
+                        "CHAN1:STAT?": "1",
+                        "CHAN2:STAT?": "1",
                         "CHAN1:DATA:HEAD?": "0,1,2,1",
                         "CHAN2:DATA:HEAD?": "0,1,2,1",
                     }
@@ -144,3 +146,17 @@ class VerticalScaleTests(unittest.TestCase):
         self.assertEqual(completed, [1, 2])
         self.assertEqual(transport.writes.count("SINGle"), 1)
         self.assertEqual(transport.queries.count("*OPC?"), 1)
+        self.assertIn("CHAN1:STAT?", transport.queries)
+        self.assertIn("CHAN2:STAT?", transport.queries)
+
+    def test_multichannel_capture_rejects_inactive_channel_before_single(self):
+        transport = FakeTransport({"CHAN1:STAT?": "1", "CHAN2:STAT?": "0"})
+
+        with self.assertRaisesRegex(DataError, "channel 2 did not become active"):
+            RTM2032Scope(transport=transport).capture_waveforms(
+                channels=[1, 2],
+                points="DEF",
+                check_errors=False,
+            )
+
+        self.assertNotIn("SINGle", transport.writes)
