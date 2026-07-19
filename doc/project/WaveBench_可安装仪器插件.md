@@ -32,6 +32,8 @@ python -m venv .venv
 
 `--load` 会导入已安装插件。descriptor 导入本身不应连接仪器；真正的 transport 在配置选中该 driver 并执行仪器命令时才创建。
 
+外置 V2 插件首版只接受 entry point 对应的 canonical ID，不解析插件自定义 alias。
+
 ## 配置
 
 安装 DS1000Z 试点后，用 canonical ID 显式选择外部实现：
@@ -66,7 +68,7 @@ max_chunk_points = 250000
 
 - `kind` 不匹配：检查 driver 是否写在正确的 `[scope]` / `[source]` / `[power]` / `[dmm]` 段。
 - 版本不兼容：安装 descriptor 声明范围内的 WaveBench 版本，或升级插件。
-- alias / ID 冲突：外部插件不能覆盖内置 canonical ID 或 alias。
+- alias / ID：外置 V2 插件只能声明 canonical ID，不能声明或覆盖 alias；内置兼容 alias 不受影响。
 - import/factory 失败：运行 `plugin doctor --load` 查看具体包；坏插件不会阻止其他内置 driver。
 - vendor SDK 依赖互斥：第一阶段不做每插件进程隔离；为不同依赖组合建立独立 venv。
 - marketplace：当前只读展示索引，不会下载或自动安装任何包。

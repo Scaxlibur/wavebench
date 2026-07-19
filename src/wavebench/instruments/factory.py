@@ -59,6 +59,11 @@ def open_instrument_driver(
     opened_transports: list[InstrumentTransport] = []
 
     def open_transport() -> InstrumentTransport:
+        if opened_transports:
+            raise ConfigError(
+                f"instrument driver {descriptor.driver_id!r} requested more than one transport; "
+                "instrument API v2 factories may open exactly one configured transport"
+            )
         transport = _open_transport(
             backend=backend,
             resource=resource,

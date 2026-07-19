@@ -118,6 +118,11 @@ class InstrumentRegistry:
                 f"instrument entry point {entry_point.name!r} returned driver_id "
                 f"{descriptor.driver_id!r}; names must match"
             )
+        if descriptor.aliases:
+            raise ConfigError(
+                f"external instrument driver {descriptor.driver_id!r} declares aliases; "
+                "installable drivers are canonical-ID-only in instrument API v2"
+            )
         distribution, version = _entry_point_distribution(entry_point, descriptor)
         descriptor = descriptor.with_distribution(
             distribution=distribution,

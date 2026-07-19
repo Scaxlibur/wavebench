@@ -20,7 +20,7 @@ def descriptor() -> InstrumentDescriptor:
         display_name="RIGOL DS1000Z Oscilloscope",
         manufacturer="RIGOL Technologies",
         models=("DS1104Z", "DS1104Z Plus", "DS1104Z-S Plus", "DS1000Z"),
-        aliases=("rigol-ds1000z",),
+        aliases=(),
         capabilities=(
             "scope.idn",
             "scope.errors",

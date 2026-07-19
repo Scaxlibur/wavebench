@@ -37,7 +37,7 @@ def make_descriptor(driver_id="example.scope", **changes):
         display_name="Example Scope",
         manufacturer="Example",
         models=("EX1",),
-        aliases=("example",),
+        aliases=(),
         capabilities=("scope.idn",),
         idn_patterns=("EXAMPLE,EX1",),
         backends=("pyvisa",),
@@ -89,13 +89,12 @@ def test_registry_rejects_kind_version_and_builtin_override():
         "future.scope",
         make_descriptor(
             driver_id="future.scope",
-            aliases=("future",),
             wavebench_min_version="99.0.0",
         ),
     )
     override = FakeEntryPoint(
-        "external.scope",
-        make_descriptor(driver_id="external.scope", aliases=("rtm2032",)),
+        "rigol.ds1104",
+        make_descriptor(driver_id="rigol.ds1104"),
     )
 
     with pytest.raises(ConfigError, match="expected 'scope'"):
@@ -106,10 +105,24 @@ def test_registry_rejects_kind_version_and_builtin_override():
         InstrumentRegistry(external_entry_points=(incompatible,)).resolve(
             "future.scope", expected_kind="scope"
         )
-    with pytest.raises(ConfigError, match="conflicts with built-in"):
-        InstrumentRegistry(external_entry_points=(override,)).resolve(
-            "external.scope", expected_kind="scope"
-        )
+    override_result = InstrumentRegistry(external_entry_points=(override,)).load_all()
+    assert len(override_result.load_errors) == 1
+    assert "conflicts with built-in" in override_result.load_errors[0].message
+
+
+def test_registry_rejects_external_aliases_as_canonical_only():
+    descriptor = make_descriptor(aliases=("example-scope",))
+    entry_point = FakeEntryPoint("example.scope", descriptor)
+    registry = InstrumentRegistry(external_entry_points=(entry_point,))
+
+    with pytest.raises(ConfigError, match="canonical-ID-only"):
+        registry.resolve("example.scope", expected_kind="scope")
+
+    result = registry.load_all()
+
+    assert all(item.driver_id != "example.scope" for item in result.descriptors)
+    assert len(result.load_errors) == 1
+    assert "canonical-ID-only" in result.load_errors[0].message
 
 
 def test_descriptor_validates_restricted_options_and_exports_v1_metadata():
@@ -184,7 +197,12 @@ def test_core_factory_builds_context_and_validates_driver_contract(monkeypatch):
 
 
 def test_core_factory_isolates_protocol_and_close_failures(monkeypatch):
+    transport = _FakeTransport()
+
     class BrokenDriver:
+        def __init__(self, owned_transport):
+            self.transport = owned_transport
+
         def idn(self):
             return "BROKEN"
 
@@ -192,12 +210,16 @@ def test_core_factory_isolates_protocol_and_close_failures(monkeypatch):
             raise RuntimeError("close failed")
 
     descriptor = make_descriptor(
-        factory=lambda context: BrokenDriver(),
+        factory=lambda context: BrokenDriver(context.open_transport()),
         option_specs=(),
     )
     monkeypatch.setattr(
         "wavebench.instruments.factory.resolve_instrument_descriptor",
         lambda reference, expected_kind: descriptor,
+    )
+    monkeypatch.setattr(
+        "wavebench.instruments.factory._open_transport",
+        lambda **kwargs: transport,
     )
 
     with pytest.raises(ConfigError, match="does not satisfy the scope driver contract"):
@@ -212,6 +234,77 @@ def test_core_factory_isolates_protocol_and_close_failures(monkeypatch):
             read_retry_delay_ms=10,
             logger=CommandLogger(),
         )
+
+    assert transport.close_count == 1
+
+
+def test_core_factory_closes_transport_when_factory_raises(monkeypatch):
+    transport = _FakeTransport()
+
+    def factory(context):
+        context.open_transport()
+        raise RuntimeError("factory failed")
+
+    descriptor = make_descriptor(factory=factory, option_specs=())
+    monkeypatch.setattr(
+        "wavebench.instruments.factory.resolve_instrument_descriptor",
+        lambda reference, expected_kind: descriptor,
+    )
+    monkeypatch.setattr(
+        "wavebench.instruments.factory._open_transport",
+        lambda **kwargs: transport,
+    )
+
+    with pytest.raises(ConfigError, match="factory failed"):
+        _open_example_scope()
+
+    assert transport.close_count == 1
+
+
+def test_core_factory_rejects_second_transport_and_closes_first(monkeypatch):
+    transport = _FakeTransport()
+
+    def factory(context):
+        context.open_transport()
+        context.open_transport()
+        return _ScopeDriver()
+
+    descriptor = make_descriptor(factory=factory, option_specs=())
+    monkeypatch.setattr(
+        "wavebench.instruments.factory.resolve_instrument_descriptor",
+        lambda reference, expected_kind: descriptor,
+    )
+    monkeypatch.setattr(
+        "wavebench.instruments.factory._open_transport",
+        lambda **kwargs: transport,
+    )
+
+    with pytest.raises(ConfigError, match="requested more than one transport"):
+        _open_example_scope()
+
+    assert transport.close_count == 1
+
+
+def _open_example_scope():
+    return open_instrument_driver(
+        driver_reference="example.scope",
+        expected_kind="scope",
+        resource="configured-resource",
+        configured_backend="lan",
+        timeout_ms=1000,
+        opc_timeout_ms=2000,
+        read_retry_attempts=1,
+        read_retry_delay_ms=10,
+        logger=CommandLogger(),
+    )
+
+
+class _FakeTransport:
+    def __init__(self):
+        self.close_count = 0
+
+    def close(self):
+        self.close_count += 1
 
 
 class _ScopeDriver:

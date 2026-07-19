@@ -62,6 +62,7 @@ def test_plugin_descriptor_is_executable_v2_metadata_without_io():
 
     assert descriptor.driver_id == "rigol.ds1000z"
     assert descriptor.api_version == "wavebench.instrument.v2"
+    assert descriptor.aliases == ()
     assert descriptor.backends == ("pyvisa",)
     assert descriptor.scope_coupling_policy == "fixed-high-impedance"
     assert descriptor.validate_options({}) == {"max_chunk_points": 250_000}
