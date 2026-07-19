@@ -1,0 +1,72 @@
+from __future__ import annotations
+
+from collections.abc import Iterable
+
+from wavebench.errors import ConfigError
+
+from .api import InstrumentDescriptor
+
+
+CAPABILITY_METHODS: dict[str, tuple[str, ...]] = {
+    "scope.idn": ("idn",),
+    "scope.errors": ("errors",),
+    "scope.autoscale": ("autoscale",),
+    "scope.fetch_waveform": ("fetch_waveform",),
+    "scope.capture_waveform": ("capture_waveform",),
+    "scope.screenshot": ("screenshot_png",),
+    "scope.channel_coupling": ("channel_coupling",),
+    "source.idn": ("idn",),
+    "source.errors": ("errors", "assert_no_errors"),
+    "source.status": ("get_status",),
+    "source.set_frequency": ("set_frequency",),
+    "source.set_function": ("set_function",),
+    "source.set_amplitude_vpp": ("set_amplitude_vpp",),
+    "source.set_square_duty_cycle": ("set_square_duty_cycle",),
+    "source.output": ("set_output",),
+    "source.arbitrary_probe": ("probe_arbitrary_queries",),
+    "source.arbitrary_upload": ("upload_dg4000_dac14_block",),
+    "power.idn": ("idn",),
+    "power.status": ("get_status",),
+    "power.measurement": ("get_measurement",),
+    "power.set_voltage_current_limit": ("set_voltage_current_limit",),
+    "power.output": ("set_output",),
+    "power.protection": ("get_protection_status", "set_protection"),
+    "dmm.idn": ("idn",),
+    "dmm.read": ("read",),
+    "dmm.function_status": ("function_status",),
+    "dmm.set_function": ("set_function",),
+}
+
+
+def require_capabilities(
+    descriptor: InstrumentDescriptor,
+    required: Iterable[str],
+    *,
+    operation: str,
+) -> None:
+    missing = sorted(set(required) - set(descriptor.capabilities))
+    if missing:
+        raise ConfigError(
+            f"instrument driver {descriptor.driver_id!r} cannot perform {operation!r}; "
+            f"missing capabilities: {', '.join(missing)}"
+        )
+
+
+def validate_declared_capabilities(
+    descriptor: InstrumentDescriptor,
+    driver: object,
+) -> None:
+    if not callable(getattr(driver, "close", None)):
+        raise TypeError("factory returned a driver without callable close()")
+    for capability in descriptor.capabilities:
+        methods = CAPABILITY_METHODS.get(capability)
+        if methods is None:
+            raise TypeError(f"descriptor declares unknown capability {capability!r}")
+        missing_methods = [
+            method for method in methods if not callable(getattr(driver, method, None))
+        ]
+        if missing_methods:
+            raise TypeError(
+                f"descriptor declares capability {capability!r}, but driver lacks callable "
+                f"method(s): {', '.join(missing_methods)}"
+            )

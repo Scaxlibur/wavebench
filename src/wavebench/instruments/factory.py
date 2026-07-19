@@ -13,7 +13,8 @@ from wavebench.transport.rsinstrument_transport import RsInstrumentTransport
 from wavebench.transport.serial_transport import SerialTransport
 
 from .api import DriverContext, InstrumentDescriptor
-from .contracts import DmmDriver, InstrumentDriver, PowerDriver, ScopeDriver, SourceDriver
+from .capabilities import validate_declared_capabilities
+from .contracts import InstrumentDriver
 from .registry import resolve_instrument_descriptor
 
 
@@ -21,14 +22,6 @@ from .registry import resolve_instrument_descriptor
 class OpenedInstrument:
     descriptor: InstrumentDescriptor
     driver: InstrumentDriver
-
-
-_CONTRACTS = {
-    "scope": ScopeDriver,
-    "source": SourceDriver,
-    "power": PowerDriver,
-    "dmm": DmmDriver,
-}
 
 
 def open_instrument_driver(
@@ -91,12 +84,7 @@ def open_instrument_driver(
     )
     try:
         driver = descriptor.factory(context)
-        contract = _CONTRACTS[expected_kind]
-        if not isinstance(driver, contract):
-            raise TypeError(
-                f"factory returned {type(driver).__name__}, which does not satisfy "
-                f"the {expected_kind} driver contract"
-            )
+        validate_declared_capabilities(descriptor, driver)
     except Exception as exc:
         _close_factory_failure(driver if "driver" in locals() else None, opened_transports)
         if isinstance(exc, ConfigError):

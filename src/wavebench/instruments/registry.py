@@ -14,6 +14,7 @@ from .api import (
     descriptor_from_entry_point,
 )
 from .builtin import BUILTIN_INSTRUMENTS
+from .capabilities import CAPABILITY_METHODS
 
 ENTRY_POINT_GROUP = "wavebench.instruments"
 
@@ -175,6 +176,12 @@ def _validate_descriptor(
         raise ConfigError(
             f"instrument driver {descriptor.driver_id!r} has kind {descriptor.kind!r}; "
             f"expected {expected_kind!r}"
+        )
+    unknown_capabilities = sorted(set(descriptor.capabilities) - set(CAPABILITY_METHODS))
+    if unknown_capabilities:
+        raise ConfigError(
+            f"instrument driver {descriptor.driver_id!r} declares unknown capabilities: "
+            f"{', '.join(unknown_capabilities)}"
         )
     current = _version_tuple(__version__)
     if current < _version_tuple(descriptor.wavebench_min_version) or current >= _version_tuple(

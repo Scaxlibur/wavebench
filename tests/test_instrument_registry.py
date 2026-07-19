@@ -196,6 +196,47 @@ def test_core_factory_builds_context_and_validates_driver_contract(monkeypatch):
     assert captured["context"].settings == {"check_errors": True}
 
 
+def test_core_factory_accepts_minimal_driver_for_declared_capabilities(monkeypatch):
+    class MinimalIdnDriver:
+        def idn(self):
+            return "EXAMPLE,EX1"
+
+        def close(self):
+            pass
+
+    descriptor = make_descriptor(factory=lambda context: MinimalIdnDriver(), option_specs=())
+    monkeypatch.setattr(
+        "wavebench.instruments.factory.resolve_instrument_descriptor",
+        lambda reference, expected_kind: descriptor,
+    )
+
+    opened = _open_example_scope()
+
+    assert opened.driver.idn() == "EXAMPLE,EX1"
+
+
+def test_core_factory_rejects_declared_capability_without_method(monkeypatch):
+    class MissingCaptureDriver:
+        def idn(self):
+            return "EXAMPLE,EX1"
+
+        def close(self):
+            pass
+
+    descriptor = make_descriptor(
+        capabilities=("scope.idn", "scope.capture_waveform"),
+        factory=lambda context: MissingCaptureDriver(),
+        option_specs=(),
+    )
+    monkeypatch.setattr(
+        "wavebench.instruments.factory.resolve_instrument_descriptor",
+        lambda reference, expected_kind: descriptor,
+    )
+
+    with pytest.raises(ConfigError, match="scope.capture_waveform.*capture_waveform"):
+        _open_example_scope()
+
+
 def test_core_factory_isolates_protocol_and_close_failures(monkeypatch):
     transport = _FakeTransport()
 
@@ -210,6 +251,7 @@ def test_core_factory_isolates_protocol_and_close_failures(monkeypatch):
             raise RuntimeError("close failed")
 
     descriptor = make_descriptor(
+        capabilities=("scope.idn", "scope.capture_waveform"),
         factory=lambda context: BrokenDriver(context.open_transport()),
         option_specs=(),
     )
@@ -222,7 +264,7 @@ def test_core_factory_isolates_protocol_and_close_failures(monkeypatch):
         lambda **kwargs: transport,
     )
 
-    with pytest.raises(ConfigError, match="does not satisfy the scope driver contract"):
+    with pytest.raises(ConfigError, match="scope.capture_waveform.*capture_waveform"):
         open_instrument_driver(
             driver_reference="example.scope",
             expected_kind="scope",

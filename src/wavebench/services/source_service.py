@@ -9,9 +9,12 @@ from wavebench.arbitrary import build_dg4000_dac14_binary_block, load_arbitrary_
 from wavebench.config import SourceConfig, WaveBenchConfig
 from wavebench.errors import ConfigError
 from wavebench.instruments.contracts import SourceDriver
+from wavebench.instruments.api import InstrumentDescriptor
+from wavebench.instruments.capabilities import require_capabilities
 from wavebench.instruments.factory import open_instrument_driver
 from wavebench.instruments.models import ArbitraryQueryProbeResult, SourceStatus
 from wavebench.logging import CommandLogger
+from wavebench.instruments.registry import resolve_instrument_descriptor
 from wavebench.services.source_state import RestorableSourceState
 
 
@@ -20,6 +23,15 @@ class SourceService:
     config: WaveBenchConfig
     logger: CommandLogger
     session: SourceDriver | None = None
+    descriptor: InstrumentDescriptor | None = None
+
+    def _require(self, operation: str, *capabilities: str) -> None:
+        source = self._source_config()
+        descriptor = self.descriptor or resolve_instrument_descriptor(
+            source.driver,
+            expected_kind="source",
+        )
+        require_capabilities(descriptor, capabilities, operation=operation)
 
     def _source_config(self) -> SourceConfig:
         if self.config.source is None or not self.config.source.resource:
@@ -41,6 +53,7 @@ class SourceService:
             settings={"check_errors": source.check_errors},
             options=getattr(source, "options", {}),
         )
+        self.descriptor = opened.descriptor
         return opened.driver
 
     def open_session(self) -> SourceDriver:
@@ -58,16 +71,19 @@ class SourceService:
             source.close()
 
     def idn(self) -> str:
+        self._require("source.idn", "source.idn")
         with self._source_session() as source:
             return source.idn()
 
     def errors(self) -> list[str]:
+        self._require("source.errors", "source.errors")
         with self._source_session() as source:
             return source.errors()
 
     def status(self, channel: int | None = None) -> SourceStatus:
         source_cfg = self._source_config()
         channel = source_cfg.default_channel if channel is None else channel
+        self._require("source.status", "source.status")
         with self._source_session() as source:
             return source.get_status(channel)
 
@@ -88,6 +104,12 @@ class SourceService:
     def set_frequency(self, channel: int | None, value_hz: float) -> SourceStatus:
         source_cfg = self._source_config()
         channel = source_cfg.default_channel if channel is None else channel
+        required = ["source.set_frequency"]
+        if source_cfg.settle_ms_after_set_frequency:
+            required.append("source.status")
+        if source_cfg.check_errors:
+            required.append("source.errors")
+        self._require("source.set_frequency", *required)
         with self._source_session() as source:
             status = source.set_frequency(
                 channel,
@@ -105,6 +127,10 @@ class SourceService:
     def set_output(self, channel: int | None, enabled: bool) -> SourceStatus:
         source_cfg = self._source_config()
         channel = source_cfg.default_channel if channel is None else channel
+        required = ["source.output"]
+        if enabled:
+            required.append("source.status")
+        self._require("source.output", *required)
         with self._source_session() as source:
             if enabled:
                 status = source.get_status(channel)
@@ -114,12 +140,14 @@ class SourceService:
     def set_function(self, channel: int | None, function: str) -> SourceStatus:
         source_cfg = self._source_config()
         channel = source_cfg.default_channel if channel is None else channel
+        self._require("source.set_function", "source.set_function")
         with self._source_session() as source:
             return source.set_function(channel, function, check_errors=source_cfg.check_errors)
 
     def set_square_duty_cycle(self, channel: int | None, duty_percent: float) -> SourceStatus:
         source_cfg = self._source_config()
         channel = source_cfg.default_channel if channel is None else channel
+        self._require("source.set_square_duty_cycle", "source.set_square_duty_cycle")
         with self._source_session() as source:
             return source.set_square_duty_cycle(channel, duty_percent, check_errors=source_cfg.check_errors)
 
@@ -127,6 +155,7 @@ class SourceService:
         source_cfg = self._source_config()
         self._check_source_vpp(value_vpp, field="source amplitude / 信号源幅度")
         channel = source_cfg.default_channel if channel is None else channel
+        self._require("source.set_amplitude_vpp", "source.set_amplitude_vpp")
         with self._source_session() as source:
             return source.set_amplitude_vpp(channel, value_vpp, check_errors=source_cfg.check_errors)
 
@@ -153,6 +182,7 @@ class SourceService:
             max_points=max_points,
         )
         block = build_dg4000_dac14_binary_block(waveform, byte_order=byte_order)
+        self._require("source.arbitrary_upload", "source.arbitrary_upload")
         with self._source_session() as source:
             return source.upload_dg4000_dac14_block(
                 channel=channel,
@@ -175,5 +205,6 @@ class SourceService:
     def probe_arbitrary_queries(self, channel: int | None = None) -> list[ArbitraryQueryProbeResult]:
         source_cfg = self._source_config()
         channel = source_cfg.default_channel if channel is None else channel
+        self._require("source.arbitrary_probe", "source.arbitrary_probe")
         with self._source_session() as source:
             return source.probe_arbitrary_queries(channel)

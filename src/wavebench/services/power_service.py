@@ -7,9 +7,12 @@ from dataclasses import dataclass
 from wavebench.config import PowerConfig, WaveBenchConfig
 from wavebench.errors import ConfigError
 from wavebench.instruments.contracts import PowerDriver
+from wavebench.instruments.api import InstrumentDescriptor
+from wavebench.instruments.capabilities import require_capabilities
 from wavebench.instruments.factory import open_instrument_driver
 from wavebench.instruments.models import PowerMeasurement, PowerProtectionStatus, PowerStatus
 from wavebench.logging import CommandLogger
+from wavebench.instruments.registry import resolve_instrument_descriptor
 
 
 @dataclass
@@ -17,6 +20,15 @@ class PowerService:
     config: WaveBenchConfig
     logger: CommandLogger
     session: PowerDriver | None = None
+    descriptor: InstrumentDescriptor | None = None
+
+    def _require(self, operation: str, *capabilities: str) -> None:
+        power = self._power_config()
+        descriptor = self.descriptor or resolve_instrument_descriptor(
+            power.driver,
+            expected_kind="power",
+        )
+        require_capabilities(descriptor, capabilities, operation=operation)
 
     def _power_config(self) -> PowerConfig:
         if self.config.power is None or not self.config.power.resource:
@@ -38,6 +50,7 @@ class PowerService:
             settings={"check_errors": power.check_errors},
             options=getattr(power, "options", {}),
         )
+        self.descriptor = opened.descriptor
         return opened.driver
 
     def open_session(self) -> PowerDriver:
@@ -55,24 +68,28 @@ class PowerService:
             power.close()
 
     def idn(self) -> str:
+        self._require("power.idn", "power.idn")
         with self._power_session() as power:
             return power.idn()
 
     def status(self, channel: int | None = None) -> PowerStatus:
         power_cfg = self._power_config()
         channel = power_cfg.default_channel if channel is None else channel
+        self._require("power.status", "power.status")
         with self._power_session() as power:
             return power.get_status(channel)
 
     def measurement(self, channel: int | None = None) -> PowerMeasurement:
         power_cfg = self._power_config()
         channel = power_cfg.default_channel if channel is None else channel
+        self._require("power.measurement", "power.measurement")
         with self._power_session() as power:
             return power.get_measurement(channel)
 
     def protection_status(self, channel: int | None = None) -> PowerProtectionStatus:
         power_cfg = self._power_config()
         channel = power_cfg.default_channel if channel is None else channel
+        self._require("power.protection_status", "power.protection")
         with self._power_session() as power:
             return power.get_protection_status(channel)
 
@@ -95,6 +112,7 @@ class PowerService:
         ):
             raise ConfigError("no protection change requested / 未请求保护设置变更")
         self._check_power_limits(voltage_v=ovp_threshold_v, current_limit_a=ocp_threshold_a)
+        self._require("power.set_protection", "power.status", "power.protection")
         with self._power_session() as power:
             setpoints = power.get_status(channel)
             protection = power.get_protection_status(channel)
@@ -121,6 +139,10 @@ class PowerService:
         power_cfg = self._power_config()
         self._check_power_limits(voltage_v=voltage_v, current_limit_a=current_limit_a)
         channel = power_cfg.default_channel if channel is None else channel
+        self._require(
+            "power.set_voltage_current_limit",
+            "power.set_voltage_current_limit",
+        )
         with self._power_session() as power:
             return power.set_voltage_current_limit(
                 channel,
@@ -166,6 +188,10 @@ class PowerService:
     def set_output(self, channel: int | None, enabled: bool) -> PowerStatus:
         power_cfg = self._power_config()
         channel = power_cfg.default_channel if channel is None else channel
+        required = ["power.output"]
+        if enabled:
+            required.append("power.status")
+        self._require("power.output", *required)
         with self._power_session() as power:
             if enabled:
                 status = power.get_status(channel)

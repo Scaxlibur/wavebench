@@ -8,9 +8,12 @@ import time
 from wavebench.config import DmmConfig, WaveBenchConfig
 from wavebench.errors import ConfigError
 from wavebench.instruments.contracts import DmmDriver
+from wavebench.instruments.api import InstrumentDescriptor
+from wavebench.instruments.capabilities import require_capabilities
 from wavebench.instruments.factory import open_instrument_driver
 from wavebench.instruments.models import DmmReading
 from wavebench.logging import CommandLogger
+from wavebench.instruments.registry import resolve_instrument_descriptor
 
 
 @dataclass
@@ -18,6 +21,15 @@ class DmmService:
     config: WaveBenchConfig
     logger: CommandLogger
     session: DmmDriver | None = None
+    descriptor: InstrumentDescriptor | None = None
+
+    def _require(self, operation: str, *capabilities: str) -> None:
+        dmm = self._dmm_config()
+        descriptor = self.descriptor or resolve_instrument_descriptor(
+            dmm.driver,
+            expected_kind="dmm",
+        )
+        require_capabilities(descriptor, capabilities, operation=operation)
 
     def _dmm_config(self) -> DmmConfig:
         if self.config.dmm is None or not self.config.dmm.resource:
@@ -39,6 +51,7 @@ class DmmService:
             options=getattr(dmm, "options", {}),
             serial_config=dmm,
         )
+        self.descriptor = opened.descriptor
         return opened.driver
 
     def open_session(self) -> DmmDriver:
@@ -56,18 +69,22 @@ class DmmService:
             dmm.close()
 
     def idn(self) -> str:
+        self._require("dmm.idn", "dmm.idn")
         with self._dmm_session() as dmm:
             return dmm.idn()
 
     def function_status(self) -> str:
+        self._require("dmm.function_status", "dmm.function_status")
         with self._dmm_session() as dmm:
             return dmm.function_status()
 
     def set_function(self, function: str) -> str:
+        self._require("dmm.set_function", "dmm.set_function")
         with self._dmm_session() as dmm:
             return dmm.set_function(function=function)
 
     def read(self, function: str = "dcv") -> DmmReading:
+        self._require("dmm.read", "dmm.read")
         with self._dmm_session() as dmm:
             settle_s = self._dmm_config().settle_ms_before_read / 1000.0
             if settle_s > 0:

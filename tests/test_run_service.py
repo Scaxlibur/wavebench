@@ -143,6 +143,33 @@ def ok_power_status() -> PowerStatus:
 
 
 class RunServiceTests(unittest.TestCase):
+    def test_check_rejects_missing_capability_before_opening_session(self):
+        with TemporaryDirectory() as tmp:
+            plan = load_run_plan(
+                write_plan(
+                    tmp,
+                    """
+[[steps]]
+kind = "scope.capture"
+screenshot = true
+""",
+                )
+            )
+            descriptor = SimpleNamespace(
+                driver_id="minimal.scope",
+                capabilities=("scope.idn", "scope.capture_waveform", "scope.errors"),
+            )
+            service = RunService(config=make_config(tmp), logger=CommandLogger())
+
+            with patch(
+                "wavebench.services.run_service.resolve_instrument_descriptor",
+                return_value=descriptor,
+            ), patch.object(service, "_run_instrument_services") as open_services:
+                with self.assertRaisesRegex(ConfigError, "scope.screenshot"):
+                    service.run(plan)
+
+            open_services.assert_not_called()
+
     def test_verify_queries_only_instruments_referenced_by_plan(self):
         with TemporaryDirectory() as tmp:
             plan = load_run_plan(

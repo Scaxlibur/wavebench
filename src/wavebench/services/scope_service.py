@@ -15,6 +15,7 @@ from wavebench.config import WaveBenchConfig
 from wavebench.data.package import new_package_dir
 from wavebench.errors import ConfigError, WaveBenchError
 from wavebench.instruments.api import InstrumentDescriptor, ScopeCouplingPolicy
+from wavebench.instruments.capabilities import require_capabilities
 from wavebench.instruments.contracts import ScopeDriver
 from wavebench.instruments.factory import open_instrument_driver
 from wavebench.instruments.models import WaveformData
@@ -96,6 +97,13 @@ class ScopeService:
     session: ScopeDriver | None = None
     descriptor: InstrumentDescriptor | None = None
 
+    def _require(self, operation: str, *capabilities: str) -> None:
+        descriptor = self.descriptor or resolve_instrument_descriptor(
+            self.config.scope.driver,
+            expected_kind="scope",
+        )
+        require_capabilities(descriptor, capabilities, operation=operation)
+
     def _open_scope(self) -> ScopeDriver:
         opened = open_instrument_driver(
             driver_reference=self.config.scope.driver,
@@ -128,14 +136,17 @@ class ScopeService:
             scope.close()
 
     def idn(self) -> str:
+        self._require("scope.idn", "scope.idn")
         with self._scope_session() as scope:
             return scope.idn()
 
     def errors(self) -> list[str]:
+        self._require("scope.errors", "scope.errors")
         with self._scope_session() as scope:
             return scope.errors()
 
     def channel_coupling(self, channel: int) -> str:
+        self._require("scope.channel_coupling", "scope.channel_coupling")
         with self._scope_session() as scope:
             return scope.channel_coupling(channel)
 
@@ -154,6 +165,10 @@ class ScopeService:
         )
 
     def autoscale(self) -> None:
+        required = ["scope.autoscale"]
+        if self.config.autoscale.check_errors:
+            required.append("scope.errors")
+        self._require("scope.autoscale", *required)
         with self._scope_session() as scope:
             scope.autoscale(
                 wait_opc=self.config.autoscale.wait_opc,
@@ -165,6 +180,10 @@ class ScopeService:
             raise ConfigError("MVP-1 only supports waveform.format = 'real'")
         if self.config.waveform.byte_order.lower() != "lsbf":
             raise ConfigError("MVP-1 only supports waveform.byte_order = 'lsbf'")
+        required = ["scope.fetch_waveform"]
+        if self.config.scope.check_errors:
+            required.append("scope.errors")
+        self._require("scope.fetch_waveform", *required)
         with self._scope_session() as scope:
             return scope.fetch_waveform(
                 channel=channel,
@@ -236,6 +255,12 @@ class ScopeService:
         )
 
     def capture_waveform(self, channel: int, label: str) -> CaptureResult:
+        required = ["scope.idn", "scope.capture_waveform"]
+        if self.config.scope.check_errors:
+            required.append("scope.errors")
+        if self.config.output.save_screenshot:
+            required.append("scope.screenshot")
+        self._require("scope.capture", *required)
         package_dir = new_package_dir(self.config.output.directory, label)
         package_dir.mkdir(parents=True, exist_ok=False)
         commands_log_path = package_dir / "commands.log" if self.config.output.save_commands_log else None
@@ -308,6 +333,12 @@ class ScopeService:
             raise ConfigError("at least one channel is required")
         if len(set(channels)) != len(channels):
             raise ConfigError("duplicate channels are not allowed")
+        required = ["scope.idn", "scope.capture_waveform"]
+        if self.config.scope.check_errors:
+            required.append("scope.errors")
+        if self.config.output.save_screenshot:
+            required.append("scope.screenshot")
+        self._require("scope.capture_multiple", *required)
         package_dir = new_package_dir(self.config.output.directory, label)
         package_dir.mkdir(parents=True, exist_ok=False)
         commands_log_path = package_dir / "commands.log" if self.config.output.save_commands_log else None
