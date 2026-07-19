@@ -81,6 +81,7 @@ class InstrumentDescriptor:
     source: str = "builtin"
     origin: PluginOrigin = "builtin"
     scope_coupling_policy: ScopeCouplingPolicy = "unknown"
+    config_fields: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.driver_id or self.driver_id.strip() != self.driver_id:
@@ -132,7 +133,9 @@ class InstrumentDescriptor:
         return validated
 
     def to_metadata(self) -> InstrumentPlugin:
-        config_fields = tuple(f"options.{spec.name}" for spec in self.option_specs)
+        config_fields = self.config_fields or tuple(
+            f"options.{spec.name}" for spec in self.option_specs
+        )
         return InstrumentPlugin(
             driver_id=self.driver_id,
             kind=self.kind,
