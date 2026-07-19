@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any, Protocol, runtime_checkable
 
 from .models import (
@@ -50,6 +51,20 @@ class ScopeDriver(InstrumentDriver, Protocol):
         include_menu: bool = False,
         color_scheme: str = "COL",
     ) -> bytes: ...
+
+
+@runtime_checkable
+class MultiChannelScopeDriver(ScopeDriver, Protocol):
+    def capture_waveforms(
+        self,
+        channels: list[int],
+        points: str = "dmax",
+        check_errors: bool = True,
+        time_range_s: float | None = None,
+        vertical_scale_v_per_div: float | None = None,
+        on_channel_start: Callable[[int | None], None] | None = None,
+        on_waveform: Callable[[int, WaveformData], None] | None = None,
+    ) -> dict[int, WaveformData]: ...
 
 
 @runtime_checkable

@@ -13,6 +13,7 @@ CAPABILITY_METHODS: dict[str, tuple[str, ...]] = {
     "scope.autoscale": ("autoscale",),
     "scope.fetch_waveform": ("fetch_waveform",),
     "scope.capture_waveform": ("capture_waveform",),
+    "scope.capture_waveforms": ("capture_waveforms",),
     "scope.screenshot": ("screenshot_png",),
     "scope.channel_coupling": ("channel_coupling",),
     "source.idn": ("idn",),

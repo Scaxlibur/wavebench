@@ -232,6 +232,35 @@ def test_capture_translates_total_time_range_to_12_divisions():
     assert "*OPC?" in transport.queries
 
 
+def test_multichannel_capture_uses_one_single_and_one_opc():
+    current_channel = {"value": 1}
+
+    def binary_reader(transport, command):
+        assert command == ":WAVeform:DATA?"
+        return bytes([127 + current_channel["value"], 128 + current_channel["value"]])
+
+    transport = FakeTransport(
+        responses={
+            ":WAVeform:PREamble?": "0,0,2,1,1e-3,0,0,0.1,0,127",
+        },
+        binary_reader=binary_reader,
+    )
+    completed = []
+
+    waveforms = DS1104Scope(transport=transport).capture_waveforms(
+        channels=[1, 2],
+        points="DEF",
+        check_errors=False,
+        on_channel_start=lambda channel: current_channel.__setitem__("value", channel),
+        on_waveform=lambda channel, waveform: completed.append(channel),
+    )
+
+    assert list(waveforms) == [1, 2]
+    assert completed == [1, 2]
+    assert transport.writes.count(":SINGle") == 1
+    assert transport.queries.count("*OPC?") == 1
+
+
 def test_ds1104_rejects_channels_outside_one_to_four():
     scope = DS1104Scope(transport=FakeTransport())
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import json
+import os
 import traceback
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -16,7 +17,7 @@ from wavebench.data.package import new_package_dir
 from wavebench.errors import ConfigError, WaveBenchError
 from wavebench.instruments.api import InstrumentDescriptor, ScopeCouplingPolicy
 from wavebench.instruments.capabilities import require_capabilities
-from wavebench.instruments.contracts import ScopeDriver
+from wavebench.instruments.contracts import MultiChannelScopeDriver, ScopeDriver
 from wavebench.instruments.factory import open_instrument_driver
 from wavebench.instruments.models import WaveformData
 from wavebench.instruments.registry import resolve_instrument_descriptor
@@ -194,18 +195,39 @@ class ScopeService:
     def _write_waveform_files(self, package_dir: Path, channel: int, waveform: WaveformData) -> dict[str, str]:
         times = waveform.times_s
         files: dict[str, str] = {}
-        if self.config.output.save_csv:
-            csv_path = package_dir / f"ch{channel}.csv"
-            with csv_path.open("w", newline="", encoding="utf-8") as file:
-                writer = csv.writer(file)
-                writer.writerow(["index", "time_s", "voltage_v"])
-                for index, (time_s, voltage_v) in enumerate(zip(times, waveform.voltages_v)):
-                    writer.writerow([index, f"{time_s:.12e}", f"{float(voltage_v):.12e}"])
-            files["csv"] = str(csv_path)
-        if self.config.output.save_npy:
-            npy_path = package_dir / f"ch{channel}.npy"
-            np.save(npy_path, np.column_stack((times, waveform.voltages_v)))
-            files["npy"] = str(npy_path)
+        staged: list[tuple[Path, Path, str]] = []
+        promoted: list[Path] = []
+        try:
+            if self.config.output.save_csv:
+                csv_path = package_dir / f"ch{channel}.csv"
+                csv_tmp_path = package_dir / f".ch{channel}.csv.tmp"
+                staged.append((csv_tmp_path, csv_path, "csv"))
+                with csv_tmp_path.open("w", newline="", encoding="utf-8") as file:
+                    writer = csv.writer(file)
+                    writer.writerow(["index", "time_s", "voltage_v"])
+                    for index, (time_s, voltage_v) in enumerate(
+                        zip(times, waveform.voltages_v)
+                    ):
+                        writer.writerow(
+                            [index, f"{time_s:.12e}", f"{float(voltage_v):.12e}"]
+                        )
+            if self.config.output.save_npy:
+                npy_path = package_dir / f"ch{channel}.npy"
+                npy_tmp_path = package_dir / f".ch{channel}.npy.tmp"
+                staged.append((npy_tmp_path, npy_path, "npy"))
+                with npy_tmp_path.open("wb") as file:
+                    np.save(file, np.column_stack((times, waveform.voltages_v)))
+            for temporary, final, kind in staged:
+                os.replace(temporary, final)
+                promoted.append(final)
+                files[kind] = str(final)
+        except Exception:
+            for final in promoted:
+                final.unlink(missing_ok=True)
+            raise
+        finally:
+            for temporary, _, _ in staged:
+                temporary.unlink(missing_ok=True)
         return files
 
 
@@ -235,22 +257,41 @@ class ScopeService:
         }
 
     def _failed_capture_package(
-        self, *, package_dir: Path, operation: dict[str, Any], exc: Exception, commands_log_path: Path | None
+        self,
+        *,
+        package_dir: Path,
+        operation: dict[str, Any],
+        exc: Exception,
+        commands_log_path: Path | None,
+        partial: dict[str, Any] | None = None,
     ) -> None:
         failed_dir = package_dir.with_name(package_dir.name + "_failed")
         package_dir.rename(failed_dir)
+
+        def rewrite_failed_paths(value: Any) -> Any:
+            if isinstance(value, dict):
+                return {key: rewrite_failed_paths(item) for key, item in value.items()}
+            if isinstance(value, list):
+                return [rewrite_failed_paths(item) for item in value]
+            if isinstance(value, str):
+                prefix = str(package_dir)
+                if value == prefix or value.startswith(prefix + os.sep):
+                    return str(failed_dir) + value[len(prefix) :]
+            return value
         (failed_dir / "error.txt").write_text(
             f"{type(exc).__name__}: {exc}\n\n{traceback.format_exc()}",
             encoding="utf-8",
         )
-        partial = {
+        partial_metadata: dict[str, Any] = {
             "instrument": {"resource": self.config.connection.resource},
             "operation": {**operation, "failed": True},
             "error": {"type": type(exc).__name__, "message": str(exc)},
             "files": {"commands": str(failed_dir / "commands.log")} if commands_log_path is not None else {},
         }
+        if partial is not None:
+            partial_metadata.update(rewrite_failed_paths(partial))
         (failed_dir / "metadata.partial.json").write_text(
-            json.dumps(partial, indent=2, ensure_ascii=False),
+            json.dumps(partial_metadata, indent=2, ensure_ascii=False),
             encoding="utf-8",
         )
 
@@ -333,7 +374,7 @@ class ScopeService:
             raise ConfigError("at least one channel is required")
         if len(set(channels)) != len(channels):
             raise ConfigError("duplicate channels are not allowed")
-        required = ["scope.idn", "scope.capture_waveform"]
+        required = ["scope.idn", "scope.capture_waveforms"]
         if self.config.scope.check_errors:
             required.append("scope.errors")
         if self.config.output.save_screenshot:
@@ -357,47 +398,103 @@ class ScopeService:
             "target_vpp": self.config.waveform.target_vpp,
         }
         waveforms: dict[int, WaveformData] = {}
+        files: dict[str, dict[str, str]] = {}
+        channel_metadata: dict[str, Any] = {}
+        completed_channels: list[int] = []
+        failed_channel: int | None = None
+        stage = "open_session"
         screenshot_path: Path | None = None
         screenshot_error: dict[str, str] | None = None
+        scope: MultiChannelScopeDriver | None = None
         try:
-            with self._scope_session() as scope:
-                instrument_idn = scope.idn()
-                for channel in channels:
-                    capture_kwargs = {
-                        "channel": channel,
+            with self._scope_session() as opened_scope:
+                scope = opened_scope
+                try:
+                    stage = "identify"
+                    instrument_idn = scope.idn()
+                    capture_kwargs: dict[str, Any] = {
+                        "channels": channels,
                         "points": self.config.waveform.points,
                         "check_errors": self.config.scope.check_errors,
                         "time_range_s": self.config.waveform.time_range_s,
                     }
                     if self.config.waveform.vertical_scale_v_per_div is not None:
                         capture_kwargs["vertical_scale_v_per_div"] = self.config.waveform.vertical_scale_v_per_div
-                    waveforms[channel] = scope.capture_waveform(**capture_kwargs)
-                screenshot_path, screenshot_error = self._write_screenshot_file(package_dir, scope)
+
+                    def start_channel(channel: int | None) -> None:
+                        nonlocal failed_channel, stage
+                        if channel is None:
+                            failed_channel = None
+                            stage = "check_errors"
+                        else:
+                            failed_channel = channel
+                            stage = "read_waveform"
+
+                    def save_waveform(channel: int, waveform: WaveformData) -> None:
+                        nonlocal failed_channel, stage
+                        failed_channel = channel
+                        stage = "write_waveform"
+                        key = str(channel)
+                        files[key] = self._write_waveform_files(package_dir, channel, waveform)
+                        channel_metadata[key] = self._waveform_metadata(waveform)
+                        waveforms[channel] = waveform
+                        completed_channels.append(channel)
+                        failed_channel = None
+                        stage = "read_waveform"
+
+                    stage = "acquire"
+                    failed_channel = None
+                    capture_kwargs["on_channel_start"] = start_channel
+                    capture_kwargs["on_waveform"] = save_waveform
+                    returned_waveforms = scope.capture_waveforms(**capture_kwargs)
+                    for channel in channels:
+                        if channel not in waveforms:
+                            save_waveform(channel, returned_waveforms[channel])
+                    failed_channel = None
+                    stage = "screenshot"
+                    screenshot_path, screenshot_error = self._write_screenshot_file(
+                        package_dir, scope
+                    )
+                except Exception:
+                    if self.config.output.save_screenshot:
+                        screenshot_path, screenshot_error = self._write_screenshot_file(
+                            package_dir, scope
+                        )
+                    raise
         except Exception as exc:
+            partial_files: dict[str, Any] = dict(files)
+            if commands_log_path is not None:
+                partial_files["commands"] = str(package_dir / "commands.log")
+            if screenshot_path is not None:
+                partial_files["screenshot"] = str(package_dir / "screenshot.png")
             self._failed_capture_package(
                 package_dir=package_dir,
                 operation=operation,
                 exc=exc,
                 commands_log_path=commands_log_path,
+                partial={
+                    "completed_channels": completed_channels,
+                    "failed_channel": failed_channel,
+                    "stage": stage,
+                    "channels": channel_metadata,
+                    "files": partial_files,
+                    **(
+                        {"screenshot_error": screenshot_error}
+                        if screenshot_error is not None
+                        else {}
+                    ),
+                },
             )
             if isinstance(exc, WaveBenchError):
                 raise
             raise
-
-        files: dict[str, dict[str, str]] = {}
-        channel_metadata: dict[str, Any] = {}
-        for channel in channels:
-            waveform = waveforms[channel]
-            key = str(channel)
-            files[key] = self._write_waveform_files(package_dir, channel, waveform)
-            channel_metadata[key] = self._waveform_metadata(waveform)
 
         metadata_files: dict[str, Any] = dict(files)
         if self.config.output.save_screenshot:
             metadata_files["screenshot"] = str(screenshot_path) if screenshot_path is not None else None
         metadata: dict[str, Any] = {
             "instrument": {"idn": instrument_idn, "resource": self.config.connection.resource},
-            "operation": {**operation, "triggered_single": True, "trigger_mode": "sequential_per_channel"},
+            "operation": {**operation, "triggered_single": True, "trigger_mode": "single_acquisition"},
             "channels": channel_metadata,
             "files": metadata_files,
         }

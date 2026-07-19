@@ -195,6 +195,25 @@ def test_plugin_single_autoscale_screenshot_errors_and_close():
     assert transport.closed
 
 
+def test_plugin_multichannel_capture_uses_one_single_and_one_opc():
+    transport = FakeTransport(
+        responses={
+            ":WAVeform:PREamble?": "0,0,2,1,1e-3,0,0,0.1,0,127",
+            ":WAVeform:DATA?": bytes([127, 128]),
+        }
+    )
+
+    waveforms = DS1000ZScope(transport=transport).capture_waveforms(
+        channels=[1, 2],
+        points="DEF",
+        check_errors=False,
+    )
+
+    assert list(waveforms) == [1, 2]
+    assert transport.writes.count(":SINGle") == 1
+    assert transport.queries.count("*OPC?") == 1
+
+
 def test_plugin_rejects_bad_preamble_short_blocks_screenshot_and_opc_timeout():
     bad_preamble = FakeTransport(responses={":WAVeform:PREamble?": "bad"})
     with pytest.raises(DataError, match="PREamble"):

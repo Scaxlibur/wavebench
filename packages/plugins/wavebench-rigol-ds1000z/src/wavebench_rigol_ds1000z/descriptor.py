@@ -27,6 +27,7 @@ def descriptor() -> InstrumentDescriptor:
             "scope.autoscale",
             "scope.fetch_waveform",
             "scope.capture_waveform",
+            "scope.capture_waveforms",
             "scope.screenshot",
             "scope.channel_coupling",
         ),

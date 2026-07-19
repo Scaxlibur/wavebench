@@ -79,6 +79,8 @@ def descriptor():
 
 descriptor 至少声明 canonical ID、kind、API/兼容版本、厂商/型号、capability、IDN pattern、backend、受限选项、权限提示和 factory。外置 V2 插件首版必须使用 `aliases=()`；scope 插件还应准确声明 coupling policy，无法证明输入安全语义时保留 `unknown`，核心会默认拒绝采集。
 
+需要支持重复 `--channel` 的 scope 插件还必须声明 `scope.capture_waveforms` 并实现同名方法。该方法的语义固定为：先配置全部目标通道，只执行一次 acquisition / OPC 等待，再逐通道读取；不得静默退回逐通道重复触发。不声明该能力的插件仍可执行单通道 `scope.capture_waveform`，多通道操作会在打开 transport 前明确拒绝。
+
 插件模块导入时不得连接仪器、发送 SCPI、创建文件或修改全局状态。factory 才能调用 `context.open_transport()`，且每次 factory 调用最多只能成功打开一个 transport。
 
 ## DriverContext

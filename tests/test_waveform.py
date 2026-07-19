@@ -111,3 +111,36 @@ class VerticalScaleTests(unittest.TestCase):
         self.assertIn("CHAN1:SCAL 0.2", transport.writes)
         self.assertIn("CHAN1:POS 0", transport.writes)
         self.assertLess(transport.writes.index("CHAN1:SCAL 0.2"), transport.writes.index("SINGle"))
+
+    def test_multichannel_capture_uses_one_single_and_one_opc(self):
+        class Transport(FakeTransport):
+            def __init__(self):
+                super().__init__(
+                    {
+                        "CHAN1:DATA:HEAD?": "0,1,2,1",
+                        "CHAN2:DATA:HEAD?": "0,1,2,1",
+                    }
+                )
+
+            def query_float_list(self, command):
+                self.queries.append(command)
+                return [0.0, 1.0]
+
+            def query_opc(self):
+                self.queries.append("*OPC?")
+                return "1"
+
+        transport = Transport()
+        completed = []
+
+        waveforms = RTM2032Scope(transport=transport).capture_waveforms(
+            channels=[1, 2],
+            points="DEF",
+            check_errors=False,
+            on_waveform=lambda channel, waveform: completed.append(channel),
+        )
+
+        self.assertEqual(list(waveforms), [1, 2])
+        self.assertEqual(completed, [1, 2])
+        self.assertEqual(transport.writes.count("SINGle"), 1)
+        self.assertEqual(transport.queries.count("*OPC?"), 1)

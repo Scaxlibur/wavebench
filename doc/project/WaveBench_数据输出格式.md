@@ -460,7 +460,7 @@ commands.log
   "operation": {
     "command": "scope capture",
     "channels": [1, 2],
-    "trigger_mode": "sequential_per_channel"
+    "trigger_mode": "single_acquisition"
   },
   "channels": {
     "1": {
@@ -479,7 +479,9 @@ commands.log
 }
 ```
 
-当前多通道语义是逐通道采集，不保证通道间同一时刻采样，也不假设不同通道接入的是同一个信号。频率、幅度和 warning 都按通道独立计算。
+当前多通道语义是：配置全部目标通道后只执行一次 `SINGle` 和一次 `*OPC?`，再顺序读取各通道。因此各通道属于同一次 acquisition；读取和文件写入仍按通道顺序进行。WaveBench 不假设不同通道接入的是同一个信号，频率、幅度和 warning 都按通道独立计算。
+
+每个通道读取成功后，CSV/NPY 会先写临时文件，再用 `os.replace()` 原子提升为最终文件。后续通道失败时，采集包改名为 `*_failed`，已完成通道继续保留；`metadata.partial.json` 额外记录 `completed_channels`、`failed_channel`、`stage`、已完成通道的 metadata/files，以及可用时的 best-effort 截图。
 
 
 对于看起来像方波 / PWM / 阶跃的波形，`waveform.summary` 还会补充轻量边沿指标：

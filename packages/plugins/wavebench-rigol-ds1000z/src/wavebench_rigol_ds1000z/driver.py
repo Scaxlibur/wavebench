@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from collections.abc import Callable
 import time
 
 import numpy as np
@@ -275,6 +276,49 @@ class DS1000ZScope:
         if check_errors:
             self.assert_no_errors()
         return waveform
+
+    def capture_waveforms(
+        self,
+        channels: list[int],
+        points: str = "dmax",
+        check_errors: bool = True,
+        time_range_s: float | None = None,
+        vertical_scale_v_per_div: float | None = None,
+        on_channel_start: Callable[[int | None], None] | None = None,
+        on_waveform: Callable[[int, WaveformData], None] | None = None,
+    ) -> dict[int, WaveformData]:
+        self.clear_status()
+        for channel in channels:
+            self._validate_channel(channel)
+        if time_range_s is not None:
+            self.set_time_range(time_range_s)
+        for channel in channels:
+            if vertical_scale_v_per_div is not None:
+                self.set_vertical_scale(channel, vertical_scale_v_per_div)
+            else:
+                self.transport.write(f":CHANnel{channel}:DISPlay ON")
+        self.transport.write(":SINGle")
+        try:
+            self.transport.query_opc()
+        except Exception as exc:
+            raise OperationTimeout(
+                "single acquisition timed out while waiting for *OPC?. "
+                "Check trigger source/level, or use `scope fetch` to read the current waveform."
+            ) from exc
+        waveforms: dict[int, WaveformData] = {}
+        for channel in channels:
+            if on_channel_start is not None:
+                on_channel_start(channel)
+            raw_mode = self._setup_waveform_transfer(channel=channel, points=points)
+            waveform = self._read_waveform(channel=channel, raw_mode=raw_mode)
+            waveforms[channel] = waveform
+            if on_waveform is not None:
+                on_waveform(channel, waveform)
+        if check_errors:
+            if on_channel_start is not None:
+                on_channel_start(None)
+            self.assert_no_errors()
+        return waveforms
 
     def screenshot_png(
         self,

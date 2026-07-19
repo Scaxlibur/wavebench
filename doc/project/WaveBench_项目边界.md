@@ -60,7 +60,7 @@ wavebench scope capture --channel 1
 
 - 保存截图；
 - 支持 CH2；
-- 支持多通道逐个采集；
+- 支持单次 acquisition 后逐通道读取；
 - 自动保存更完整的命令日志。
 
 ### 暂不做
