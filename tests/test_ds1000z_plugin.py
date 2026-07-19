@@ -30,6 +30,7 @@ class FakeTransport:
         self.binary_reader = binary_reader
         self.writes = []
         self.queries = []
+        self.events = []
         self.closed = False
 
     def write(self, command):
@@ -49,6 +50,9 @@ class FakeTransport:
         self.queries.append("*OPC?")
         return "1"
 
+    def record_event(self, direction, text):
+        self.events.append((direction, text))
+
     def close(self):
         self.closed = True
 
@@ -61,6 +65,8 @@ def test_plugin_descriptor_is_executable_v2_metadata_without_io():
     assert descriptor.backends == ("pyvisa",)
     assert descriptor.scope_coupling_policy == "fixed-high-impedance"
     assert descriptor.validate_options({}) == {"max_chunk_points": 250_000}
+    with pytest.raises(ValueError, match=r"must be <= 250000"):
+        descriptor.validate_options({"max_chunk_points": 250_001})
 
 
 def test_plugin_factory_uses_core_context_transport_only():
@@ -123,6 +129,45 @@ def test_plugin_norm_raw_dmax_conversion_and_chunk_boundaries():
         assert raw_transport.queries.count(":WAVeform:DATA?") == 3
         assert ":WAVeform:STARt 7" in raw_transport.writes
         assert ":WAVeform:STOP 8" in raw_transport.writes
+        assert any(
+            direction == "telemetry"
+            and "stage=waveform_chunk" in text
+            and "range=1-3" in text
+            for direction, text in raw_transport.events
+        )
+        assert any(
+            direction == "telemetry"
+            and "stage=waveform_transfer" in text
+            and "chunks=3" in text
+            for direction, text in raw_transport.events
+        )
+
+
+def test_plugin_failed_raw_chunk_records_range_before_raising():
+    def binary_reader(transport, command):
+        start = int(transport.writes[-2].split()[-1])
+        if start == 4:
+            raise TimeoutError("interrupted")
+        return bytes([127]) * 3
+
+    transport = FakeTransport(
+        responses={":WAVeform:PREamble?": "0,0,6,1,1e-9,0,0,0.01,0,127"},
+        binary_reader=binary_reader,
+    )
+
+    with pytest.raises(TimeoutError, match="interrupted"):
+        DS1000ZScope(
+            transport=transport,
+            max_byte_points_per_read=3,
+        ).fetch_waveform(channel=1, points="DMAX", check_errors=False)
+
+    assert any(
+        direction == "telemetry"
+        and "stage=waveform_chunk" in text
+        and "status=failed" in text
+        and "range=4-6" in text
+        for direction, text in transport.events
+    )
 
 
 def test_plugin_single_autoscale_screenshot_errors_and_close():

@@ -51,6 +51,9 @@ class PyVisaTransport:
             read_retry_delay_ms=config.read_retry_delay_ms,
         )
 
+    def record_event(self, direction: str, text: str) -> None:
+        self.logger.record(direction, text)
+
     def write(self, command: str) -> None:
         self.logger.record("write", command)
         try:
@@ -83,27 +86,25 @@ class PyVisaTransport:
 
     def query_float_list(self, command: str) -> list[float]:
         self.logger.record("query", command)
+        started = time.perf_counter()
         try:
-            if hasattr(self.session, "query_binary_values"):
-                try:
-                    values = list(
-                        self._read_with_retry(
-                            "query",
-                            command,
-                            lambda: self.session.query_binary_values(command, datatype="f"),
-                        )
-                    )
-                except Exception:
-                    values = self._parse_ascii_float_list(
-                        self._read_with_retry("query", command, lambda: self.session.query(command))
-                    )
-            else:
-                values = self._parse_ascii_float_list(
-                    self._read_with_retry("query", command, lambda: self.session.query(command))
-                )
+            values = self._parse_ascii_float_list(self.session.query(command))
         except Exception as exc:
-            raise self._instrument_io_error("query", command, exc) from exc
+            self._record_query_telemetry(
+                operation="query_float_list",
+                started=started,
+                status="failed",
+                replay="disabled",
+            )
+            raise self._nonreplayable_query_error("query_float_list", command, exc) from exc
         self.logger.record("response", f"<float_list len={len(values)}>")
+        self._record_query_telemetry(
+            operation="query_float_list",
+            started=started,
+            status="ok",
+            replay="disabled",
+            items=len(values),
+        )
         return values
 
     @staticmethod
@@ -118,18 +119,65 @@ class PyVisaTransport:
         self.logger.record("query_binary", command)
         if not hasattr(self.session, "query_binary_values"):
             raise ConnectionError("pyvisa session does not support binary block queries")
+        started = time.perf_counter()
         try:
             data = bytes(
-                self._read_with_retry(
-                    "query_binary",
-                    command,
-                    lambda: self.session.query_binary_values(command, datatype="B", container=bytes),
-                )
+                self.session.query_binary_values(command, datatype="B", container=bytes)
             )
         except Exception as exc:
-            raise self._instrument_io_error("query_binary", command, exc) from exc
+            self._record_query_telemetry(
+                operation="query_binary",
+                started=started,
+                status="failed",
+                replay="disabled",
+            )
+            raise self._nonreplayable_query_error("query_binary", command, exc) from exc
         self.logger.record("response", f"<bin_block len={len(data)}>")
+        self._record_query_telemetry(
+            operation="query_binary",
+            started=started,
+            status="ok",
+            replay="disabled",
+            bytes_count=len(data),
+        )
         return data
+
+    def _record_query_telemetry(
+        self,
+        *,
+        operation: str,
+        started: float,
+        status: str,
+        replay: str,
+        bytes_count: int | None = None,
+        items: int | None = None,
+    ) -> None:
+        elapsed_s = max(time.perf_counter() - started, 0.0)
+        fields = [
+            f"operation={operation}",
+            f"status={status}",
+            f"elapsed_ms={elapsed_s * 1000.0:.3f}",
+            f"replay={replay}",
+        ]
+        if bytes_count is not None:
+            fields.append(f"bytes={bytes_count}")
+            throughput = bytes_count / elapsed_s / (1024.0 * 1024.0) if elapsed_s > 0 else 0.0
+            fields.append(f"throughput_mib_s={throughput:.3f}")
+        if items is not None:
+            fields.append(f"items={items}")
+        self.logger.record("telemetry", " ".join(fields))
+
+    def _nonreplayable_query_error(
+        self,
+        operation: str,
+        command: str,
+        exc: Exception,
+    ) -> InstrumentError:
+        return InstrumentError(
+            f"pyvisa {operation} failed on {self.resource} command {command!r}: "
+            f"{type(exc).__name__}: {exc}. The response state may be partial; reopen the "
+            "instrument session and restart the complete acquisition before retrying."
+        )
 
     def query_opc(self) -> str:
         self.logger.record("query", "*OPC?")

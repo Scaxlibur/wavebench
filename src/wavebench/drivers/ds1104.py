@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import time
 
 import numpy as np
 
@@ -73,6 +74,11 @@ class DS1104Scope:
     transport: InstrumentTransport
     check_errors_after_ops: bool = True
 
+    def _record_telemetry(self, text: str) -> None:
+        recorder = getattr(self.transport, "record_event", None)
+        if recorder is not None:
+            recorder("telemetry", text)
+
     def idn(self) -> str:
         return self.transport.query("*IDN?")
 
@@ -143,40 +149,70 @@ class DS1104Scope:
         return raw_mode
 
     def _read_raw_bytes(self, points: int, *, chunked: bool) -> bytes:
-        if not chunked:
-            self.transport.write(":WAVeform:STARt 1")
-            self.transport.write(f":WAVeform:STOP {points}")
-            data = self.transport.query_bin_block(":WAVeform:DATA?")
-            if len(data) != points:
-                raise DataError(f"waveform length mismatch: preamble says {points}, got {len(data)}")
-            return data
-
+        transfer_started = time.perf_counter()
+        chunk_size = _MAX_BYTE_POINTS_PER_READ if chunked else points
         chunks: list[bytes] = []
-        for start in range(1, points + 1, _MAX_BYTE_POINTS_PER_READ):
-            stop = min(points, start + _MAX_BYTE_POINTS_PER_READ - 1)
+        for start in range(1, points + 1, chunk_size):
+            stop = min(points, start + chunk_size - 1)
             self.transport.write(f":WAVeform:STARt {start}")
             self.transport.write(f":WAVeform:STOP {stop}")
-            chunk = self.transport.query_bin_block(":WAVeform:DATA?")
+            chunk_started = time.perf_counter()
+            try:
+                chunk = self.transport.query_bin_block(":WAVeform:DATA?")
+            except Exception:
+                chunk_elapsed = max(time.perf_counter() - chunk_started, 0.0)
+                self._record_telemetry(
+                    "stage=waveform_chunk status=failed "
+                    f"range={start}-{stop} elapsed_ms={chunk_elapsed * 1000.0:.3f}"
+                )
+                raise
+            chunk_elapsed = max(time.perf_counter() - chunk_started, 0.0)
             expected = stop - start + 1
             if len(chunk) != expected:
+                label = "waveform chunk" if chunked else "waveform"
                 raise DataError(
-                    f"waveform chunk length mismatch for points {start}-{stop}: "
+                    f"{label} length mismatch for points {start}-{stop}: "
                     f"expected {expected}, got {len(chunk)}"
                 )
             chunks.append(chunk)
+            throughput = (
+                len(chunk) / chunk_elapsed / (1024.0 * 1024.0)
+                if chunk_elapsed > 0
+                else 0.0
+            )
+            self._record_telemetry(
+                "stage=waveform_chunk status=ok "
+                f"range={start}-{stop} bytes={len(chunk)} "
+                f"elapsed_ms={chunk_elapsed * 1000.0:.3f} "
+                f"throughput_mib_s={throughput:.3f}"
+            )
+        transfer_elapsed = max(time.perf_counter() - transfer_started, 0.0)
+        self._record_telemetry(
+            "stage=waveform_transfer "
+            f"points={points} chunks={len(chunks)} bytes={sum(map(len, chunks))} "
+            f"elapsed_ms={transfer_elapsed * 1000.0:.3f}"
+        )
         return b"".join(chunks)
 
     def _read_waveform(self, channel: int, *, raw_mode: bool) -> WaveformData:
+        read_started = time.perf_counter()
+        preamble_started = time.perf_counter()
         preamble = parse_rigol_waveform_preamble(
             self.transport.query(":WAVeform:PREamble?")
         )
+        preamble_elapsed = max(time.perf_counter() - preamble_started, 0.0)
+        self._record_telemetry(
+            "stage=waveform_preamble "
+            f"points={preamble.points} elapsed_ms={preamble_elapsed * 1000.0:.3f}"
+        )
         raw = self._read_raw_bytes(preamble.points, chunked=raw_mode)
+        convert_started = time.perf_counter()
         voltages = np.frombuffer(raw, dtype=np.uint8).astype(np.float64)
         voltages -= preamble.y_origin + preamble.y_reference
         voltages *= preamble.y_increment
         x_start = preamble.x_origin - preamble.x_reference * preamble.x_increment
         x_stop = x_start + (preamble.points - 1) * preamble.x_increment
-        return WaveformData(
+        waveform = WaveformData(
             channel=channel,
             header=WaveformHeader(
                 x_start=x_start,
@@ -185,6 +221,18 @@ class DS1104Scope:
             ),
             voltages_v=voltages,
         )
+        convert_elapsed = max(time.perf_counter() - convert_started, 0.0)
+        self._record_telemetry(
+            "stage=waveform_convert "
+            f"points={preamble.points} elapsed_ms={convert_elapsed * 1000.0:.3f}"
+        )
+        read_elapsed = max(time.perf_counter() - read_started, 0.0)
+        self._record_telemetry(
+            "stage=waveform_read "
+            f"channel={channel} points={preamble.points} "
+            f"elapsed_ms={read_elapsed * 1000.0:.3f}"
+        )
+        return waveform
 
     def fetch_waveform(
         self, channel: int, points: str = "dmax", check_errors: bool = True

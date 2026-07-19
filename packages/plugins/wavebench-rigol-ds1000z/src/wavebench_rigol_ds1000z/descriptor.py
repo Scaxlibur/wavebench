@@ -38,7 +38,7 @@ def descriptor() -> InstrumentDescriptor:
                 int,
                 default=250_000,
                 minimum=1,
-                maximum=1_000_000,
+                maximum=250_000,
             ),
         ),
         permissions=("instrument.io", "configured-resource-only"),

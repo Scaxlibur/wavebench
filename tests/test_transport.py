@@ -57,6 +57,23 @@ class FlakyQuerySession(FakePyVisaSession):
         return "OK"
 
 
+class FailingBinaryQuerySession(FakePyVisaSession):
+    def __init__(self):
+        super().__init__()
+        self.binary_attempts = 0
+
+    def query_binary_values(self, command: str, datatype: str = "B", container=list):
+        self.queries.append(command)
+        self.binary_attempts += 1
+        raise TimeoutError("binary transfer interrupted")
+
+
+class FailingFloatListSession(FakePyVisaSession):
+    def query(self, command: str) -> str:
+        self.queries.append(command)
+        raise TimeoutError("float-list transfer interrupted")
+
+
 class FailingWriteSession(FakePyVisaSession):
     def __init__(self):
         super().__init__()
@@ -86,10 +103,64 @@ class PyVisaTransportTests(unittest.TestCase):
         self.assertEqual(session.reads, ["read"])
 
     def test_query_bin_block_and_opc(self):
-        transport = PyVisaTransport("TCPIP::x::INSTR", FakeResourceManager(), FakePyVisaSession(), CommandLogger())
+        logger = CommandLogger()
+        transport = PyVisaTransport("TCPIP::x::INSTR", FakeResourceManager(), FakePyVisaSession(), logger)
 
         self.assertEqual(transport.query_bin_block("DATA?"), b"\x01\x02\x03")
         self.assertEqual(transport.query_opc(), "1")
+        self.assertTrue(
+            any(
+                entry.direction == "telemetry"
+                and "operation=query_binary" in entry.text
+                and "elapsed_ms=" in entry.text
+                and "bytes=3" in entry.text
+                for entry in logger.entries
+            )
+        )
+
+    def test_binary_block_failure_is_not_replayed_in_same_session(self):
+        session = FailingBinaryQuerySession()
+        logger = CommandLogger()
+        transport = PyVisaTransport(
+            "TCPIP::x::INSTR",
+            FakeResourceManager(),
+            session,
+            logger,
+            read_retry_attempts=3,
+            read_retry_delay_ms=0,
+        )
+
+        with self.assertRaisesRegex(InstrumentError, "reopen.*session"):
+            transport.query_bin_block("DATA?")
+
+        self.assertEqual(session.binary_attempts, 1)
+        self.assertEqual(session.queries, ["DATA?"])
+        self.assertFalse(any(entry.direction == "retry" for entry in logger.entries))
+        self.assertTrue(
+            any(
+                entry.direction == "telemetry"
+                and "operation=query_binary" in entry.text
+                and "status=failed" in entry.text
+                and "replay=disabled" in entry.text
+                for entry in logger.entries
+            )
+        )
+
+    def test_binary_float_failure_is_not_replayed_or_fallen_back_to_ascii(self):
+        session = FailingFloatListSession()
+        transport = PyVisaTransport(
+            "TCPIP::x::INSTR",
+            FakeResourceManager(),
+            session,
+            CommandLogger(),
+            read_retry_attempts=3,
+            read_retry_delay_ms=0,
+        )
+
+        with self.assertRaisesRegex(InstrumentError, "reopen.*session"):
+            transport.query_float_list("VALUES?")
+
+        self.assertEqual(session.queries, ["VALUES?"])
 
     def test_query_timeout_is_wrapped_as_instrument_error(self):
         transport = PyVisaTransport("TCPIP::x::INSTR", FakeResourceManager(), FailingQuerySession(), CommandLogger())

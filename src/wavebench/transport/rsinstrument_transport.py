@@ -40,6 +40,9 @@ class RsInstrumentTransport:
             raise ConnectionError(f"failed to open instrument {config.resource}: {exc}") from exc
         return cls(resource=config.resource, session=session, logger=logger)
 
+    def record_event(self, direction: str, text: str) -> None:
+        self.logger.record(direction, text)
+
     def write(self, command: str) -> None:
         self.logger.record("write", command)
         self.session.write_str(command)

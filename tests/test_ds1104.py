@@ -28,6 +28,7 @@ class FakeTransport:
         self.binary_reader = binary_reader
         self.writes: list[str] = []
         self.queries: list[str] = []
+        self.events: list[tuple[str, str]] = []
         self.closed = False
 
     def write(self, command):
@@ -46,6 +47,9 @@ class FakeTransport:
     def query_opc(self):
         self.queries.append("*OPC?")
         return "1"
+
+    def record_event(self, direction, text):
+        self.events.append((direction, text))
 
     def close(self):
         self.closed = True
@@ -145,6 +149,60 @@ def test_fetch_raw_waveform_stops_and_reads_in_250k_chunks():
     assert ":WAVeform:STARt 250001" in transport.writes
     assert ":WAVeform:STOP 250002" in transport.writes
     assert transport.queries.count(":WAVeform:DATA?") == 2
+    assert any(
+        direction == "telemetry"
+        and "stage=waveform_chunk" in text
+        and "range=1-250000" in text
+        and "throughput_mib_s=" in text
+        for direction, text in transport.events
+    )
+    assert any(
+        direction == "telemetry"
+        and "stage=waveform_transfer" in text
+        and f"points={points}" in text
+        and "chunks=2" in text
+        for direction, text in transport.events
+    )
+    assert any(
+        direction == "telemetry"
+        and "stage=waveform_convert" in text
+        and f"points={points}" in text
+        for direction, text in transport.events
+    )
+
+
+def test_failed_raw_chunk_records_range_and_failure_before_raising():
+    points = 250_002
+
+    def binary_reader(transport, command):
+        assert command == ":WAVeform:DATA?"
+        start = int(transport.writes[-2].split()[-1])
+        stop = int(transport.writes[-1].split()[-1])
+        if start == 250_001:
+            raise TimeoutError("interrupted")
+        return bytes([127]) * (stop - start + 1)
+
+    transport = FakeTransport(
+        responses={
+            ":WAVeform:PREamble?": f"0,0,{points},1,1e-9,0,0,0.01,0,127",
+        },
+        binary_reader=binary_reader,
+    )
+
+    with pytest.raises(TimeoutError, match="interrupted"):
+        DS1104Scope(transport=transport).fetch_waveform(
+            channel=1,
+            points="DMAX",
+            check_errors=False,
+        )
+
+    assert any(
+        direction == "telemetry"
+        and "stage=waveform_chunk" in text
+        and "status=failed" in text
+        and "range=250001-250002" in text
+        for direction, text in transport.events
+    )
 
 
 def test_capture_translates_total_time_range_to_12_divisions():

@@ -183,9 +183,11 @@ backend = "lan"
 TCPIP::<instrument-ip>::INSTR
 ```
 
-`read_retry_attempts` 是只读 query 失败后的额外重试次数，默认 1。写操作不会自动重试。
+`read_retry_attempts` 是短文本只读 query 失败后的额外重试次数，默认 1。写操作、
+二进制块 query 和浮点列表 query 都不会在原 session 自动重放。后两类读取失败时，
+响应可能已被部分消费；应关闭并重建仪器 session，再从完整采集流程起点重试。
 
-`read_retry_delay_ms` 是两次只读 query 之间的等待时间，默认 200 ms。
+`read_retry_delay_ms` 是两次短文本只读 query 之间的等待时间，默认 200 ms。
 
 ## `[scope]`
 
