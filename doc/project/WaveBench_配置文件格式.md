@@ -240,6 +240,10 @@ reset_before_run = false
 check_errors = true
 ```
 
+这里的 `ds1104` / `ds1000z` 是核心内置驱动的兼容 alias。安装式 V2 插件首版只接受
+canonical ID；要显式选择外置 DS1000Z 插件，应配置 `driver = "rigol.ds1000z"`，不能
+使用外置 alias。
+
 DS1104Z 上 `waveform.points = "def"` 对应 NORM 屏幕波形，`"max"`/`"dmax"`
 对应停止状态下的 RAW 存储波形。RAW 使用 BYTE 格式并按 250000 点分块读取；
 `waveform.time_range_s` 是总时间窗口，驱动会除以 12 后写入主时基的 s/div。
