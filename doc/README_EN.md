@@ -4,6 +4,8 @@
 
 WaveBench is a lightweight Python measurement bench for explicit, reproducible control of laboratory instruments. It currently covers oscilloscope capture, signal-generator and power-supply control, digital-multimeter reads, multi-instrument run plans, offline reports, and trusted executable instrument plugins.
 
+The WaveBench distribution includes built-in drivers for the RTM2000/RTM2032, DS1104Z/DS1000Z, DG4000/DG4202, DP800, and DM3000/DM3058 families. First use does not require an external plugin: copy the example configuration and set the real instrument resource. External plugins are explicitly selected optional upgrades or extensions and do not replace the built-in short names used by the example configuration.
+
 > Warning: WaveBench communicates with real laboratory equipment. Review the active configuration, wiring, voltage/current limits, input impedance, and output state before running any command that can change an instrument.
 
 ## Start here

@@ -2,7 +2,7 @@
 
 [English](README_EN.md) | 中文
 
-WaveBench 是面向电赛调试场景的轻量 Python 自动测量台。当前阶段支持 R&S RTM2032 示波器采集、RIGOL DG4202 信号源控制、RIGOL DP800 系列电源控制、RIGOL DM3000/DM3058 系列万用表读取，并坚持显式命令与可验证的小步实验流程。
+WaveBench 是面向电赛调试场景的轻量 Python 自动测量台。当前阶段支持 R&S RTM2032、RIGOL DS1104Z/DS1000Z 示波器采集、RIGOL DG4202 信号源控制、RIGOL DP800 系列电源控制、RIGOL DM3000/DM3058 系列万用表读取，并坚持显式命令与可验证的小步实验流程。上述驱动均内建于主包，首次使用无需安装外置插件；外置插件是显式选择的可选升级或扩展。
 
 ## 当前阶段
 
