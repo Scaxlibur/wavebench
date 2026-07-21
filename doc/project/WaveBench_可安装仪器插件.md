@@ -17,11 +17,11 @@ WaveBench 的受管插件命令只允许在当前 venv 中运行，拒绝系统 
 
 ```bash
 .venv/bin/python -m wavebench plugin package check \
-  packages/plugins/wavebench-rigol-ds1000z
+  ../wavebench-instrument-plugins/packages/wavebench-rigol-ds1000z
 .venv/bin/python -m wavebench plugin install \
-  packages/plugins/wavebench-rigol-ds1000z --dry-run
+  ../wavebench-instrument-plugins/packages/wavebench-rigol-ds1000z --dry-run
 .venv/bin/python -m wavebench plugin install \
-  packages/plugins/wavebench-rigol-ds1000z
+  ../wavebench-instrument-plugins/packages/wavebench-rigol-ds1000z
 ```
 
 源码目录会先在临时目录中离线构建 wheel。即使是 `package check` 或 `--dry-run`，源码包的受信任 build backend 也会执行；如果不希望执行构建代码，请只检查已经取得并核验来源的 wheel。

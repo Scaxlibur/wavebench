@@ -130,6 +130,63 @@ def _raw_pip_install(python: Path, wheel: Path) -> None:
     )
 
 
+def _plugin_source(root: Path) -> Path:
+    source = root / "source-plugin"
+    package = source / "src" / "wavebench_source_scope"
+    package.mkdir(parents=True)
+    (source / "pyproject.toml").write_text(
+        """
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "wavebench-source-scope"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = ["wavebench>=0.7,<1"]
+
+[project.entry-points."wavebench.instruments"]
+"example.source-scope" = "wavebench_source_scope:descriptor"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/wavebench_source_scope"]
+""",
+        encoding="utf-8",
+    )
+    (package / "__init__.py").write_text(
+        '''from wavebench.instruments.api import InstrumentDescriptor
+
+
+class Driver:
+    def idn(self):
+        return "EXAMPLE,SOURCE-SCOPE"
+
+    def close(self):
+        pass
+
+
+def descriptor():
+    return InstrumentDescriptor(
+        driver_id="example.source-scope",
+        kind="scope",
+        display_name="Example Source Scope",
+        manufacturer="Example",
+        models=("EX1",),
+        aliases=(),
+        capabilities=("scope.idn",),
+        idn_patterns=("EXAMPLE,SOURCE-SCOPE",),
+        backends=("pyvisa",),
+        option_specs=(),
+        permissions=("instrument.io",),
+        factory=lambda context: Driver(),
+    )
+''',
+        encoding="utf-8",
+    )
+    return source
+
+
 def test_lifecycle_rejects_system_python():
     lifecycle = PluginLifecycle(python_executable=Path(sys.base_prefix) / "bin" / "python3")
 
@@ -192,14 +249,14 @@ def test_install_status_and_remove_round_trip(tmp_path):
 
 def test_source_directory_install_keeps_built_wheel_alive_until_cached(tmp_path):
     python = _target_venv(tmp_path)
-    source = Path(__file__).resolve().parents[1] / "packages/plugins/wavebench-rigol-ds1000z"
+    source = _plugin_source(tmp_path)
     lifecycle = PluginLifecycle(python_executable=python)
 
     installed = lifecycle.install(source)
 
-    assert installed.driver_id == "rigol.ds1000z"
-    assert lifecycle.info("rigol.ds1000z").status == "healthy"
-    assert lifecycle.remove("rigol.ds1000z").status == "removed"
+    assert installed.driver_id == "example.source-scope"
+    assert lifecycle.info("example.source-scope").status == "healthy"
+    assert lifecycle.remove("example.source-scope").status == "removed"
 
 
 def test_install_refuses_to_take_over_unmanaged_distribution(tmp_path):

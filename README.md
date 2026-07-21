@@ -237,8 +237,8 @@ python -m wavebench plugin list --include-entry-points
 python -m wavebench plugin list --load
 python -m wavebench plugin info rigol.ds1000z --load
 python -m wavebench plugin doctor --load
-python -m wavebench plugin package check packages/plugins/wavebench-rigol-ds1000z
-python -m wavebench plugin install packages/plugins/wavebench-rigol-ds1000z --dry-run
+python -m wavebench plugin package check ../wavebench-instrument-plugins/packages/wavebench-rigol-ds1000z
+python -m wavebench plugin install ../wavebench-instrument-plugins/packages/wavebench-rigol-ds1000z --dry-run
 python -m wavebench plugin installed
 python -m wavebench plugin info rigol.ds1000z --installed
 python -m wavebench plugin market search rigol
