@@ -13,7 +13,7 @@ python -m venv .venv
 
 WaveBench 的受管插件命令只允许在当前 venv 中运行，拒绝系统 Python。它只接受用户明确指定的本地源码目录或 wheel，不联网、不自动安装依赖，也不修改 `wavebench.toml`。
 
-先做包检查和安装 dry-run：
+从 WaveBench 仓库根目录先做包检查和安装 dry-run：
 
 ```bash
 .venv/bin/python -m wavebench plugin package check \

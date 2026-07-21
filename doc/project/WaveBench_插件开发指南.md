@@ -145,7 +145,7 @@ DS1000Z 试点保留内置 fallback，因此旧配置 alias `ds1104` / `ds1000z`
 - 受管 install / upgrade / downgrade / remove 在临时 venv 中完成事务、回滚和 recover 测试；
 - 卸载后缺失提示或内置 fallback 行为。
 
-示例：
+从 WaveBench 仓库根目录运行以下示例：
 
 ```bash
 python -m pytest -q packages/wavebench-rigol-ds1000z/tests

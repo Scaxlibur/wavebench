@@ -20,6 +20,11 @@ ARBITRARY_QUERY_CANDIDATES: tuple[tuple[str, str], ...] = (
 )
 
 
+def _validate_channel(channel: int) -> None:
+    if channel not in (1, 2):
+        raise DataError("DG4000 channel must be 1 or 2")
+
+
 @dataclass
 class DG4202Source:
     transport: object
@@ -50,8 +55,7 @@ class DG4202Source:
             raise InstrumentError("instrument error queue is not empty: " + "; ".join(active))
 
     def get_status(self, channel: int) -> SourceStatus:
-        if channel < 1:
-            raise DataError("channel must be >= 1")
+        _validate_channel(channel)
         return SourceStatus(
             channel=channel,
             output=self.transport.query(f":OUTP{channel}?"),
@@ -70,8 +74,7 @@ class DG4202Source:
     def set_frequency(
         self, channel: int, value_hz: float, *, ensure_fix_mode: bool = True, check_errors: bool = True
     ) -> SourceStatus:
-        if channel < 1:
-            raise DataError("channel must be >= 1")
+        _validate_channel(channel)
         if value_hz <= 0:
             raise DataError("frequency must be > 0")
         if ensure_fix_mode:
@@ -85,8 +88,7 @@ class DG4202Source:
         return status
 
     def set_output(self, channel: int, enabled: bool, *, check_errors: bool = True) -> SourceStatus:
-        if channel < 1:
-            raise DataError("channel must be >= 1")
+        _validate_channel(channel)
         self.transport.write(f":OUTP{channel} {'ON' if enabled else 'OFF'}")
         status = self.get_status(channel)
         if check_errors:
@@ -95,8 +97,7 @@ class DG4202Source:
 
 
     def set_function(self, channel: int, function: str, *, check_errors: bool = True) -> SourceStatus:
-        if channel < 1:
-            raise DataError("channel must be >= 1")
+        _validate_channel(channel)
         normalized = function.strip().upper()
         aliases = {
             "SINE": "SIN",
@@ -121,8 +122,7 @@ class DG4202Source:
         return status
 
     def set_amplitude_vpp(self, channel: int, value_vpp: float, *, check_errors: bool = True) -> SourceStatus:
-        if channel < 1:
-            raise DataError("channel must be >= 1")
+        _validate_channel(channel)
         if value_vpp <= 0:
             raise DataError("amplitude must be > 0")
         self.transport.write(f":SOUR{channel}:VOLT:UNIT VPP")
@@ -134,8 +134,7 @@ class DG4202Source:
 
 
     def set_square_duty_cycle(self, channel: int, duty_percent: float, *, check_errors: bool = True) -> SourceStatus:
-        if channel < 1:
-            raise DataError("channel must be >= 1")
+        _validate_channel(channel)
         if duty_percent <= 0 or duty_percent >= 100:
             raise DataError("duty cycle percent must be > 0 and < 100")
         self.transport.write(f":SOUR{channel}:FUNC:SQU:DCYC {duty_percent:.12g}")
@@ -156,8 +155,7 @@ class DG4202Source:
         output_on: bool = False,
         check_errors: bool = True,
     ) -> SourceStatus:
-        if channel < 1:
-            raise DataError("channel must be >= 1")
+        _validate_channel(channel)
         if playback_frequency_hz <= 0:
             raise DataError("playback frequency must be > 0")
         if amplitude_vpp <= 0:
@@ -185,8 +183,7 @@ class DG4202Source:
         channel: int,
         candidates: tuple[tuple[str, str], ...] = ARBITRARY_QUERY_CANDIDATES,
     ) -> list[ArbitraryQueryProbeResult]:
-        if channel < 1:
-            raise DataError("channel must be >= 1")
+        _validate_channel(channel)
         results: list[ArbitraryQueryProbeResult] = []
         # Drain pre-existing errors so each candidate result is attributable.
         self.errors()

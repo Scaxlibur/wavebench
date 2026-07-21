@@ -1,6 +1,7 @@
 import unittest
 
 from wavebench.drivers.dg4202 import DG4202Source
+from wavebench.errors import DataError
 
 
 class FakeTransport:
@@ -78,6 +79,17 @@ class FakeTransport:
 
 
 class DG4202Tests(unittest.TestCase):
+    def test_rejects_channels_outside_dual_channel_range_before_io(self):
+        transport = FakeTransport()
+        driver = DG4202Source(transport=transport, check_errors_after_ops=True)
+
+        for channel in (0, 3):
+            with self.subTest(channel=channel):
+                with self.assertRaisesRegex(DataError, "DG4000 channel must be 1 or 2"):
+                    driver.get_status(channel)
+
+        self.assertEqual(transport.writes, [])
+
     def test_get_status_reads_basic_fields(self):
         driver = DG4202Source(transport=FakeTransport(), check_errors_after_ops=True)
         status = driver.get_status(2)
