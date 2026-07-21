@@ -37,7 +37,7 @@ dependencies = ["wavebench>=0.7,<1"]
 "example.scope" = "wavebench_example_scope:descriptor"
 ```
 
-entry point 名必须等于 canonical `driver_id`。普通配置解析只读取 entry point 名；只有配置真正选中该 ID、显式查看详情，或运行 `plugin ... --load` 时才导入插件。
+entry point 名必须等于 canonical `driver_id`。普通 metadata 命令不导入 V2 插件；只有配置真正选中该 ID、运行 `plugin info <driver_id> --load`，或运行 `plugin list/doctor --load` 时才导入 descriptor。V1 metadata entry point 仍由独立的 `--include-entry-points` 开关控制。
 
 ## Descriptor 与 factory
 
@@ -77,7 +77,7 @@ def descriptor():
     )
 ```
 
-descriptor 至少声明 canonical ID、kind、API/兼容版本、厂商/型号、capability、IDN pattern、backend、受限选项、权限提示和 factory。外置 V2 插件首版必须使用 `aliases=()`；scope 插件还应准确声明 coupling policy，无法证明输入安全语义时保留 `unknown`，核心会默认拒绝采集。
+descriptor 至少声明 canonical ID、kind、API/兼容版本、厂商/型号、capability、IDN pattern、backend、受限选项、权限提示和 factory。当前 V2 外置插件必须使用 `aliases=()`；scope 插件还应准确声明 coupling policy，无法证明输入安全语义时保留 `unknown`，核心会默认拒绝采集。
 
 需要支持重复 `--channel` 的 scope 插件还必须声明 `scope.capture_waveforms` 并实现同名方法。该方法的语义固定为：先配置全部目标通道，只执行一次 acquisition / OPC 等待，再逐通道读取；不得静默退回逐通道重复触发。不声明该能力的插件仍可执行单通道 `scope.capture_waveform`，多通道操作会在打开 transport 前明确拒绝。
 
@@ -116,7 +116,7 @@ factory 返回对象缺少已声明 capability 对应的方法时，核心会拒
 
 ## ID、alias 与兼容
 
-- 外置 V2 插件首版只支持 canonical ID，不接受 alias；内置 driver 可继续保留兼容 alias。
+- 当前 V2 外置插件只支持 canonical ID，不接受 alias；内置 driver 可继续保留兼容 alias。
 - 外部插件不能覆盖内置 canonical ID 或 alias。
 - entry point 名与 descriptor `driver_id` 必须一致。
 - `kind` 必须与配置槽位一致。
@@ -137,6 +137,8 @@ DS1000Z 试点保留内置 fallback，因此旧配置 alias `ds1104` / `ds1000z`
 - timeout、短 bin-block、坏 preamble、截图失败；
 - 坏插件不影响其他内置驱动；
 - wheel 在临时 venv 中安装、entry point 发现、重装和卸载；
+- `plugin package check` 拒绝无效 `RECORD`、重复成员、路径越界、`.pth`、`.data` 重定位、核心 `wavebench/` 覆盖及超出资源上限的 wheel；
+- 受管 install / upgrade / downgrade / remove 在临时 venv 中完成事务、回滚和 recover 测试；
 - 卸载后缺失提示或内置 fallback 行为。
 
 示例：
@@ -144,11 +146,13 @@ DS1000Z 试点保留内置 fallback，因此旧配置 alias `ds1104` / `ds1000z`
 ```bash
 python -m pytest -q tests/test_instrument_registry.py tests/test_ds1000z_plugin.py
 python -m ruff check packages/plugins/wavebench-rigol-ds1000z
+python -m wavebench plugin package check packages/plugins/wavebench-rigol-ds1000z
+python -m wavebench plugin install packages/plugins/wavebench-rigol-ds1000z --dry-run
 python -m wavebench plugin doctor --load
 ```
 
 ## 信任与发布边界
 
-Python entry point 是可信代码扩展，不是安全沙箱。安装插件等价于允许该包在当前 Python 用户权限下执行代码。WaveBench 不提供在线商店、自动下载、自动 `pip install`、插件评分或每插件进程隔离。
+Python entry point 是可信代码扩展，不是安全沙箱。安装插件等价于允许该包及其 build backend 在当前 Python 用户权限下执行代码。WaveBench 提供用户显式指定本地源码/wheel 的受管安装事务，但不提供在线商店、自动下载、自动依赖安装、插件评分或每插件进程隔离。
 
 建议每套 WaveBench 使用独立 venv，固定 WaveBench/插件版本，保存 lockfile，并在分发 wheel 时校验 hash。公开示例 resource 使用 RFC 5737 保留地址，例如 `TCPIP::192.0.2.20::INSTR`，不得提交真实实验室地址、序列号、凭据、原始波形或命令日志。

@@ -119,5 +119,5 @@ if __name__ == "__main__":
 class DM3058LanCompatibilityTests(unittest.TestCase):
     def test_dm3058_idn_uses_same_common_scpi_query(self):
         transport = FakeTransport()
-        transport.query = lambda command: "Rigol Technologies,DM3058,DM3L184650025,01.01" if command == "*IDN?" else "0"
+        transport.query = lambda command: "Rigol Technologies,DM3058,<serial>,<firmware>" if command == "*IDN?" else "0"
         self.assertIn("DM3058", DM3000Dmm(transport).idn())

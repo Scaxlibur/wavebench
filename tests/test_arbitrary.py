@@ -39,10 +39,10 @@ class ArbitraryWaveformTests(unittest.TestCase):
             np.save(path, np.array([-1.0, 0.0, 1.0]))
             waveform = load_arbitrary_waveform(path, sample_rate_hz=1000.0)
 
-            payload = waveform.payload_dict(name="REI_ARB", channel=2, amplitude_vpp=1.0, offset_v=0.0)
+            payload = waveform.payload_dict(name="EXAMPLE_ARB", channel=2, amplitude_vpp=1.0, offset_v=0.0)
 
             self.assertEqual(payload["format"], "wavebench.arbitrary.v1")
-            self.assertEqual(payload["target"]["name"], "REI_ARB")
+            self.assertEqual(payload["target"]["name"], "EXAMPLE_ARB")
             self.assertEqual(payload["target"]["channel"], 2)
             self.assertEqual(payload["target"]["sample_rate_hz"], 1000.0)
             self.assertEqual(payload["payload"]["encoding"], "dac14_unsigned_integer")
@@ -57,7 +57,7 @@ class ArbitraryWaveformTests(unittest.TestCase):
             waveform = load_arbitrary_waveform(source)
 
             written = write_arbitrary_payload_json(
-                waveform, output, name="REI_ARB", channel=2, amplitude_vpp=1.0, offset_v=0.0
+                waveform, output, name="EXAMPLE_ARB", channel=2, amplitude_vpp=1.0, offset_v=0.0
             )
 
             self.assertEqual(written, output)

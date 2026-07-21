@@ -68,7 +68,7 @@ dsrdtr = false
 DM3058 LAN 与 RS232 均已验证 `*IDN?`：
 
 ```text
-Rigol Technologies,DM3058,DM3L184650025,01.01.00.02.03.01
+Rigol Technologies,DM3058,<serial>,<firmware>
 ```
 
 2026-07-21 的 RS232 复测使用 CH340、9600 8N1、无软/硬件流控、写

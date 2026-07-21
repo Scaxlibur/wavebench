@@ -161,7 +161,7 @@ DG4202Source.upload_dg4000_dac14_block(
 候选命令：
 
 ```bash
-wavebench source arb-load --channel 1 --file waveform.npy --name REI_ARB --amplitude 1.0 --frequency 1000 --offset 0.0 --dry-run
+wavebench source arb-load --channel 1 --file waveform.npy --name EXAMPLE_ARB --amplitude 1.0 --frequency 1000 --offset 0.0 --dry-run
 ```
 
 可选：

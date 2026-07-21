@@ -4,12 +4,13 @@ import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import numpy as np
 
 from wavebench.cli import build_parser, main
 from wavebench.plugins.api import InstrumentPlugin
+from wavebench.plugins.lifecycle import InstalledPlugin, LifecycleResult
 
 
 class FakePluginEntryPoint:
@@ -343,7 +344,7 @@ max_source_vpp = 2.0
             "source", "arb-load",
             "--channel", "2",
             "--file", "waveform.npy",
-            "--name", "REI_ARB",
+            "--name", "EXAMPLE_ARB",
             "--amplitude", "1.0",
             "--frequency", "1000",
             "--offset", "0.0",
@@ -357,7 +358,7 @@ max_source_vpp = 2.0
         self.assertEqual(args.command, "arb-load")
         self.assertEqual(args.channel, 2)
         self.assertEqual(args.file, "waveform.npy")
-        self.assertEqual(args.name, "REI_ARB")
+        self.assertEqual(args.name, "EXAMPLE_ARB")
         self.assertEqual(args.amplitude, 1.0)
         self.assertEqual(args.offset, 0.0)
         self.assertEqual(args.frequency, 1000.0)
@@ -380,7 +381,7 @@ max_source_vpp = 2.0
                     "source", "arb-load",
                     "--channel", "2",
                     "--file", str(path),
-                    "--name", "REI_ARB",
+                    "--name", "EXAMPLE_ARB",
                     "--amplitude", "1.0",
                     "--frequency", "1000",
                     "--offset", "0.0",
@@ -390,7 +391,7 @@ max_source_vpp = 2.0
 
             output = stdout.getvalue()
             self.assertEqual(status, 0)
-            self.assertIn("arb_name=REI_ARB", output)
+            self.assertIn("arb_name=EXAMPLE_ARB", output)
             self.assertIn("channel=2", output)
             self.assertIn("points=3", output)
             self.assertIn("dac14=0..16383", output)
@@ -448,6 +449,41 @@ max_source_vpp = 2.0
         self.assertEqual(args.command, "info")
         self.assertEqual(args.driver_id, "rigol.dg4202")
         self.assertTrue(args.include_entry_points)
+
+    def test_plugin_lifecycle_parsers(self):
+        package = build_parser().parse_args(["plugin", "package", "check", "plugin.whl"])
+        install = build_parser().parse_args(["plugin", "install", "plugin.whl", "--dry-run"])
+        installed = build_parser().parse_args(["plugin", "installed"])
+        info = build_parser().parse_args(["plugin", "info", "example.scope", "--installed"])
+        remove = build_parser().parse_args(["plugin", "remove", "example.scope", "--dry-run"])
+        upgrade = build_parser().parse_args(["plugin", "upgrade", "plugin.whl"])
+        downgrade = build_parser().parse_args(["plugin", "downgrade", "plugin.whl"])
+        recover = build_parser().parse_args(["plugin", "recover"])
+
+        self.assertEqual(package.package_command, "check")
+        self.assertTrue(install.dry_run)
+        self.assertEqual(installed.command, "installed")
+        self.assertTrue(info.installed)
+        self.assertTrue(remove.dry_run)
+        self.assertEqual(upgrade.command, "upgrade")
+        self.assertEqual(downgrade.command, "downgrade")
+        self.assertEqual(recover.command, "recover")
+
+    def test_plugin_installed_info_rejects_plugin_loading_flags(self):
+        parser = build_parser()
+
+        with self.assertRaises(SystemExit):
+            parser.parse_args(["plugin", "info", "example.scope", "--installed", "--load"])
+        with self.assertRaises(SystemExit):
+            parser.parse_args(
+                [
+                    "plugin",
+                    "info",
+                    "example.scope",
+                    "--installed",
+                    "--include-entry-points",
+                ]
+            )
 
     def test_plugin_doctor_accepts_entry_point_flag(self):
         args = build_parser().parse_args(["plugin", "doctor", "--include-entry-points"])
@@ -537,6 +573,47 @@ max_source_vpp = 2.0
         self.assertIn("driver_id=rigol.dp800", output)
         self.assertIn("kind=power", output)
         self.assertIn("power.protection", output)
+
+    def test_plugin_installed_and_info_use_lifecycle_ledger(self):
+        plugin = InstalledPlugin(
+            driver_id="example.scope",
+            distribution="wavebench-example-scope",
+            version="0.1.0",
+            status="healthy",
+            wheel_sha256="a" * 64,
+        )
+        lifecycle = Mock()
+        lifecycle.installed.return_value = (plugin,)
+        lifecycle.info.return_value = plugin
+        stdout = io.StringIO()
+
+        with patch("wavebench.cli.PluginLifecycle", return_value=lifecycle):
+            with redirect_stdout(stdout):
+                list_code = main(["plugin", "installed"])
+                info_code = main(["plugin", "info", "example.scope", "--installed"])
+
+        self.assertEqual((list_code, info_code), (0, 0))
+        output = stdout.getvalue()
+        self.assertIn("example.scope\twavebench-example-scope\t0.1.0\thealthy", output)
+        self.assertIn("wheel_sha256=" + "a" * 64, output)
+
+    def test_plugin_lifecycle_mutation_prints_result(self):
+        lifecycle = Mock()
+        lifecycle.install.return_value = LifecycleResult(
+            "would-install",
+            "example.scope",
+            "wavebench-example-scope",
+            "0.1.0",
+        )
+        stdout = io.StringIO()
+
+        with patch("wavebench.cli.PluginLifecycle", return_value=lifecycle):
+            with redirect_stdout(stdout):
+                code = main(["plugin", "install", "plugin.whl", "--dry-run"])
+
+        self.assertEqual(code, 0)
+        lifecycle.install.assert_called_once_with("plugin.whl", dry_run=True)
+        self.assertIn("status=would-install", stdout.getvalue())
 
     def test_plugin_doctor_prints_ok_records(self):
         stdout = io.StringIO()

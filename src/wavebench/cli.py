@@ -28,6 +28,10 @@ from .cli_output import (
     _print_plugin_doctor,
     _print_plugin_info,
     _print_plugin_list,
+    _print_plugin_package,
+    _print_installed_plugin,
+    _print_installed_plugins,
+    _print_lifecycle_result,
     _print_scpi_doctor,
     _print_scpi_probe_result,
     _print_scpi_plugin_info,
@@ -45,6 +49,8 @@ from .mcp_http import (
     serve_mcp_http,
 )
 from .plugins.market import load_market_index
+from .plugins.lifecycle import PluginLifecycle
+from .plugins.package_inspect import inspect_plugin_package
 from .plugins.api import PluginDoctorRecord
 from .plugins.registry import build_plugin_registry, has_doctor_errors, plugin_doctor_records
 from .plugins.scpi import has_scpi_doctor_errors, load_scpi_plugin, probe_scpi_plugin, scpi_plugin_doctor_records
@@ -164,6 +170,51 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         if args.domain == "plugin":
+            lifecycle_commands = {
+                "install",
+                "installed",
+                "remove",
+                "upgrade",
+                "downgrade",
+                "recover",
+            }
+            if args.command == "package":
+                if args.package_command == "check":
+                    import tempfile
+
+                    with tempfile.TemporaryDirectory(prefix="wavebench-plugin-check-") as temporary:
+                        package = inspect_plugin_package(
+                            args.path,
+                            build_directory=temporary,
+                            python_executable=sys.executable,
+                        )
+                    _print_plugin_package(package)
+                    return 0
+            if args.command in lifecycle_commands or (
+                args.command == "info" and args.installed
+            ):
+                lifecycle = PluginLifecycle(python_executable=sys.executable)
+                if args.command == "installed":
+                    _print_installed_plugins(lifecycle.installed())
+                    return 0
+                if args.command == "info":
+                    _print_installed_plugin(lifecycle.info(args.driver_id))
+                    return 0
+                if args.command == "install":
+                    _print_lifecycle_result(lifecycle.install(args.path, dry_run=args.dry_run))
+                    return 0
+                if args.command == "remove":
+                    _print_lifecycle_result(lifecycle.remove(args.driver_id, dry_run=args.dry_run))
+                    return 0
+                if args.command == "upgrade":
+                    _print_lifecycle_result(lifecycle.upgrade(args.path, dry_run=args.dry_run))
+                    return 0
+                if args.command == "downgrade":
+                    _print_lifecycle_result(lifecycle.downgrade(args.path, dry_run=args.dry_run))
+                    return 0
+                if args.command == "recover":
+                    _print_lifecycle_result(lifecycle.recover())
+                    return 0
             if getattr(args, "load", False):
                 executable_registry = build_instrument_registry()
                 if args.command == "info":

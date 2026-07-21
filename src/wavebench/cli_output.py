@@ -18,6 +18,8 @@ from .instruments.api import InstrumentDescriptor
 from .instruments.models import DmmReading, PowerProtectionStatus, PowerStatus, SourceStatus, WaveformData
 from .plugins.api import InstrumentPlugin, PluginDoctorRecord
 from .plugins.market import MarketPlugin
+from .plugins.lifecycle import InstalledPlugin, LifecycleResult
+from .plugins.package_inspect import PluginPackage
 from .plugins.scpi import DeclarativeScpiPlugin, ScpiProbeResult
 from .services.run_plan import RunPlan, RunStep
 
@@ -51,6 +53,51 @@ def _print_plugin_info(plugin: InstrumentPlugin) -> None:
         print("idn_patterns=" + ", ".join(plugin.idn_patterns))
     if plugin.config_fields:
         print("config_fields=" + ", ".join(plugin.config_fields))
+
+
+def _print_plugin_package(package: PluginPackage) -> None:
+    print("package_status=valid / 插件包状态=有效")
+    print(f"source_kind={package.source_kind}")
+    print(f"distribution={package.distribution}")
+    print(f"version={package.version}")
+    print("driver_ids=" + ", ".join(package.driver_ids))
+    print(f"sha256={package.sha256}")
+    print(f"files={package.file_count}")
+    print(f"size_bytes={package.size_bytes}")
+    print(f"dependencies={len(package.dependencies)}")
+
+
+def _print_installed_plugins(plugins: tuple[InstalledPlugin, ...]) -> None:
+    if not plugins:
+        print("no_installed_plugins / 未发现已安装插件")
+        return
+    print("driver_id\tdistribution\tversion\tstatus\tdetail")
+    for plugin in plugins:
+        print(
+            f"{plugin.driver_id}\t{plugin.distribution}\t{plugin.version}\t"
+            f"{plugin.status}\t{plugin.detail}"
+        )
+
+
+def _print_installed_plugin(plugin: InstalledPlugin) -> None:
+    print(f"driver_id={plugin.driver_id}")
+    print(f"distribution={plugin.distribution}")
+    print(f"version={plugin.version}")
+    print(f"status={plugin.status}")
+    if plugin.wheel_sha256:
+        print(f"wheel_sha256={plugin.wheel_sha256}")
+    if plugin.detail:
+        print(f"detail={plugin.detail}")
+
+
+def _print_lifecycle_result(result: LifecycleResult) -> None:
+    print(f"status={result.status}")
+    if result.driver_id:
+        print(f"driver_id={result.driver_id}")
+    if result.distribution:
+        print(f"distribution={result.distribution}")
+    if result.version:
+        print(f"version={result.version}")
 
 
 def _print_instrument_descriptor(descriptor: InstrumentDescriptor) -> None:

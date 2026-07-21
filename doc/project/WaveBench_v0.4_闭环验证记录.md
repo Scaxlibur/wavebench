@@ -90,7 +90,7 @@ python -m wavebench source arb-load \
   --config <lab-config.toml> \
   --channel 1 \
   --file data/arb/triangle_1024.npy \
-  --name REI_TRI \
+  --name EXAMPLE_TRI \
   --amplitude 1.0 \
   --frequency 1000 \
   --offset 0 \

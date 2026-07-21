@@ -104,15 +104,68 @@ def build_parser() -> argparse.ArgumentParser:
         help="Show one plugin metadata record / 显示单个插件元数据",
     )
     plugin_info.add_argument("driver_id", help="Plugin driver id, e.g. rigol.dg4202")
-    plugin_info.add_argument(
+    plugin_info_source = plugin_info.add_mutually_exclusive_group()
+    plugin_info_source.add_argument(
         "--include-entry-points",
         action="store_true",
         help="Also load Python entry points from wavebench.drivers / 同时加载 wavebench.drivers 入口点",
     )
-    plugin_info.add_argument(
+    plugin_info_source.add_argument(
         "--load",
         action="store_true",
         help="Load the selected executable instrument plugin / 加载选中的可执行仪器插件",
+    )
+    plugin_info_source.add_argument(
+        "--installed",
+        action="store_true",
+        help="Read only the managed-install ledger / 仅查询受管安装账本",
+    )
+    plugin_package = plugin_sub.add_parser(
+        "package",
+        help="Inspect trusted local plugin packages / 检查受信任的本地插件包",
+    )
+    plugin_package_sub = plugin_package.add_subparsers(
+        dest="package_command",
+        required=True,
+    )
+    plugin_package_check = plugin_package_sub.add_parser(
+        "check",
+        help="Validate a source directory or wheel without installing / "
+        "校验源码目录或 wheel，但不安装",
+    )
+    plugin_package_check.add_argument("path", help="Local source directory or wheel / 本地源码目录或 wheel")
+    plugin_install = plugin_sub.add_parser(
+        "install",
+        help="Install a trusted local plugin in the current venv / "
+        "在当前虚拟环境安装受信任的本地插件",
+    )
+    plugin_install.add_argument("path", help="Local source directory or wheel / 本地源码目录或 wheel")
+    plugin_install.add_argument("--dry-run", action="store_true", help="Validate only / 仅校验")
+    plugin_sub.add_parser(
+        "installed",
+        help="List managed and unmanaged instrument distributions / "
+        "列出受管与未受管的仪器分发",
+    )
+    plugin_remove = plugin_sub.add_parser(
+        "remove",
+        help="Remove one healthy managed plugin / 移除一个健康的受管插件",
+    )
+    plugin_remove.add_argument("driver_id", help="Managed canonical driver id / 受管 canonical driver ID")
+    plugin_remove.add_argument("--dry-run", action="store_true", help="Validate only / 仅校验")
+    for command in ("upgrade", "downgrade"):
+        lifecycle_parser = plugin_sub.add_parser(
+            command,
+            help=(
+                "Replace a managed plugin with an explicit local wheel / "
+                "用明确的本地 wheel 替换受管插件"
+            ),
+        )
+        lifecycle_parser.add_argument("path", help="Local source directory or wheel / 本地源码目录或 wheel")
+        lifecycle_parser.add_argument("--dry-run", action="store_true", help="Validate only / 仅校验")
+    plugin_sub.add_parser(
+        "recover",
+        help="Inspect and recover a durable plugin transaction / "
+        "检查并恢复持久化插件事务",
     )
     plugin_doctor = plugin_sub.add_parser(
         "doctor",
@@ -426,7 +479,7 @@ def build_parser() -> argparse.ArgumentParser:
     source_arb_load = source_sub.add_parser("arb-load", help="Load a DG4202 arbitrary waveform from .csv/.npy; dry-run can export offline payloads")
     source_arb_load.add_argument("--channel", type=int, required=True)
     source_arb_load.add_argument("--file", required=True, help="Input waveform file: .csv or .npy")
-    source_arb_load.add_argument("--name", required=True, help="Instrument waveform name, e.g. REI_ARB")
+    source_arb_load.add_argument("--name", required=True, help="Instrument waveform name, e.g. EXAMPLE_ARB")
     source_arb_load.add_argument("--amplitude", type=float, required=True, help="Target output amplitude in Vpp")
     source_arb_load.add_argument("--frequency", type=float, default=None, help="Arbitrary waveform playback frequency in Hz; required when uploading")
     source_arb_load.add_argument("--offset", type=float, default=0.0, help="Target output offset in V")
