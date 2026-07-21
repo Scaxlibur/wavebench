@@ -31,6 +31,13 @@ def vertical_scale_from_vpp(target_vpp: float, *, target_divisions: float = 5.0)
         raise ConfigError("target vertical divisions must be > 0")
     return target_vpp / target_divisions
 
+
+def _strict_bool(table: dict[str, object], key: str, default: bool, *, path: str) -> bool:
+    value = table.get(key, default)
+    if not isinstance(value, bool):
+        raise ConfigError(f"{path}.{key} must be a boolean")
+    return value
+
 @dataclass(frozen=True)
 class ConnectionConfig:
     backend: str
@@ -100,6 +107,11 @@ class DmmConfig:
     settle_ms_before_read: int = 0
     settle_ms_after_function_change: int = 500
     options: dict[str, object] = field(default_factory=dict)
+    write_termination: str = "lf"
+    read_termination: str = "lf"
+    xonxoff: bool = False
+    rtscts: bool = False
+    dsrdtr: bool = False
 
 @dataclass(frozen=True)
 class OutputConfig:
@@ -383,6 +395,11 @@ class WaveBenchConfig:
                 settle_ms_before_read=dmm.settle_ms_before_read,
                 settle_ms_after_function_change=dmm.settle_ms_after_function_change,
                 options=dmm.options,
+                write_termination=dmm.write_termination,
+                read_termination=dmm.read_termination,
+                xonxoff=dmm.xonxoff,
+                rtscts=dmm.rtscts,
+                dsrdtr=dmm.dsrdtr,
             ),
             quality=self.quality,
             safety_limits=self.safety_limits,
@@ -450,6 +467,11 @@ def load_config(path: str | Path = "wavebench.toml") -> WaveBenchConfig:
                     dmm_raw.get("settle_ms_after_function_change", 500)
                 ),
                 options=_instrument_options(dmm_raw, "dmm"),
+                write_termination=str(dmm_raw.get("write_termination", "lf")),
+                read_termination=str(dmm_raw.get("read_termination", "lf")),
+                xonxoff=_strict_bool(dmm_raw, "xonxoff", False, path="dmm"),
+                rtscts=_strict_bool(dmm_raw, "rtscts", False, path="dmm"),
+                dsrdtr=_strict_bool(dmm_raw, "dsrdtr", False, path="dmm"),
             )
         config = WaveBenchConfig(
             connection=ConnectionConfig(
@@ -585,6 +607,10 @@ def load_config(path: str | Path = "wavebench.toml") -> WaveBenchConfig:
             raise ConfigError("dmm.parity must be N, O, E, NONE, ODD, or EVEN")
         if config.dmm.stopbits not in {1.0, 1.5, 2.0}:
             raise ConfigError("dmm.stopbits must be 1, 1.5, or 2")
+        if config.dmm.write_termination.strip().lower() not in {"lf", "crlf"}:
+            raise ConfigError("dmm.write_termination must be lf or crlf")
+        if config.dmm.read_termination.strip().lower() not in {"lf", "crlf"}:
+            raise ConfigError("dmm.read_termination must be lf or crlf")
         if config.dmm.timeout_ms <= 0:
             raise ConfigError("dmm.timeout_ms must be > 0")
         if config.dmm.settle_ms_before_read < 0:

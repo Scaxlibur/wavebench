@@ -171,11 +171,11 @@ driver = "dm3058"
 
 # Transport backend for the DMM. Keep this separate from the device driver:
 # the DMM driver owns SCPI; the backend owns LAN/VISA or serial bytes.
-# Use "lan" for DM3058 over Ethernet/VISA, "serial" for the older RS232 path.
+# Use "lan" for DM3058 over Ethernet/VISA, or "serial" for RS-232.
 backend = "lan"
 
-# DM3058 LAN resource verified from WSL. The RS232 skeleton remains available
-# with backend="serial" and resource="/dev/ttyUSB0" when the wiring is reliable.
+# DM3058 LAN resource verified from WSL. For RS-232, prefer the stable Linux
+# path under /dev/serial/by-id rather than an enumeration-dependent ttyUSB name.
 resource = "TCPIP::192.0.2.15::INSTR"
 
 # Serial-only settings. Ignored by LAN/VISA backends, kept here so switching
@@ -185,6 +185,14 @@ bytesize = 8
 parity = "N"
 stopbits = 1
 timeout_ms = 3000
+
+# Serial line framing. DM3058 RS-232 hardware was verified with CRLF commands
+# and LF-terminated responses. Flow control remains disabled.
+write_termination = "crlf"
+read_termination = "lf"
+xonxoff = false
+rtscts = false
+dsrdtr = false
 
 # Optional DMM stabilization wait before each reading. Set 0 for no wait.
 # 每次万用表读数前的可选稳定等待时间。设为 0 表示不等待。

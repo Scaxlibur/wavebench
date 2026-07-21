@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from wavebench.config import DmmConfig
-from wavebench.errors import ConnectionError, InstrumentError
+from wavebench.errors import ConfigError, ConnectionError, InstrumentError
 from wavebench.logging import CommandLogger
 
 
@@ -17,15 +17,27 @@ _PARITY_ALIASES = {
     "EVEN": "E",
 }
 
+_TERMINATIONS = {
+    "LF": b"\n",
+    "CRLF": b"\r\n",
+}
+
 
 @dataclass
 class SerialTransport:
     resource: str
     session: Any
     logger: CommandLogger
+    write_termination: bytes = b"\n"
+    read_termination: bytes = b"\n"
 
     @classmethod
     def open(cls, config: DmmConfig, logger: CommandLogger | None = None) -> "SerialTransport":
+        try:
+            write_termination = _TERMINATIONS[config.write_termination.strip().upper()]
+            read_termination = _TERMINATIONS[config.read_termination.strip().upper()]
+        except (AttributeError, KeyError) as exc:
+            raise ConfigError("serial terminations must be lf or crlf") from exc
         try:
             import serial
         except ImportError as exc:
@@ -42,10 +54,19 @@ class SerialTransport:
                 stopbits=config.stopbits,
                 timeout=config.timeout_ms / 1000.0,
                 write_timeout=config.timeout_ms / 1000.0,
+                xonxoff=config.xonxoff,
+                rtscts=config.rtscts,
+                dsrdtr=config.dsrdtr,
             )
         except Exception as exc:
             raise ConnectionError(f"failed to open serial instrument {config.resource}: {exc}") from exc
-        return cls(resource=config.resource, session=session, logger=logger)
+        return cls(
+            resource=config.resource,
+            session=session,
+            logger=logger,
+            write_termination=write_termination,
+            read_termination=read_termination,
+        )
 
     def record_event(self, direction: str, text: str) -> None:
         self.logger.record(direction, text)
@@ -53,10 +74,10 @@ class SerialTransport:
     def write(self, command: str) -> None:
         self.logger.record("write", command)
         try:
-            payload = command.encode("ascii")
-            if not payload.endswith(b"\n"):
-                payload += b"\n"
-            self.session.write(payload)
+            payload = command.rstrip("\r\n").encode("ascii") + self.write_termination
+            written = self.session.write(payload)
+            if written is not None and written != len(payload):
+                raise OSError(f"short serial write: wrote {written} of {len(payload)} bytes")
             if hasattr(self.session, "flush"):
                 self.session.flush()
         except Exception as exc:
@@ -75,7 +96,20 @@ class SerialTransport:
         self.logger.record("query", command)
         try:
             self.write(command)
-            response = self.session.readline().decode("ascii", errors="replace").strip()
+            if hasattr(self.session, "read_until"):
+                raw = self.session.read_until(self.read_termination)
+            else:
+                raw = self.session.readline()
+            if not raw:
+                raise TimeoutError(f"timed out waiting for {self.read_termination!r}")
+            if not raw.endswith(self.read_termination):
+                raise TimeoutError(
+                    f"serial response ended before {self.read_termination!r}; received {len(raw)} bytes"
+                )
+            response_bytes = raw[: -len(self.read_termination)]
+            if self.read_termination == b"\n" and response_bytes.endswith(b"\r"):
+                response_bytes = response_bytes[:-1]
+            response = response_bytes.decode("ascii")
         except Exception as exc:
             raise self._instrument_io_error("query", command, exc) from exc
         self.logger.record("response", response)

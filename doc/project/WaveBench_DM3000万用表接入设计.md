@@ -41,30 +41,44 @@ resource = "TCPIP::192.0.2.13::INSTR"
 timeout_ms = 3000
 ```
 
-DM3000 / RS232 路径（保留 skeleton，实机暂缓）：
+DM3000 / DM3058 RS232 路径：
 
 ```toml
 [dmm]
-driver = "dm3000"
+driver = "dm3058"
 backend = "serial"
-resource = "/dev/ttyUSB0"
+resource = "/dev/serial/by-id/usb-<adapter-id>"
 baudrate = 9600
 bytesize = 8
 parity = "N"
 stopbits = 1
-timeout_ms = 1000
+timeout_ms = 3000
+write_termination = "crlf"
+read_termination = "lf"
+xonxoff = false
+rtscts = false
+dsrdtr = false
 ```
 
 这里 `driver` 和 `backend` 是分开的：
 
 - `driver=dm3000|dm3058`：决定用哪些 SCPI 命令、如何解析返回值；
-- `backend=serial|lan`：决定如何打开 `/dev/ttyUSB0` 或 `TCPIP::...::INSTR`、如何处理 I/O。
+- `backend=serial|lan`：决定如何打开 `/dev/serial/by-id/...` 或 `TCPIP::...::INSTR`、如何处理 I/O。
 
-DM3058 LAN 已从 WSL 验证 `*IDN?`：
+DM3058 LAN 与 RS232 均已验证 `*IDN?`：
 
 ```text
 Rigol Technologies,DM3058,DM3L184650025,01.01.00.02.03.01
 ```
+
+2026-07-21 的 RS232 复测使用 CH340、9600 8N1、无软/硬件流控、写
+`CRLF`、读 `LF`，连续 20 次 `*IDN?` 全部成功。此前只写 LF 或 CR 的
+不稳定现象来自命令行终止不完整，不再归因于驱动或接口锈蚀。
+
+接入 WaveBench 后，正式 `SerialTransport -> DM3000Dmm -> DmmService` 路径
+再次完成同一会话 20/20 次 `*IDN?`，延迟 72.7–80.8 ms；`doctor` 能按
+serial backend 正确探测，当前功能查询为 DCV，单次只读 DCV 返回
+`-1.628406E-04 V`。该结果只验收通信与当前挡位读取，不代表外部标准源精度校准。
 
 ## 第一阶段 CLI
 
@@ -77,11 +91,11 @@ wavebench dmm read acv --resource TCPIP::192.0.2.13::INSTR
 wavebench dmm read res --resource TCPIP::192.0.2.13::INSTR
 ```
 
-RS232 / DM3000 skeleton：
+RS232 / DM3000 或 DM3058：
 
 ```bash
-wavebench dmm idn --resource /dev/ttyUSB0
-wavebench dmm read dcv --resource /dev/ttyUSB0
+wavebench dmm idn --resource /dev/serial/by-id/usb-<adapter-id>
+wavebench dmm read dcv --resource /dev/serial/by-id/usb-<adapter-id>
 ```
 
 `read` 的返回保持窄而清楚：函数、数值、单位、原始字符串。

@@ -395,6 +395,71 @@ settle_ms_after_output = 1000
             self.assertEqual(updated.power.resource, "TCPIP::192.168.1.50::INSTR")
 
 class DmmConfigTests(unittest.TestCase):
+    def test_loads_dm3058_serial_line_endings_and_flow_control(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "wavebench.toml"
+            path.write_text('''
+[connection]
+resource = "TCPIP::scope::INSTR"
+[scope]
+[dmm]
+driver = "dm3058"
+backend = "serial"
+resource = "/dev/serial/by-id/usb-test"
+baudrate = 9600
+bytesize = 8
+parity = "N"
+stopbits = 1
+write_termination = "crlf"
+read_termination = "lf"
+xonxoff = false
+rtscts = false
+dsrdtr = false
+''', encoding="utf-8")
+
+            config = load_config(path)
+
+            self.assertEqual(config.dmm.write_termination, "crlf")
+            self.assertEqual(config.dmm.read_termination, "lf")
+            self.assertFalse(config.dmm.xonxoff)
+            self.assertFalse(config.dmm.rtscts)
+            self.assertFalse(config.dmm.dsrdtr)
+
+    def test_rejects_unknown_dmm_serial_termination(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "wavebench.toml"
+            path.write_text('''
+[connection]
+resource = "TCPIP::scope::INSTR"
+[scope]
+[dmm]
+driver = "dm3058"
+backend = "serial"
+resource = "/dev/ttyUSB0"
+write_termination = "nul"
+''', encoding="utf-8")
+
+            with self.assertRaisesRegex(Exception, "dmm.write_termination"):
+                load_config(path)
+
+    def test_rejects_non_boolean_dmm_flow_control(self):
+        for field in ("xonxoff", "rtscts", "dsrdtr"):
+            with self.subTest(field=field), tempfile.TemporaryDirectory() as tmp:
+                path = Path(tmp) / "wavebench.toml"
+                path.write_text(f'''
+[connection]
+resource = "TCPIP::scope::INSTR"
+[scope]
+[dmm]
+driver = "dm3058"
+backend = "serial"
+resource = "/dev/serial/by-id/usb-test"
+{field} = "false"
+''', encoding="utf-8")
+
+                with self.assertRaisesRegex(Exception, f"dmm.{field} must be a boolean"):
+                    load_config(path)
+
     def test_loads_dm3058_lan_backend(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "wavebench.toml"
@@ -489,6 +554,36 @@ settle_ms_after_function_change = -1
         updated = config.with_dmm_resource("TCPIP::192.168.123.5::INSTR")
         self.assertEqual(updated.dmm.settle_ms_before_read, 500)
         self.assertEqual(updated.dmm.settle_ms_after_function_change, 750)
+
+    def test_dmm_resource_override_preserves_serial_framing(self):
+        config = WaveBenchConfig(
+            connection=ConnectionConfig("lan", "TCPIP::127.0.0.1::INSTR", 100, 100),
+            scope=ScopeConfig("rtm2032", None, 1, False, True),
+            autoscale=AutoscaleConfig(True, True),
+            waveform=WaveformConfig("real", "lsbf", "dmax"),
+            output=OutputConfig(Path("data/raw"), "timestamp_label", True, True, True, True, False),
+            source_path=Path("test.toml"),
+            dmm=DmmConfig(
+                "dm3058",
+                "/dev/serial/by-id/old",
+                "serial",
+                9600,
+                8,
+                "N",
+                1,
+                3000,
+                write_termination="crlf",
+                read_termination="lf",
+                rtscts=False,
+            ),
+        )
+
+        updated = config.with_dmm_resource("/dev/serial/by-id/new")
+
+        self.assertEqual(updated.dmm.backend, "serial")
+        self.assertEqual(updated.dmm.write_termination, "crlf")
+        self.assertEqual(updated.dmm.read_termination, "lf")
+        self.assertFalse(updated.dmm.rtscts)
 
 
 class InstrumentPluginConfigTests(unittest.TestCase):

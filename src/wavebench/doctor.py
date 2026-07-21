@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Callable, Sequence
 
-from .config import WaveBenchConfig
+from .config import DmmConfig, WaveBenchConfig
 from .discovery import DEFAULT_DISCOVERY_PORTS, DiscoveryResult, discover_instruments
 from .errors import ConfigError
 from .instruments.registry import resolve_instrument_descriptor
+from .transport.serial_transport import SerialTransport
 
 
 @dataclass(frozen=True)
@@ -15,6 +16,7 @@ class DoctorTarget:
     driver: str
     resource: str | None
     expected_idn_tokens: tuple[str, ...] = ()
+    serial_config: DmmConfig | None = None
 
 
 @dataclass(frozen=True)
@@ -46,9 +48,8 @@ def doctor_records(
     discoverer: InstrumentDiscoverer | None = None,
 ) -> list[DoctorRecord]:
     timeout = timeout_ms or config.connection.timeout_ms
-    probe = idn_probe or query_resource_idn
     targets = _doctor_targets(config)
-    records = [_doctor_target(target, timeout_ms=timeout, idn_probe=probe) for target in targets]
+    records = [_doctor_target(target, timeout_ms=timeout, idn_probe=idn_probe) for target in targets]
     if discover_subnet:
         discovery_results = (discoverer or discover_instruments)(
             subnet=discover_subnet,
@@ -100,7 +101,26 @@ def query_resource_idn(resource: str, timeout_ms: int) -> str | None:
                 pass
 
 
-def _doctor_target(target: DoctorTarget, *, timeout_ms: int, idn_probe: IdnProbe) -> DoctorRecord:
+def query_target_idn(target: DoctorTarget, timeout_ms: int) -> str | None:
+    if target.serial_config is None:
+        return query_resource_idn(target.resource or "", timeout_ms)
+    transport = None
+    try:
+        transport = SerialTransport.open(replace(target.serial_config, timeout_ms=timeout_ms))
+        return transport.query("*IDN?") or None
+    except Exception:
+        return None
+    finally:
+        if transport is not None:
+            transport.close()
+
+
+def _doctor_target(
+    target: DoctorTarget,
+    *,
+    timeout_ms: int,
+    idn_probe: IdnProbe | None,
+) -> DoctorRecord:
     resource = target.resource or ""
     if not resource:
         return DoctorRecord(
@@ -112,7 +132,11 @@ def _doctor_target(target: DoctorTarget, *, timeout_ms: int, idn_probe: IdnProbe
             message="resource not configured / 资源未配置",
             suggestion="set the instrument resource in wavebench.toml / 在 wavebench.toml 中配置资源",
         )
-    idn = idn_probe(resource, timeout_ms)
+    idn = (
+        idn_probe(resource, timeout_ms)
+        if idn_probe is not None
+        else query_target_idn(target, timeout_ms)
+    )
     if not idn:
         return DoctorRecord(
             severity="error",
@@ -178,6 +202,7 @@ def _doctor_targets(config: WaveBenchConfig) -> list[DoctorTarget]:
                 driver=config.dmm.driver,
                 resource=config.dmm.resource,
                 expected_idn_tokens=_driver_expected_tokens(config.dmm.driver),
+                serial_config=config.dmm if config.dmm.backend.strip().lower() == "serial" else None,
             )
         )
     return targets
