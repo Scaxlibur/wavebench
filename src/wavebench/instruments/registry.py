@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from importlib.metadata import EntryPoint, entry_points
 import re
 
+from packaging.utils import canonicalize_name
+
 from wavebench import __version__
 from wavebench.errors import ConfigError
 from wavebench.plugins.api import PluginKind, PluginLoadError
@@ -15,6 +17,7 @@ from .api import (
 )
 from .builtin import BUILTIN_INSTRUMENTS
 from .capabilities import CAPABILITY_METHODS
+from .migrations import BUILTIN_MIGRATION_DISTRIBUTIONS
 
 ENTRY_POINT_GROUP = "wavebench.instruments"
 
@@ -52,13 +55,17 @@ class InstrumentRegistry:
         expected_kind: PluginKind | None = None,
     ) -> InstrumentDescriptor:
         normalized = reference.strip()
+        matching = [
+            entry_point
+            for entry_point in self.external_entry_points
+            if entry_point.name == normalized
+        ]
         descriptor = self._find_builtin(normalized)
-        if descriptor is None:
-            matching = [
-                entry_point
-                for entry_point in self.external_entry_points
-                if entry_point.name == normalized
-            ]
+        if normalized in BUILTIN_MIGRATION_DISTRIBUTIONS and matching:
+            if len(matching) > 1:
+                raise ConfigError(f"duplicate instrument entry point: {normalized}")
+            descriptor = self._load_external(matching[0])
+        elif descriptor is None:
             if not matching:
                 raise ConfigError(
                     f"instrument driver {reference!r} is not installed; install its package "
@@ -89,7 +96,16 @@ class InstrumentRegistry:
             try:
                 descriptor = self._load_external(entry_point)
                 _validate_descriptor(descriptor, expected_kind=None)
-                _assert_no_reference_conflicts(descriptor, tuple(descriptors))
+                remaining = descriptors
+                if descriptor.driver_id in BUILTIN_MIGRATION_DISTRIBUTIONS:
+                    remaining = [
+                        item
+                        for item in descriptors
+                        if not (
+                            item.driver_id == descriptor.driver_id and item.origin == "builtin"
+                        )
+                    ]
+                _assert_no_reference_conflicts(descriptor, tuple(remaining))
             except Exception as exc:
                 errors.append(
                     PluginLoadError(
@@ -98,6 +114,7 @@ class InstrumentRegistry:
                     )
                 )
                 continue
+            descriptors = remaining
             descriptors.append(descriptor)
         return InstrumentRegistryLoadResult(tuple(descriptors), tuple(errors))
 
@@ -216,6 +233,13 @@ def _assert_external_does_not_override_builtins(
         for reference in (builtin.driver_id, *builtin.aliases)
     }
     conflicts = sorted(set((descriptor.driver_id, *descriptor.aliases)) & builtin_references)
+    expected_distribution = BUILTIN_MIGRATION_DISTRIBUTIONS.get(descriptor.driver_id)
+    if (
+        conflicts == [descriptor.driver_id]
+        and expected_distribution is not None
+        and canonicalize_name(descriptor.distribution) == canonicalize_name(expected_distribution)
+    ):
+        return
     if conflicts:
         raise ConfigError(
             f"external instrument driver {descriptor.driver_id!r} conflicts with built-in "

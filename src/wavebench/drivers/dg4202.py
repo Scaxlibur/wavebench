@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from wavebench.arbitrary import DG4000DacBlock
 from wavebench.errors import DataError, InstrumentError
+from wavebench.instruments.dg4000 import DG4000DacBlock
 from wavebench.instruments.models import ArbitraryQueryProbeResult, SourceStatus
 
 

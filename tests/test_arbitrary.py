@@ -6,6 +6,7 @@ import numpy as np
 
 from wavebench.arbitrary import build_dg4000_dac14_binary_block, load_arbitrary_waveform, normalize_peak, normalized_to_dac14, validate_waveform_name, write_arbitrary_payload_json, write_dg4000_dac14_binary_block
 from wavebench.errors import DataError
+from wavebench.instruments import DG4000ByteOrder, DG4000DacBlock
 
 
 class ArbitraryWaveformTests(unittest.TestCase):
@@ -74,6 +75,8 @@ class ArbitraryWaveformTests(unittest.TestCase):
 
             block = build_dg4000_dac14_binary_block(waveform)
 
+            self.assertIsInstance(block, DG4000DacBlock)
+            self.assertIs(block.byte_order, DG4000ByteOrder.LITTLE)
             self.assertEqual(block.points, 3)
             self.assertEqual(block.data_bytes, 6)
             self.assertTrue(block.command.startswith(b":DATA:DAC VOLATILE,#16"))

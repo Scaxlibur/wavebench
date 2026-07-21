@@ -12,6 +12,7 @@ from .models import (
     SourceStatus,
     WaveformData,
 )
+from .dg4000 import DG4000DacBlock
 
 
 @runtime_checkable
@@ -116,7 +117,17 @@ class SourceDriver(InstrumentDriver, Protocol):
         check_errors: bool = True,
     ) -> SourceStatus: ...
 
-    def upload_dg4000_dac14_block(self, **kwargs: Any) -> SourceStatus: ...
+    def upload_dg4000_dac14_block(
+        self,
+        *,
+        channel: int,
+        block: DG4000DacBlock,
+        playback_frequency_hz: float,
+        amplitude_vpp: float,
+        offset_v: float = 0.0,
+        output_on: bool = False,
+        check_errors: bool = True,
+    ) -> SourceStatus: ...
 
     def probe_arbitrary_queries(self, channel: int) -> list[ArbitraryQueryProbeResult]: ...
 

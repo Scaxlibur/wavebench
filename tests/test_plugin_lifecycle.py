@@ -45,6 +45,8 @@ def _plugin_wheel(
     version: str,
     driver_id: str = "example.scope",
     distribution: str = "wavebench-example-scope",
+    kind: str = "scope",
+    capabilities: tuple[str, ...] = ("scope.idn",),
     broken_descriptor: bool = False,
     include_entry_point: bool = True,
 ) -> Path:
@@ -76,12 +78,12 @@ class Driver:
 def descriptor():
     return InstrumentDescriptor(
         driver_id={driver_id!r},
-        kind="scope",
-        display_name="Example Scope",
+        kind={kind!r},
+        display_name="Example Instrument",
         manufacturer="Example",
         models=("EX1",),
         aliases=(),
-        capabilities=("scope.idn",),
+        capabilities={capabilities!r},
         idn_patterns=("EXAMPLE,SCOPE",),
         backends=("pyvisa",),
         option_specs=(),
@@ -228,6 +230,69 @@ def test_dry_run_refuses_unmanaged_distribution_without_writing_state(tmp_path):
         lifecycle.install(wheel, dry_run=True)
 
     assert not lifecycle.state_dir.exists()
+
+
+def test_lifecycle_allows_only_the_declared_builtin_migration_canonical(tmp_path):
+    python = _target_venv(tmp_path)
+    dg4202_capabilities = (
+        "source.idn",
+        "source.errors",
+        "source.status",
+        "source.set_frequency",
+        "source.set_function",
+        "source.set_amplitude_vpp",
+        "source.set_square_duty_cycle",
+        "source.output",
+        "source.arbitrary_probe",
+        "source.arbitrary_upload",
+    )
+    migration = _plugin_wheel(
+        tmp_path,
+        version="0.1.0",
+        driver_id="rigol.dg4202",
+        distribution="wavebench-rigol-dg4000",
+        kind="source",
+        capabilities=dg4202_capabilities,
+    )
+    forbidden = _plugin_wheel(
+        tmp_path,
+        version="0.1.0",
+        driver_id="rigol.ds1104",
+        distribution="wavebench-rigol-ds1104-override",
+    )
+    lifecycle = PluginLifecycle(python_executable=python)
+
+    assert lifecycle.install(migration, dry_run=True).status == "would-install"
+    with pytest.raises(ConfigError, match="conflicts with built-in"):
+        lifecycle.install(forbidden, dry_run=True)
+
+
+def test_migration_install_routes_canonical_and_remove_restores_builtin(tmp_path):
+    python = _target_venv(tmp_path)
+    wheel = _plugin_wheel(
+        tmp_path,
+        version="0.1.0",
+        driver_id="rigol.dg4202",
+        distribution="wavebench-rigol-dg4000",
+        kind="source",
+        capabilities=("source.idn",),
+    )
+    lifecycle = PluginLifecycle(python_executable=python)
+    resolve_script = """
+from wavebench.instruments.registry import build_instrument_registry
+registry = build_instrument_registry()
+canonical = registry.resolve('rigol.dg4202', expected_kind='source')
+alias = registry.resolve('dg4202', expected_kind='source')
+print(canonical.origin, canonical.distribution, alias.origin, alias.driver_id)
+"""
+
+    assert lifecycle.install(wheel).status == "installed"
+    installed = _run([str(python), "-I", "-c", resolve_script]).stdout.strip()
+    assert installed == "entry_point wavebench-rigol-dg4000 builtin rigol.dg4202"
+
+    assert lifecycle.remove("rigol.dg4202").status == "removed"
+    removed = _run([str(python), "-I", "-c", resolve_script]).stdout.strip()
+    assert removed == "builtin wavebench builtin rigol.dg4202"
 
 
 def test_install_status_and_remove_round_trip(tmp_path):

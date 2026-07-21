@@ -112,18 +112,22 @@ ID、操作名和缺失项。
 
 公共返回类型来自 `wavebench.instruments.models`，包括 `WaveformHeader`、`WaveformData`、`SourceStatus`、`PowerStatus`、`PowerMeasurement`、`PowerProtectionStatus` 和 `DmmReading`。不要复制另一套不兼容的数据模型。插件只需实现其声明能力对应的方法以及 `close()`，不必为了通过加载而实现整个 kind 的所有方法。
 
+DG4000 系列 source 插件还可从 `wavebench.instruments` 导入稳定的 `DG4000DacBlock` 与 `DG4000ByteOrder`。核心继续负责 CSV/NPY 加载、归一化、DAC14 编码、CLI、Service、安全限制和 artifact；插件只接收已校验的 binary-block 对象并负责厂商协议上传。不要从 `wavebench.arbitrary` 复制或导入核心工作流实现。
+
 factory 返回对象缺少已声明 capability 对应的方法时，核心会拒绝启用该插件并尝试关闭已创建资源。
 
 ## ID、alias 与兼容
 
 - 当前 V2 外置插件只支持 canonical ID，不接受 alias；内置 driver 可继续保留兼容 alias。
-- 外部插件不能覆盖内置 canonical ID 或 alias。
+- 除核心显式声明的迁移槽位外，外部插件不能覆盖内置 canonical ID 或 alias。
 - entry point 名与 descriptor `driver_id` 必须一致。
 - `kind` 必须与配置槽位一致。
 - 当前 WaveBench 版本必须落在插件声明的半开兼容区间内。
 - 第一阶段不解决同一 Python 环境中互斥 vendor SDK 依赖；出现真实需求后再评估独立进程或 RPC。
 
 DS1000Z 试点保留内置 fallback，因此旧配置 alias `ds1104` / `ds1000z` 继续选择内置实现；安装试点 wheel 后，使用 canonical `rigol.ds1000z` 才会显式选择外部包。这避免外部包覆盖内置 alias，也便于卸载后安全恢复。
+
+迁移槽位是核心内置的窄白名单，不是插件可自行请求的权限。首个槽位只允许 distribution `wavebench-rigol-dg4000` 通过 canonical ID `rigol.dg4202` 接管同名内置实现；短 alias `dg4202` 始终选择内置 fallback，卸载外置包后 canonical ID 也恢复到内置实现。distribution、canonical ID 或 alias 任一不匹配都会按普通冲突拒绝。
 
 ## 测试门槛
 

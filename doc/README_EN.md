@@ -36,6 +36,8 @@ Source-directory inspection executes the package's declared build backend in a s
 
 The local marketplace index remains read-only. It does not download or install plugins.
 
+Executable plugins use canonical IDs and cannot define aliases. Built-in IDs are protected except for narrowly allowlisted migration slots that bind one canonical ID to one distribution. For the DG4000 migration slot, `wavebench-rigol-dg4000` may provide `rigol.dg4202`; the short `dg4202` alias always selects the built-in fallback, and uninstalling the external distribution restores the built-in canonical implementation. DG4000 source plugins may import the stable `DG4000DacBlock` and `DG4000ByteOrder` types from `wavebench.instruments`; waveform loading, normalization, DAC14 encoding, services, and safety policy remain core responsibilities.
+
 ## Safety defaults
 
 - No implicit instrument reset.

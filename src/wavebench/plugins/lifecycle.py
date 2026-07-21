@@ -17,6 +17,7 @@ from packaging.version import Version
 
 from wavebench.errors import ConfigError
 from wavebench.instruments.builtin import BUILTIN_INSTRUMENTS
+from wavebench.instruments.migrations import BUILTIN_MIGRATION_DISTRIBUTIONS
 
 from .package_inspect import PluginPackage, inspect_plugin_package
 
@@ -625,6 +626,9 @@ print(json.dumps(payload, sort_keys=True))
             for reference in (descriptor.driver_id, *descriptor.aliases)
         }
         if driver_id in builtin_references:
+            expected_distribution = BUILTIN_MIGRATION_DISTRIBUTIONS.get(driver_id)
+            if package.normalized_distribution == canonicalize_name(expected_distribution or ""):
+                return
             raise ConfigError(
                 f"external plugin conflicts with built-in driver / "
                 f"外置插件与内置驱动冲突: {driver_id}"

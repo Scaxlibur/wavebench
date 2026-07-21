@@ -40,7 +40,9 @@ WaveBench 的受管插件命令只允许在当前 venv 中运行，拒绝系统 
 
 `plugin installed` 和 `info --installed` 会交叉核对受管账本、已安装 distribution、entry point、`RECORD` 与文件摘要，并报告 `healthy`、`missing`、`drifted`、`broken` 或 `unmanaged`。普通 `plugin info` 仍查看 metadata；只有 `--load` 才导入 V2 descriptor。descriptor 导入本身不应连接仪器；真正的 transport 在配置选中该 driver 并执行仪器命令时才创建。
 
-当前 V2 外置插件只接受 entry point 对应的 canonical ID，不解析插件自定义 alias。
+当前 V2 外置插件只接受 entry point 对应的 canonical ID，不解析插件自定义 alias。除 WaveBench 核心显式列出的迁移槽位外，外置插件不能覆盖内置 canonical ID 或 alias。
+
+迁移槽位按 canonical ID 与 distribution 双重白名单控制。例如安装受支持的 `wavebench-rigol-dg4000` 后，显式 canonical `rigol.dg4202` 选择外置实现，短 alias `dg4202` 仍选择内置兼容实现；卸载外置包后 canonical 也自动回退到内置实现。其他同名覆盖请求仍会被安装器拒绝。
 
 ## 配置
 

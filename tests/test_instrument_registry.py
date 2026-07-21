@@ -48,6 +48,19 @@ def make_descriptor(driver_id="example.scope", **changes):
     return replace(descriptor, **changes)
 
 
+def make_external_dg4202_descriptor(**changes):
+    builtin = build_instrument_registry(include_entry_points=False).resolve(
+        "rigol.dg4202",
+        expected_kind="source",
+    )
+    changes.setdefault("distribution", "wavebench-rigol-dg4000")
+    return replace(
+        builtin,
+        aliases=(),
+        **changes,
+    )
+
+
 def test_builtin_aliases_and_canonical_ids_resolve_to_same_descriptor():
     registry = build_instrument_registry(include_entry_points=False)
 
@@ -108,6 +121,68 @@ def test_registry_rejects_kind_version_and_builtin_override():
     override_result = InstrumentRegistry(external_entry_points=(override,)).load_all()
     assert len(override_result.load_errors) == 1
     assert "conflicts with built-in" in override_result.load_errors[0].message
+
+
+def test_migration_canonical_prefers_external_while_alias_keeps_builtin_fallback():
+    entry_point = FakeEntryPoint("rigol.dg4202", make_external_dg4202_descriptor())
+    registry = InstrumentRegistry(external_entry_points=(entry_point,))
+
+    canonical = registry.resolve("rigol.dg4202", expected_kind="source")
+    alias = registry.resolve("dg4202", expected_kind="source")
+    loaded = registry.load_all()
+
+    assert canonical.origin == "entry_point"
+    assert alias.origin == "builtin"
+    assert [item.origin for item in loaded.descriptors if item.driver_id == "rigol.dg4202"] == [
+        "entry_point"
+    ]
+    assert loaded.load_errors == ()
+
+
+def test_migration_canonical_falls_back_to_builtin_when_external_is_absent():
+    descriptor = build_instrument_registry(include_entry_points=False).resolve(
+        "rigol.dg4202",
+        expected_kind="source",
+    )
+
+    assert descriptor.origin == "builtin"
+
+
+def test_invalid_migration_plugin_does_not_remove_builtin_from_load_all():
+    descriptor = make_external_dg4202_descriptor(
+        capabilities=("source.unknown",),
+    )
+    entry_point = FakeEntryPoint("rigol.dg4202", descriptor)
+
+    loaded = InstrumentRegistry(external_entry_points=(entry_point,)).load_all()
+
+    matches = [item for item in loaded.descriptors if item.driver_id == "rigol.dg4202"]
+    assert [item.origin for item in matches] == ["builtin"]
+    assert len(loaded.load_errors) == 1
+
+
+def test_duplicate_migration_entry_point_keeps_first_external_and_reports_second():
+    first = FakeEntryPoint("rigol.dg4202", make_external_dg4202_descriptor())
+    second = FakeEntryPoint("rigol.dg4202", make_external_dg4202_descriptor())
+
+    loaded = InstrumentRegistry(external_entry_points=(first, second)).load_all()
+
+    matches = [item for item in loaded.descriptors if item.driver_id == "rigol.dg4202"]
+    assert [item.origin for item in matches] == ["entry_point"]
+    assert len(loaded.load_errors) == 1
+    assert "conflicts with loaded" in loaded.load_errors[0].message
+
+
+def test_migration_slot_rejects_wrong_distribution_for_same_canonical():
+    descriptor = make_external_dg4202_descriptor(distribution="not-the-allowed-package")
+    entry_point = FakeEntryPoint("rigol.dg4202", descriptor)
+
+    loaded = InstrumentRegistry(external_entry_points=(entry_point,)).load_all()
+
+    matches = [item for item in loaded.descriptors if item.driver_id == "rigol.dg4202"]
+    assert [item.origin for item in matches] == ["builtin"]
+    assert len(loaded.load_errors) == 1
+    assert "conflicts with built-in" in loaded.load_errors[0].message
 
 
 def test_registry_rejects_external_aliases_as_canonical_only():

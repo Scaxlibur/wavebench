@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import StrEnum
 import json
 from pathlib import Path
 from typing import Any
@@ -9,33 +8,10 @@ from typing import Any
 import numpy as np
 
 from wavebench.errors import DataError
+from wavebench.instruments.dg4000 import DG4000ByteOrder, DG4000DacBlock
 
 DAC14_MIN = 0
 DAC14_MAX = 16383
-
-
-class DG4000ByteOrder(StrEnum):
-    BIG = "big"
-    LITTLE = "little"
-
-
-@dataclass(frozen=True)
-class DG4000DacBlock:
-    command: bytes
-    points: int
-    data_bytes: int
-    byte_order: DG4000ByteOrder
-
-    @property
-    def header(self) -> bytes:
-        prefix = b":DATA:DAC VOLATILE,"
-        if not self.command.startswith(prefix):
-            raise DataError("unexpected DG4000 DAC command prefix")
-        payload = self.command[len(prefix):]
-        if not payload.startswith(b"#"):
-            raise DataError("unexpected DG4000 DAC binary block header")
-        digits = int(chr(payload[1]))
-        return payload[: 2 + digits]
 
 
 @dataclass(frozen=True)
