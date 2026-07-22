@@ -1,10 +1,323 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
+from math import isfinite
+from typing import Literal
 
 import numpy as np
 
 from wavebench.data.quality import summarize_waveform
+
+
+SweepMode = Literal["cw", "sweep"]
+SweepAxis = Literal["linear", "logarithmic"]
+SweepAcquisition = Literal["single", "continuous"]
+SweepTrigger = Literal["internal", "external"]
+SourceLevelUnit = Literal["dbm", "v", "mv", "unknown"]
+MagnitudeUnit = Literal["dbm", "db", "v", "mv", "unknown"]
+DeltaMagnitudeUnit = Literal["db", "v", "mv", "unknown"]
+MagnitudeSemantics = Literal["absolute", "relative", "linear", "unknown"]
+FrequencyAxisSource = Literal["device", "derived", "unknown"]
+MeasurementMethod = Literal["instrument", "core"]
+
+
+def _validate_magnitude_unit_semantics(
+    unit: MagnitudeUnit,
+    semantics: MagnitudeSemantics,
+) -> None:
+    valid_pairs = {
+        ("dbm", "absolute"),
+        ("db", "relative"),
+        ("v", "linear"),
+        ("mv", "linear"),
+        ("unknown", "unknown"),
+    }
+    if (unit, semantics) not in valid_pairs:
+        raise ValueError("incompatible magnitude unit and semantics")
+
+
+@dataclass(frozen=True)
+class SweepPlan:
+    mode: SweepMode
+    cw_frequency_hz: float | None = None
+    start_frequency_hz: float | None = None
+    stop_frequency_hz: float | None = None
+    center_frequency_hz: float | None = None
+    span_frequency_hz: float | None = None
+    axis: SweepAxis = "linear"
+    sweep_time_s: float | None = None
+    acquisition: SweepAcquisition = "single"
+    trigger: SweepTrigger = "internal"
+    averaging_enabled: bool = False
+    average_count: int = 1
+    points: int | None = None
+    source_output_enabled: bool = False
+    source_level: float | None = None
+    source_level_unit: SourceLevelUnit | None = None
+    source_impedance_ohm: float | None = None
+
+    def __post_init__(self) -> None:
+        if self.mode not in {"cw", "sweep"}:
+            raise ValueError("sweep mode must be cw or sweep")
+        if self.axis not in {"linear", "logarithmic"}:
+            raise ValueError("sweep axis must be linear or logarithmic")
+        if self.acquisition not in {"single", "continuous"}:
+            raise ValueError("sweep acquisition must be single or continuous")
+        if self.trigger not in {"internal", "external"}:
+            raise ValueError("sweep trigger must be internal or external")
+
+        window_values = (
+            self.start_frequency_hz,
+            self.stop_frequency_hz,
+            self.center_frequency_hz,
+            self.span_frequency_hz,
+        )
+        scalar_values = (
+            self.cw_frequency_hz,
+            *window_values,
+            self.sweep_time_s,
+            self.source_level,
+            self.source_impedance_ohm,
+        )
+        if any(value is not None and not isfinite(value) for value in scalar_values):
+            raise ValueError("sweep plan numeric values must be finite")
+        if self.mode == "cw":
+            if self.cw_frequency_hz is None or self.cw_frequency_hz <= 0:
+                raise ValueError("cw mode requires cw_frequency_hz > 0")
+            if any(value is not None for value in window_values):
+                raise ValueError("cw mode cannot define a sweep frequency window")
+        else:
+            if self.cw_frequency_hz is not None:
+                raise ValueError("sweep mode cannot define cw_frequency_hz")
+            if not (self.uses_start_stop ^ self.uses_center_span):
+                raise ValueError("sweep mode requires exactly one frequency window")
+            if self.uses_start_stop:
+                assert self.start_frequency_hz is not None
+                assert self.stop_frequency_hz is not None
+                if self.start_frequency_hz <= 0 or self.stop_frequency_hz <= 0:
+                    raise ValueError("sweep frequencies must be > 0")
+                if self.start_frequency_hz >= self.stop_frequency_hz:
+                    raise ValueError("start_frequency_hz must be < stop_frequency_hz")
+            else:
+                assert self.center_frequency_hz is not None
+                assert self.span_frequency_hz is not None
+                if self.center_frequency_hz <= 0 or self.span_frequency_hz <= 0:
+                    raise ValueError("center and span frequencies must be > 0")
+                if self.span_frequency_hz >= 2 * self.center_frequency_hz:
+                    raise ValueError("span_frequency_hz must keep the start frequency > 0")
+
+        if self.sweep_time_s is not None and self.sweep_time_s <= 0:
+            raise ValueError("sweep_time_s must be > 0")
+        if self.average_count < 1:
+            raise ValueError("average_count must be >= 1")
+        if self.points is not None and self.points < 2:
+            raise ValueError("sweep points must be >= 2")
+        if (self.source_level is None) != (self.source_level_unit is None):
+            raise ValueError("source_level and source_level_unit must be provided together")
+        if self.source_level_unit not in {None, "dbm", "v", "mv", "unknown"}:
+            raise ValueError("unsupported source_level_unit")
+        if self.source_impedance_ohm is not None and self.source_impedance_ohm <= 0:
+            raise ValueError("source_impedance_ohm must be > 0")
+
+    @property
+    def uses_start_stop(self) -> bool:
+        return self.start_frequency_hz is not None and self.stop_frequency_hz is not None
+
+    @property
+    def uses_center_span(self) -> bool:
+        return self.center_frequency_hz is not None and self.span_frequency_hz is not None
+
+    @property
+    def sweep_time_mode(self) -> Literal["auto", "manual"]:
+        return "auto" if self.sweep_time_s is None else "manual"
+
+
+@dataclass(frozen=True)
+class TraceIntegrity:
+    complete: bool
+    expected_points: int | None
+    actual_points: int
+    warnings: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if self.expected_points is not None and self.expected_points < 1:
+            raise ValueError("expected_points must be >= 1")
+        if self.actual_points < 0:
+            raise ValueError("actual_points must be >= 0")
+        if not self.complete and not self.warnings:
+            raise ValueError("incomplete trace integrity requires warnings")
+        if self.complete and self.expected_points is not None:
+            if self.actual_points != self.expected_points:
+                raise ValueError("complete trace must match expected_points")
+
+
+@dataclass(frozen=True)
+class FrequencyResponseTrace:
+    frequency_hz: np.ndarray | None
+    magnitude: np.ndarray | None
+    phase_deg: np.ndarray | None
+    magnitude_unit: MagnitudeUnit | None
+    magnitude_semantics: MagnitudeSemantics | None
+    axis_source: FrequencyAxisSource
+    integrity: TraceIntegrity
+    acquired_at: datetime
+    raw_evidence_ref: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.magnitude is None and self.phase_deg is None:
+            raise ValueError("frequency response requires magnitude or phase data")
+        if self.axis_source not in {"device", "derived", "unknown"}:
+            raise ValueError("unsupported frequency axis source")
+        if self.axis_source != "unknown" and self.frequency_hz is None:
+            raise ValueError("device or derived axis requires frequency_hz")
+        if self.magnitude is not None:
+            if self.magnitude_unit is None or self.magnitude_semantics is None:
+                raise ValueError("magnitude data requires unit and semantics")
+        elif self.magnitude_unit is not None or self.magnitude_semantics is not None:
+            raise ValueError("magnitude unit and semantics require magnitude data")
+        if self.magnitude_unit not in {None, "dbm", "db", "v", "mv", "unknown"}:
+            raise ValueError("unsupported magnitude unit")
+        if self.magnitude_semantics not in {
+            None,
+            "absolute",
+            "relative",
+            "linear",
+            "unknown",
+        }:
+            raise ValueError("unsupported magnitude semantics")
+        if self.magnitude_unit is not None and self.magnitude_semantics is not None:
+            _validate_magnitude_unit_semantics(
+                self.magnitude_unit,
+                self.magnitude_semantics,
+            )
+        if self.acquired_at.tzinfo is None or self.acquired_at.utcoffset() is None:
+            raise ValueError("acquired_at must be timezone-aware")
+        if self.raw_evidence_ref is not None and not self.raw_evidence_ref.strip():
+            raise ValueError("raw_evidence_ref must be non-empty when provided")
+
+        normalized_arrays: list[np.ndarray] = []
+        for name, array in (
+            ("frequency_hz", self.frequency_hz),
+            ("magnitude", self.magnitude),
+            ("phase_deg", self.phase_deg),
+        ):
+            if array is None:
+                continue
+            normalized = np.array(array, dtype=np.float64, copy=True)
+            normalized.setflags(write=False)
+            object.__setattr__(self, name, normalized)
+            normalized_arrays.append(normalized)
+        for array in normalized_arrays:
+            if array.ndim != 1:
+                raise ValueError("frequency response arrays must be one-dimensional")
+            if not np.all(np.isfinite(array)):
+                raise ValueError("frequency response arrays must contain finite values")
+        if self.frequency_hz is not None and np.any(self.frequency_hz <= 0):
+            raise ValueError("frequency axis values must be positive")
+        lengths = {int(array.size) for array in normalized_arrays}
+        if len(lengths) != 1:
+            raise ValueError("frequency response arrays must have the same number of points")
+        if not lengths or next(iter(lengths)) < 1:
+            raise ValueError("frequency response must contain at least one point")
+        if self.integrity.actual_points != self.point_count:
+            raise ValueError("trace integrity actual_points must match response data")
+
+    @property
+    def point_count(self) -> int:
+        for array in (self.magnitude, self.phase_deg, self.frequency_hz):
+            if array is not None:
+                return int(array.size)
+        return 0
+
+
+@dataclass(frozen=True)
+class SweepAnalyzerSnapshot:
+    effective_plan: SweepPlan
+    requested_plan: SweepPlan | None = None
+    frequency_offset_hz: float = 0.0
+    magnitude_measurement_enabled: bool = True
+    phase_measurement_enabled: bool = True
+    continuous_trace_enabled: bool | None = None
+
+    def __post_init__(self) -> None:
+        if not isfinite(self.frequency_offset_hz):
+            raise ValueError("frequency_offset_hz must be finite")
+        if not self.magnitude_measurement_enabled and not self.phase_measurement_enabled:
+            raise ValueError("at least one response measurement must be enabled")
+
+
+@dataclass(frozen=True)
+class MarkerReading:
+    index: int
+    frequency_hz: float
+    magnitude: float | None = None
+    magnitude_unit: MagnitudeUnit | None = None
+    magnitude_semantics: MagnitudeSemantics | None = None
+    phase_deg: float | None = None
+    delta_frequency_hz: float | None = None
+    delta_magnitude: float | None = None
+    delta_magnitude_unit: DeltaMagnitudeUnit | None = None
+
+    def __post_init__(self) -> None:
+        if self.index < 1:
+            raise ValueError("marker index must be >= 1")
+        if self.frequency_hz <= 0:
+            raise ValueError("marker frequency_hz must be > 0")
+        magnitude_fields = (
+            self.magnitude is not None,
+            self.magnitude_unit is not None,
+            self.magnitude_semantics is not None,
+        )
+        if any(magnitude_fields) and not all(magnitude_fields):
+            raise ValueError("marker magnitude, unit, and semantics must be provided together")
+        if self.magnitude_unit not in {None, "dbm", "db", "v", "mv", "unknown"}:
+            raise ValueError("unsupported marker magnitude unit")
+        if self.magnitude_semantics not in {
+            None,
+            "absolute",
+            "relative",
+            "linear",
+            "unknown",
+        }:
+            raise ValueError("unsupported marker magnitude semantics")
+        if self.magnitude_unit is not None and self.magnitude_semantics is not None:
+            _validate_magnitude_unit_semantics(
+                self.magnitude_unit,
+                self.magnitude_semantics,
+            )
+        if (self.delta_magnitude is None) != (self.delta_magnitude_unit is None):
+            raise ValueError("marker delta magnitude and unit must be provided together")
+        if self.delta_magnitude_unit not in {None, "db", "v", "mv", "unknown"}:
+            raise ValueError("unsupported marker delta magnitude unit")
+        values = (
+            self.frequency_hz,
+            self.magnitude,
+            self.phase_deg,
+            self.delta_frequency_hz,
+            self.delta_magnitude,
+        )
+        if any(value is not None and not np.isfinite(value) for value in values):
+            raise ValueError("marker values must be finite")
+
+
+@dataclass(frozen=True)
+class InstrumentMeasurementResult:
+    name: str
+    value: float
+    unit: str
+    method: MeasurementMethod
+    warnings: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not self.name.strip():
+            raise ValueError("measurement name must be non-empty")
+        if not self.unit.strip():
+            raise ValueError("measurement unit must be non-empty")
+        if self.method not in {"instrument", "core"}:
+            raise ValueError("measurement method must be instrument or core")
+        if not np.isfinite(self.value):
+            raise ValueError("measurement value must be finite")
 
 
 @dataclass(frozen=True)

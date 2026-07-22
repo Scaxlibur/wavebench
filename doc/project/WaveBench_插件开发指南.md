@@ -109,8 +109,9 @@ ID、操作名和缺失项。
 - `SourceDriver`
 - `PowerDriver`
 - `DmmDriver`
+- `SweepAnalyzerDriver`
 
-公共返回类型来自 `wavebench.instruments.models`，包括 `WaveformHeader`、`WaveformData`、`SourceStatus`、`PowerStatus`、`PowerMeasurement`、`PowerProtectionStatus` 和 `DmmReading`。不要复制另一套不兼容的数据模型。插件只需实现其声明能力对应的方法以及 `close()`，不必为了通过加载而实现整个 kind 的所有方法。
+公共返回类型来自 `wavebench.instruments.models`，包括 `WaveformHeader`、`WaveformData`、`SourceStatus`、`PowerStatus`、`PowerMeasurement`、`PowerProtectionStatus`、`DmmReading`，以及扫频分析仪使用的 `SweepPlan`、`SweepAnalyzerSnapshot`、`FrequencyResponseTrace`、`TraceIntegrity`、`MarkerReading` 和 `InstrumentMeasurementResult`。不要复制另一套不兼容的数据模型。插件只需实现其声明能力对应的方法以及 `close()`，不必为了通过加载而实现整个 kind 的所有方法。扫频分析公共模型的字段、不变量和延后边界见 [WaveBench_扫频分析仪公共契约.md](./WaveBench_扫频分析仪公共契约.md)。
 
 DG4000 系列 source 插件还可从 `wavebench.instruments` 导入稳定的 `DG4000DacBlock` 与 `DG4000ByteOrder`。核心继续负责 CSV/NPY 加载、归一化、DAC14 编码、CLI、Service、安全限制和 artifact；插件只接收已校验的 binary-block 对象并负责厂商协议上传。不要从 `wavebench.arbitrary` 复制或导入核心工作流实现。
 

@@ -16,6 +16,7 @@ The WaveBench distribution includes built-in drivers for the RTM2000/RTM2032, DS
 - [Data and artifact formats](project/WaveBench_数据输出格式.md)
 - [Error handling and command logs](project/WaveBench_错误处理和日志策略.md)
 - [Executable instrument plugin development](project/WaveBench_插件开发指南.md)
+- [Sweep analyzer public contract](project/WaveBench_sweep_analyzer_contract_EN.md)
 - [Installing and managing instrument plugins](project/WaveBench_可安装仪器插件.md)
 
 ## Managed local plugins

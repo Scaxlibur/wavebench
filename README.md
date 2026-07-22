@@ -123,6 +123,7 @@ WaveBench 主包内建 RTM2000/RTM2032、DS1104Z/DS1000Z、DG4000/DG4202、DP800
 - 插件市场当前只读本地 JSON index，不安装插件，不导入市场条目里的包
 - 声明式 SCPI 插件默认只读取并校验本地 TOML；只有显式执行 `plugin scpi probe` 才会对单个资源发送 TOML 中声明的只读 IDN 查询
 - 安装与卸载见 [可安装仪器插件用户指南](doc/project/WaveBench_可安装仪器插件.md)，作者接口见 [插件开发指南](doc/project/WaveBench_插件开发指南.md)
+- 扫频分析仪插件应复用 [扫频分析仪公共契约](doc/project/WaveBench_扫频分析仪公共契约.md)；当前仅提供核心 API，不代表任何具体型号已接入
 
 ### HTTP MCP 只读接口
 

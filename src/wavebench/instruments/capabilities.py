@@ -36,6 +36,14 @@ CAPABILITY_METHODS: dict[str, tuple[str, ...]] = {
     "dmm.read": ("read",),
     "dmm.function_status": ("function_status",),
     "dmm.set_function": ("set_function",),
+    "sweep_analyzer.idn": ("idn",),
+    "sweep_analyzer.status": ("get_snapshot",),
+    "sweep_analyzer.trace": ("fetch_frequency_response",),
+    "sweep_analyzer.configure": ("apply_sweep_plan",),
+    "sweep_analyzer.trigger": ("trigger_single",),
+    "sweep_analyzer.output": ("set_source_output",),
+    "sweep_analyzer.marker": ("read_markers",),
+    "sweep_analyzer.analysis": ("read_measurements",),
 }
 
 

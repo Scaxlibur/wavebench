@@ -3,12 +3,18 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Literal
 
-PluginKind = Literal["scope", "source", "power", "dmm"]
+PluginKind = Literal["scope", "source", "power", "dmm", "sweep_analyzer"]
 PluginOrigin = Literal["builtin", "entry_point", "local"]
 DiagnosticSeverity = Literal["ok", "warning", "error"]
 
 SUPPORTED_PLUGIN_API_VERSION = "wavebench.instrument.v1"
-VALID_PLUGIN_KINDS: tuple[str, ...] = ("scope", "source", "power", "dmm")
+VALID_PLUGIN_KINDS: tuple[str, ...] = (
+    "scope",
+    "source",
+    "power",
+    "dmm",
+    "sweep_analyzer",
+)
 
 
 @dataclass(frozen=True)

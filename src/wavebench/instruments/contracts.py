@@ -9,7 +9,12 @@ from .models import (
     PowerMeasurement,
     PowerProtectionStatus,
     PowerStatus,
+    FrequencyResponseTrace,
+    InstrumentMeasurementResult,
+    MarkerReading,
     SourceStatus,
+    SweepAnalyzerSnapshot,
+    SweepPlan,
     WaveformData,
 )
 from .dg4000 import DG4000DacBlock
@@ -162,3 +167,20 @@ class DmmDriver(InstrumentDriver, Protocol):
     def apply_function(self, function: str) -> str: ...
 
     def read(self, function: str = "dcv") -> DmmReading: ...
+
+
+@runtime_checkable
+class SweepAnalyzerDriver(InstrumentDriver, Protocol):
+    def get_snapshot(self) -> SweepAnalyzerSnapshot: ...
+
+    def fetch_frequency_response(self) -> FrequencyResponseTrace: ...
+
+    def apply_sweep_plan(self, plan: SweepPlan) -> SweepAnalyzerSnapshot: ...
+
+    def trigger_single(self) -> None: ...
+
+    def set_source_output(self, enabled: bool) -> SweepAnalyzerSnapshot: ...
+
+    def read_markers(self) -> tuple[MarkerReading, ...]: ...
+
+    def read_measurements(self) -> tuple[InstrumentMeasurementResult, ...]: ...

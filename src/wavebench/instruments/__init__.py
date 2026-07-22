@@ -1,14 +1,27 @@
 from .api import DriverContext, InstrumentDescriptor, OptionSpec
-from .contracts import DmmDriver, InstrumentDriver, PowerDriver, ScopeDriver, SourceDriver
+from .contracts import (
+    DmmDriver,
+    InstrumentDriver,
+    PowerDriver,
+    ScopeDriver,
+    SourceDriver,
+    SweepAnalyzerDriver,
+)
 from .dg4000 import DG4000ByteOrder, DG4000DacBlock
 from .factory import OpenedInstrument, open_instrument_driver
 from .models import (
     ArbitraryQueryProbeResult,
     DmmReading,
+    FrequencyResponseTrace,
+    InstrumentMeasurementResult,
+    MarkerReading,
     PowerMeasurement,
     PowerProtectionStatus,
     PowerStatus,
     SourceStatus,
+    SweepAnalyzerSnapshot,
+    SweepPlan,
+    TraceIntegrity,
     WaveformData,
     WaveformHeader,
 )
@@ -17,11 +30,14 @@ __all__ = [
     "ArbitraryQueryProbeResult",
     "DmmDriver",
     "DmmReading",
+    "FrequencyResponseTrace",
     "DG4000ByteOrder",
     "DG4000DacBlock",
     "DriverContext",
     "InstrumentDriver",
     "InstrumentDescriptor",
+    "InstrumentMeasurementResult",
+    "MarkerReading",
     "OptionSpec",
     "OpenedInstrument",
     "PowerDriver",
@@ -31,6 +47,10 @@ __all__ = [
     "ScopeDriver",
     "SourceDriver",
     "SourceStatus",
+    "SweepAnalyzerDriver",
+    "SweepAnalyzerSnapshot",
+    "SweepPlan",
+    "TraceIntegrity",
     "WaveformData",
     "WaveformHeader",
     "open_instrument_driver",
