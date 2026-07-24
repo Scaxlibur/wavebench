@@ -254,6 +254,14 @@ def test_lifecycle_allows_only_the_declared_builtin_migration_canonical(tmp_path
         kind="source",
         capabilities=dg4202_capabilities,
     )
+    dm3000_migration = _plugin_wheel(
+        tmp_path,
+        version="0.1.0",
+        driver_id="rigol.dm3000",
+        distribution="wavebench-rigol-dm3000",
+        kind="dmm",
+        capabilities=("dmm.idn",),
+    )
     forbidden = _plugin_wheel(
         tmp_path,
         version="0.1.0",
@@ -263,6 +271,7 @@ def test_lifecycle_allows_only_the_declared_builtin_migration_canonical(tmp_path
     lifecycle = PluginLifecycle(python_executable=python)
 
     assert lifecycle.install(migration, dry_run=True).status == "would-install"
+    assert lifecycle.install(dm3000_migration, dry_run=True).status == "would-install"
     with pytest.raises(ConfigError, match="conflicts with built-in"):
         lifecycle.install(forbidden, dry_run=True)
 
@@ -293,6 +302,43 @@ print(canonical.origin, canonical.distribution, alias.origin, alias.driver_id)
     assert lifecycle.remove("rigol.dg4202").status == "removed"
     removed = _run([str(python), "-I", "-c", resolve_script]).stdout.strip()
     assert removed == "builtin wavebench builtin rigol.dg4202"
+
+
+def test_dm3000_migration_install_routes_canonical_and_preserves_aliases(tmp_path):
+    python = _target_venv(tmp_path)
+    wheel = _plugin_wheel(
+        tmp_path,
+        version="0.1.0",
+        driver_id="rigol.dm3000",
+        distribution="wavebench-rigol-dm3000",
+        kind="dmm",
+        capabilities=("dmm.idn",),
+    )
+    lifecycle = PluginLifecycle(python_executable=python)
+    resolve_script = """
+from wavebench.instruments.registry import build_instrument_registry
+registry = build_instrument_registry()
+canonical = registry.resolve('rigol.dm3000', expected_kind='dmm')
+dm3000_alias = registry.resolve('dm3000', expected_kind='dmm')
+dm3058_alias = registry.resolve('dm3058', expected_kind='dmm')
+print(
+    canonical.origin,
+    canonical.distribution,
+    dm3000_alias.origin,
+    dm3058_alias.origin,
+    canonical.driver_id,
+)
+"""
+
+    assert lifecycle.install(wheel).status == "installed"
+    installed = _run([str(python), "-I", "-c", resolve_script]).stdout.strip()
+    assert installed == (
+        "entry_point wavebench-rigol-dm3000 builtin builtin rigol.dm3000"
+    )
+
+    assert lifecycle.remove("rigol.dm3000").status == "removed"
+    removed = _run([str(python), "-I", "-c", resolve_script]).stdout.strip()
+    assert removed == "builtin wavebench builtin builtin rigol.dm3000"
 
 
 def test_install_status_and_remove_round_trip(tmp_path):

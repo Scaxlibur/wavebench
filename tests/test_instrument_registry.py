@@ -61,6 +61,20 @@ def make_external_dg4202_descriptor(**changes):
     )
 
 
+def make_external_dm3000_descriptor(**changes):
+    builtin = build_instrument_registry(include_entry_points=False).resolve(
+        "rigol.dm3000",
+        expected_kind="dmm",
+    )
+    changes.setdefault("distribution", "wavebench-rigol-dm3000")
+    return replace(
+        builtin,
+        aliases=(),
+        backends=("pyvisa",),
+        **changes,
+    )
+
+
 def test_builtin_aliases_and_canonical_ids_resolve_to_same_descriptor():
     registry = build_instrument_registry(include_entry_points=False)
 
@@ -139,6 +153,27 @@ def test_migration_canonical_prefers_external_while_alias_keeps_builtin_fallback
     assert loaded.load_errors == ()
 
 
+def test_dm3000_migration_is_lan_only_while_aliases_keep_builtin_fallback():
+    entry_point = FakeEntryPoint("rigol.dm3000", make_external_dm3000_descriptor())
+    registry = InstrumentRegistry(external_entry_points=(entry_point,))
+
+    canonical = registry.resolve("rigol.dm3000", expected_kind="dmm")
+    dm3000_alias = registry.resolve("dm3000", expected_kind="dmm")
+    dm3058_alias = registry.resolve("dm3058", expected_kind="dmm")
+    loaded = registry.load_all()
+
+    assert canonical.origin == "entry_point"
+    assert canonical.backends == ("pyvisa",)
+    assert dm3000_alias.origin == "builtin"
+    assert dm3058_alias.origin == "builtin"
+    assert dm3000_alias.backends == ("serial", "pyvisa")
+    assert dm3058_alias.backends == ("serial", "pyvisa")
+    assert [item.origin for item in loaded.descriptors if item.driver_id == "rigol.dm3000"] == [
+        "entry_point"
+    ]
+    assert loaded.load_errors == ()
+
+
 def test_migration_canonical_falls_back_to_builtin_when_external_is_absent():
     descriptor = build_instrument_registry(include_entry_points=False).resolve(
         "rigol.dg4202",
@@ -180,6 +215,18 @@ def test_migration_slot_rejects_wrong_distribution_for_same_canonical():
     loaded = InstrumentRegistry(external_entry_points=(entry_point,)).load_all()
 
     matches = [item for item in loaded.descriptors if item.driver_id == "rigol.dg4202"]
+    assert [item.origin for item in matches] == ["builtin"]
+    assert len(loaded.load_errors) == 1
+    assert "conflicts with built-in" in loaded.load_errors[0].message
+
+
+def test_dm3000_migration_slot_rejects_wrong_distribution():
+    descriptor = make_external_dm3000_descriptor(distribution="not-the-allowed-package")
+    entry_point = FakeEntryPoint("rigol.dm3000", descriptor)
+
+    loaded = InstrumentRegistry(external_entry_points=(entry_point,)).load_all()
+
+    matches = [item for item in loaded.descriptors if item.driver_id == "rigol.dm3000"]
     assert [item.origin for item in matches] == ["builtin"]
     assert len(loaded.load_errors) == 1
     assert "conflicts with built-in" in loaded.load_errors[0].message
