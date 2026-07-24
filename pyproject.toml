@@ -13,7 +13,7 @@ authors = [{ name = "Scaxlibur" }]
 dependencies = ["RsInstrument>=1.90.0", "numpy>=2.0.0", "packaging>=24.0", "pyserial>=3.5", "pyvisa-py>=0.8.1"]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0.0", "ruff==0.15.20"]
+dev = ["hatchling==1.30.1", "pytest>=8.0.0", "ruff==0.15.20"]
 tui = ["textual>=0.86.0"]
 
 [project.scripts]
