@@ -15,6 +15,16 @@ WAVEFORM_POINTS_ALIASES = {
     "dmaximum": "DMAX",
 }
 
+SCOPE_CONNECTION_BACKENDS = {
+    "lan",
+    "visa",
+    "pyvisa",
+    "rsinstrument-socket",
+    "rsinstrument",
+    "rsinstrument-rsvisa",
+    "rsinstrument-pyvisa-py",
+}
+
 
 def normalize_waveform_points(points: str) -> str:
     normalized = points.strip().lower()
@@ -546,8 +556,9 @@ def load_config(path: str | Path = "wavebench.toml") -> WaveBenchConfig:
     except (TypeError, ValueError) as exc:
         raise ConfigError(f"invalid config value in {config_path}: {exc}") from exc
 
-    if config.connection.backend.lower() != "lan":
-        raise ConfigError("MVP-1 only supports LAN VISA resources")
+    if config.connection.backend.lower() not in SCOPE_CONNECTION_BACKENDS:
+        choices = ", ".join(sorted(SCOPE_CONNECTION_BACKENDS))
+        raise ConfigError(f"connection.backend must be one of: {choices}")
     if config.connection.read_retry_attempts < 0:
         raise ConfigError("connection.read_retry_attempts must be >= 0")
     if config.connection.read_retry_delay_ms < 0:

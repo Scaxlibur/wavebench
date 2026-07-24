@@ -80,6 +80,22 @@ def descriptor():
 
 descriptor 至少声明 canonical ID、kind、API/兼容版本、厂商/型号、capability、IDN pattern、backend、受限选项、权限提示和 factory。仅允许特定 VISA 接口类型的插件还应声明 `resource_schemes`；例如 LAN-only 插件使用 `("tcpip",)`，核心会在打开 transport 前拒绝 `ASRL`、`USB`、`GPIB` 等资源。空 tuple 表示不限制，适用于必须保留多种连接方式的内置兼容实现。当前 V2 外置插件必须使用 `aliases=()`；scope 插件还应准确声明 coupling policy，无法证明输入安全语义时保留 `unknown`，核心会默认拒绝采集。
 
+`backends` 的顺序是 `connection.backend = "lan"` 的首选顺序，但只在该 descriptor
+声明的后端全部属于 RsInstrument 家族时生效。当前 RsInstrument 后端 token 为
+`rsinstrument-socket`、`rsinstrument`、`rsinstrument-rsvisa` 和
+`rsinstrument-pyvisa-py`；其中 `rsinstrument` 保留 RsInstrument 自身的实现选择和既有
+pyvisa-py 兼容回退。插件不得在已开始的有状态查询或波形传输失败后静默切换后端并重放；
+需要兼容路径时应由配置显式选择并重新打开会话。
+
+核心只对 `rsinstrument-socket` 做受限 resource 规范化：简单的
+`TCPIP::<host>::INSTR` 映射到 `TCPIP::<host>::5025::SOCKET`，已显式给出端口的
+`TCPIP::<host>::<port>::SOCKET` 保留其端口。其他 TCPIP 形式 fail closed，插件不得自行
+猜测端口或设备名。
+
+RsInstrument SocketIO 会话固定启用 `AddTermCharToWriteBinBlock=True` 和
+`DataChunkSize=512`，确保 definite binary block 具有消息终止符并限制 raw socket 单次发送
+长度；显式 VISA 后端保持各自原有 binary write 语义。
+
 需要支持重复 `--channel` 的 scope 插件还必须声明 `scope.capture_waveforms` 并实现同名方法。该方法的语义固定为：先配置全部目标通道，只执行一次 acquisition / OPC 等待，再逐通道读取；不得静默退回逐通道重复触发。不声明该能力的插件仍可执行单通道 `scope.capture_waveform`，多通道操作会在打开 transport 前明确拒绝。
 
 插件模块导入时不得连接仪器、发送 SCPI、创建文件或修改全局状态。factory 才能调用 `context.open_transport()`，且每次 factory 调用最多只能成功打开一个 transport。

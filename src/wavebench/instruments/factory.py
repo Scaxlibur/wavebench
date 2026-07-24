@@ -18,6 +18,15 @@ from .capabilities import validate_declared_capabilities
 from .contracts import InstrumentDriver
 from .registry import resolve_instrument_descriptor
 
+RSINSTRUMENT_BACKENDS = (
+    "rsinstrument-socket",
+    "rsinstrument",
+    "rsinstrument-rsvisa",
+    "rsinstrument-pyvisa-py",
+)
+
+RSINSTRUMENT_SOCKET_DEFAULT_PORT = 5025
+
 
 @dataclass(frozen=True)
 class OpenedInstrument:
@@ -103,11 +112,13 @@ def _select_backend(configured_backend: str, supported: tuple[str, ...]) -> str:
     normalized = aliases.get(configured, configured)
     if normalized in supported:
         return normalized
-    if configured in {"lan", "visa", "pyvisa"} and len(supported) == 1 and supported[0] in {
-        "pyvisa",
-        "rsinstrument",
-    }:
-        return supported[0]
+    rsinstrument_backends = tuple(
+        backend for backend in supported if backend in RSINSTRUMENT_BACKENDS
+    )
+    if configured == "lan" and rsinstrument_backends and len(rsinstrument_backends) == len(supported):
+        return rsinstrument_backends[0]
+    if configured in {"visa", "pyvisa"} and supported == ("rsinstrument",):
+        return "rsinstrument"
     raise ConfigError(
         f"configured backend {configured_backend!r} is not supported; "
         f"driver supports: {', '.join(supported)}"
@@ -124,6 +135,38 @@ def _validate_resource_scheme(resource: str, supported: tuple[str, ...]) -> None
     raise ConfigError(
         f"configured resource scheme {configured!r} is not supported; "
         f"driver supports: {', '.join(supported)}"
+    )
+
+
+def _normalize_rsinstrument_socket_resource(resource: str) -> str:
+    stripped = resource.strip()
+    socket_match = re.fullmatch(
+        r"TCPIP\d*::([^:]+)::([0-9]+)::SOCKET",
+        stripped,
+        flags=re.IGNORECASE,
+    )
+    if socket_match is not None:
+        host, raw_port = socket_match.groups()
+        port = int(raw_port)
+        if not 1 <= port <= 65_535:
+            raise ConfigError("RsInstrument SocketIO TCP port must be between 1 and 65535")
+        return f"TCPIP::{host}::{port}::SOCKET"
+
+    instr_match = re.fullmatch(
+        r"TCPIP\d*::([^:]+)::INSTR",
+        stripped,
+        flags=re.IGNORECASE,
+    )
+    if instr_match is not None:
+        host = instr_match.group(1)
+        return (
+            f"TCPIP::{host}::{RSINSTRUMENT_SOCKET_DEFAULT_PORT}::SOCKET"
+        )
+
+    raise ConfigError(
+        "RsInstrument SocketIO requires TCPIP::<host>::INSTR or "
+        "TCPIP::<host>::<port>::SOCKET; use an explicit VISA-based backend "
+        "for other TCPIP resource forms"
     )
 
 
@@ -154,6 +197,27 @@ def _open_transport(
         return PyVisaTransport.open(connection, logger=logger)
     if backend == "rsinstrument":
         return RsInstrumentTransport.open(connection, logger=logger)
+    select_visa = {
+        "rsinstrument-socket": "socketio",
+        "rsinstrument-rsvisa": "rs",
+        "rsinstrument-pyvisa-py": "pyvisa-py",
+    }.get(backend)
+    if select_visa is not None:
+        if backend == "rsinstrument-socket":
+            resource = _normalize_rsinstrument_socket_resource(resource)
+            connection = ConnectionConfig(
+                backend="lan",
+                resource=resource,
+                timeout_ms=timeout_ms,
+                opc_timeout_ms=opc_timeout_ms,
+                read_retry_attempts=read_retry_attempts,
+                read_retry_delay_ms=read_retry_delay_ms,
+            )
+        return RsInstrumentTransport.open(
+            connection,
+            logger=logger,
+            select_visa=select_visa,
+        )
     raise ConfigError(f"unsupported instrument transport backend: {backend}")
 
 

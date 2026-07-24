@@ -3,11 +3,16 @@
 # `wavebench.toml` is ignored by git because it may contain real instrument IPs and local paths.
 
 [connection]
-# Connection backend. MVP-1 only supports LAN VISA resources.
+# Connection backend. "lan" selects the driver descriptor's preferred LAN
+# transport. External RTM2000 0.2+ prefers RsInstrument SocketIO; RIGOL
+# drivers continue to prefer PyVISA. Advanced RTM2000 compatibility choices
+# are rsinstrument, rsinstrument-rsvisa, and rsinstrument-pyvisa-py.
 backend = "lan"
 
 # VISA resource string for the oscilloscope.
-# Replace the IP address with your oscilloscope LAN address.
+# Replace the IP address with your oscilloscope LAN address. For the external
+# RTM2000 SocketIO path, this INSTR form is opened as TCPIP::<host>::5025::SOCKET.
+# Use an explicit TCPIP::<host>::<port>::SOCKET resource for a non-default port.
 resource = "TCPIP::192.0.2.10::INSTR"
 
 # General VISA I/O timeout in milliseconds.
@@ -39,6 +44,11 @@ reset_before_run = false
 
 # Query SYST:ERR? after important operations when possible.
 check_errors = true
+
+# External RTM2000 0.2+ applies this timeout only to MAX/DMAX waveform data
+# reads. DEF and ordinary SCPI queries keep connection.timeout_ms.
+# [scope.options]
+# long_waveform_timeout_ms = 300000
 
 [autoscale]
 # AUToscale is asynchronous, so WaveBench should wait for completion.

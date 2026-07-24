@@ -496,6 +496,248 @@ def test_core_factory_maps_lan_backends_to_single_rsinstrument_backend(
     assert captured == {"backend": "rsinstrument", "transport": transport}
 
 
+def test_core_factory_maps_lan_to_first_declared_rsinstrument_backend(monkeypatch):
+    captured = {}
+    transport = object()
+
+    def factory(context):
+        captured["backend"] = context.backend
+        captured["transport"] = context.open_transport()
+        return _ScopeDriver()
+
+    descriptor = make_descriptor(
+        backends=(
+            "rsinstrument-socket",
+            "rsinstrument",
+            "rsinstrument-rsvisa",
+            "rsinstrument-pyvisa-py",
+        ),
+        factory=factory,
+        option_specs=(),
+    )
+    monkeypatch.setattr(
+        "wavebench.instruments.factory.resolve_instrument_descriptor",
+        lambda reference, expected_kind: descriptor,
+    )
+
+    def open_rsinstrument(connection, logger, *, select_visa=None):
+        captured["select_visa"] = select_visa
+        captured["resource"] = connection.resource
+        return transport
+
+    monkeypatch.setattr(
+        "wavebench.instruments.factory.RsInstrumentTransport.open",
+        open_rsinstrument,
+    )
+
+    opened = open_instrument_driver(
+        driver_reference="example.scope",
+        expected_kind="scope",
+        resource="TCPIP::192.0.2.40::INSTR",
+        configured_backend="lan",
+        timeout_ms=1000,
+        opc_timeout_ms=2000,
+        read_retry_attempts=1,
+        read_retry_delay_ms=10,
+        logger=CommandLogger(),
+    )
+
+    assert opened.driver.__class__ is _ScopeDriver
+    assert captured == {
+        "backend": "rsinstrument-socket",
+        "transport": transport,
+        "select_visa": "socketio",
+        "resource": "TCPIP::192.0.2.40::5025::SOCKET",
+    }
+
+
+@pytest.mark.parametrize(
+    ("configured_backend", "expected_select_visa"),
+    [
+        ("rsinstrument-socket", "socketio"),
+        ("rsinstrument-rsvisa", "rs"),
+        ("rsinstrument-pyvisa-py", "pyvisa-py"),
+    ],
+)
+def test_core_factory_opens_explicit_rsinstrument_implementation(
+    monkeypatch,
+    configured_backend,
+    expected_select_visa,
+):
+    captured = {}
+
+    descriptor = make_descriptor(
+        backends=(
+            "rsinstrument-socket",
+            "rsinstrument",
+            "rsinstrument-rsvisa",
+            "rsinstrument-pyvisa-py",
+        ),
+        factory=lambda context: (context.open_transport(), _ScopeDriver())[1],
+        option_specs=(),
+    )
+    monkeypatch.setattr(
+        "wavebench.instruments.factory.resolve_instrument_descriptor",
+        lambda reference, expected_kind: descriptor,
+    )
+
+    def open_rsinstrument(connection, logger, *, select_visa=None):
+        captured["select_visa"] = select_visa
+        captured["resource"] = connection.resource
+        return object()
+
+    monkeypatch.setattr(
+        "wavebench.instruments.factory.RsInstrumentTransport.open",
+        open_rsinstrument,
+    )
+
+    open_instrument_driver(
+        driver_reference="example.scope",
+        expected_kind="scope",
+        resource="TCPIP::192.0.2.40::INSTR",
+        configured_backend=configured_backend,
+        timeout_ms=1000,
+        opc_timeout_ms=2000,
+        read_retry_attempts=1,
+        read_retry_delay_ms=10,
+        logger=CommandLogger(),
+    )
+
+    assert captured["select_visa"] == expected_select_visa
+    expected_resource = (
+        "TCPIP::192.0.2.40::5025::SOCKET"
+        if configured_backend == "rsinstrument-socket"
+        else "TCPIP::192.0.2.40::INSTR"
+    )
+    assert captured["resource"] == expected_resource
+
+
+@pytest.mark.parametrize(
+    ("configured_resource", "opened_resource"),
+    [
+        (
+            "TCPIP::192.0.2.40::5025::SOCKET",
+            "TCPIP::192.0.2.40::5025::SOCKET",
+        ),
+        (
+            "tcpip0::scope.example::6000::socket",
+            "TCPIP::scope.example::6000::SOCKET",
+        ),
+    ],
+)
+def test_core_factory_preserves_explicit_socketio_endpoint(
+    monkeypatch,
+    configured_resource,
+    opened_resource,
+):
+    captured = {}
+    descriptor = make_descriptor(
+        backends=("rsinstrument-socket",),
+        factory=lambda context: (context.open_transport(), _ScopeDriver())[1],
+        option_specs=(),
+    )
+    monkeypatch.setattr(
+        "wavebench.instruments.factory.resolve_instrument_descriptor",
+        lambda reference, expected_kind: descriptor,
+    )
+
+    def open_rsinstrument(connection, logger, *, select_visa=None):
+        captured["resource"] = connection.resource
+        captured["select_visa"] = select_visa
+        return object()
+
+    monkeypatch.setattr(
+        "wavebench.instruments.factory.RsInstrumentTransport.open",
+        open_rsinstrument,
+    )
+
+    open_instrument_driver(
+        driver_reference="example.scope",
+        expected_kind="scope",
+        resource=configured_resource,
+        configured_backend="lan",
+        timeout_ms=1000,
+        opc_timeout_ms=2000,
+        read_retry_attempts=1,
+        read_retry_delay_ms=10,
+        logger=CommandLogger(),
+    )
+
+    assert captured == {
+        "resource": opened_resource,
+        "select_visa": "socketio",
+    }
+
+
+@pytest.mark.parametrize(
+    "resource",
+    [
+        "TCPIP::scope.example::inst0::INSTR",
+        "TCPIP::scope.example::0::SOCKET",
+        "TCPIP::scope.example::65536::SOCKET",
+    ],
+)
+def test_core_factory_rejects_unsupported_socketio_resource(monkeypatch, resource):
+    descriptor = make_descriptor(
+        backends=("rsinstrument-socket",),
+        factory=lambda context: (context.open_transport(), _ScopeDriver())[1],
+        option_specs=(),
+    )
+    monkeypatch.setattr(
+        "wavebench.instruments.factory.resolve_instrument_descriptor",
+        lambda reference, expected_kind: descriptor,
+    )
+
+    with pytest.raises(ConfigError, match="SocketIO"):
+        open_instrument_driver(
+            driver_reference="example.scope",
+            expected_kind="scope",
+            resource=resource,
+            configured_backend="lan",
+            timeout_ms=1000,
+            opc_timeout_ms=2000,
+            read_retry_attempts=1,
+            read_retry_delay_ms=10,
+            logger=CommandLogger(),
+        )
+
+
+def test_core_factory_keeps_plain_rsinstrument_compatibility_path(monkeypatch):
+    transport = object()
+    descriptor = make_descriptor(
+        backends=(
+            "rsinstrument-socket",
+            "rsinstrument",
+            "rsinstrument-rsvisa",
+            "rsinstrument-pyvisa-py",
+        ),
+        factory=lambda context: (context.open_transport(), _ScopeDriver())[1],
+        option_specs=(),
+    )
+    monkeypatch.setattr(
+        "wavebench.instruments.factory.resolve_instrument_descriptor",
+        lambda reference, expected_kind: descriptor,
+    )
+    monkeypatch.setattr(
+        "wavebench.instruments.factory.RsInstrumentTransport.open",
+        lambda connection, logger: transport,
+    )
+
+    opened = open_instrument_driver(
+        driver_reference="example.scope",
+        expected_kind="scope",
+        resource="TCPIP::192.0.2.40::INSTR",
+        configured_backend="rsinstrument",
+        timeout_ms=1000,
+        opc_timeout_ms=2000,
+        read_retry_attempts=1,
+        read_retry_delay_ms=10,
+        logger=CommandLogger(),
+    )
+
+    assert opened.driver.__class__ is _ScopeDriver
+
+
 def test_core_factory_rejects_explicit_serial_for_lan_only_driver(monkeypatch):
     descriptor = make_descriptor(backends=("pyvisa",), option_specs=())
     monkeypatch.setattr(

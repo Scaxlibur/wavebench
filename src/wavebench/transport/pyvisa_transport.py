@@ -84,10 +84,19 @@ class PyVisaTransport:
         self.logger.record("response", response)
         return response
 
-    def query_float_list(self, command: str) -> list[float]:
+    def query_float_list(
+        self,
+        command: str,
+        *,
+        timeout_ms: int | None = None,
+    ) -> list[float]:
         self.logger.record("query", command)
         started = time.perf_counter()
+        original_timeout = None
         try:
+            if timeout_ms is not None:
+                original_timeout = self.session.timeout
+                self.session.timeout = timeout_ms
             values = self._parse_ascii_float_list(self.session.query(command))
         except Exception as exc:
             self._record_query_telemetry(
@@ -97,6 +106,9 @@ class PyVisaTransport:
                 replay="disabled",
             )
             raise self._nonreplayable_query_error("query_float_list", command, exc) from exc
+        finally:
+            if timeout_ms is not None:
+                self.session.timeout = original_timeout
         self.logger.record("response", f"<float_list len={len(values)}>")
         self._record_query_telemetry(
             operation="query_float_list",

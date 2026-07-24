@@ -65,6 +65,28 @@ max_chunk_points = 250000
 
 旧 alias `ds1104` 与 `ds1000z` 在试点期继续选择 WaveBench 内置 fallback，不会被外部包覆盖。这样卸载插件后旧配置仍可工作；要验证外部 wheel，必须使用 canonical `rigol.ds1000z`。
 
+RTM2000 外置插件 0.2+ 在 `backend = "lan"` 时默认使用 RsInstrument SocketIO，避开
+VXI-11 的接收分块限制；RIGOL 插件的 `lan` 仍解析为 PyVISA。需要诊断兼容路径时，可把
+全局 `[connection].backend` 显式设为 `rsinstrument`、`rsinstrument-rsvisa` 或
+`rsinstrument-pyvisa-py`，并重新打开会话。后端切换不会在波形读取失败后自动发生，避免
+对部分消费的仪器响应做不安全重放。RTM 的 `MAX` / `DMAX` 传输上限可单独配置：
+
+```toml
+[scope.options]
+long_waveform_timeout_ms = 300000
+```
+
+该值不改变普通 SCPI、`DEF` 或 `*OPC?` 的 timeout。
+
+为保持现有配置可用，SocketIO 路径会把简单的 `TCPIP::<host>::INSTR` 规范化为
+`TCPIP::<host>::5025::SOCKET`。非默认端口应显式写成
+`TCPIP::<host>::<port>::SOCKET`；包含 `inst0` 等设备名的复杂 VXI-11 resource 不会被猜测
+转换，需要显式选择 VISA 后端。
+
+SocketIO 会话为 binary block 写入追加 SCPI 终止符，并把发送分块限制为 512 bytes。前者是
+RTM 执行 `SYST:SET <488.2 block>` 所必需；后者避免把完整设置块交给单次 raw socket send。
+这些选项不施加到 VXI-11、RsVisa 或 pyvisa-py 会话。
+
 ## 升级与卸载
 
 升级与降级都要求提供明确的本地源码目录或 wheel，并按目标版本相对当前受管版本的方向进行校验：

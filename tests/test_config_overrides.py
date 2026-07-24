@@ -6,6 +6,45 @@ from wavebench.config import AutoscaleConfig, ConnectionConfig, DmmConfig, Outpu
 
 
 class ConfigOverrideTests(unittest.TestCase):
+    def test_loads_explicit_rsinstrument_scope_backends(self):
+        for backend in (
+            "rsinstrument-socket",
+            "rsinstrument",
+            "rsinstrument-rsvisa",
+            "rsinstrument-pyvisa-py",
+        ):
+            with self.subTest(backend=backend), tempfile.TemporaryDirectory() as tmp:
+                path = Path(tmp) / "wavebench.toml"
+                path.write_text(
+                    f'''\
+[connection]
+backend = "{backend}"
+resource = "TCPIP::192.0.2.40::INSTR"
+[scope]
+''',
+                    encoding="utf-8",
+                )
+
+                config = load_config(path)
+
+                self.assertEqual(config.connection.backend, backend)
+
+    def test_rejects_unknown_scope_backend(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "wavebench.toml"
+            path.write_text(
+                '''
+[connection]
+backend = "socket"
+resource = "TCPIP::192.0.2.40::INSTR"
+[scope]
+''',
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(Exception, "connection.backend must be one of"):
+                load_config(path)
+
     def test_output_overrides_disable_csv_only(self):
         config = WaveBenchConfig(
             connection=ConnectionConfig("lan", "TCPIP::127.0.0.1::INSTR", 100, 100),

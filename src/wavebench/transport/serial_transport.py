@@ -115,7 +115,12 @@ class SerialTransport:
         self.logger.record("response", response)
         return response
 
-    def query_float_list(self, command: str) -> list[float]:
+    def query_float_list(
+        self,
+        command: str,
+        *,
+        timeout_ms: int | None = None,
+    ) -> list[float]:
         response = self.query(command)
         return [float(item) for item in response.replace(";", ",").split(",") if item.strip()]
 
