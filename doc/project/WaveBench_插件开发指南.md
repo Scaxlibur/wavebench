@@ -68,6 +68,7 @@ def descriptor():
         capabilities=("scope.idn", "scope.capture_waveform"),
         idn_patterns=("EXAMPLE,EX1",),
         backends=("pyvisa",),
+        resource_schemes=("tcpip",),
         option_specs=(OptionSpec("block_points", int, default=250000, minimum=1),),
         permissions=("instrument.io", "configured-resource-only"),
         factory=_open_driver,
@@ -77,7 +78,7 @@ def descriptor():
     )
 ```
 
-descriptor 至少声明 canonical ID、kind、API/兼容版本、厂商/型号、capability、IDN pattern、backend、受限选项、权限提示和 factory。当前 V2 外置插件必须使用 `aliases=()`；scope 插件还应准确声明 coupling policy，无法证明输入安全语义时保留 `unknown`，核心会默认拒绝采集。
+descriptor 至少声明 canonical ID、kind、API/兼容版本、厂商/型号、capability、IDN pattern、backend、受限选项、权限提示和 factory。仅允许特定 VISA 接口类型的插件还应声明 `resource_schemes`；例如 LAN-only 插件使用 `("tcpip",)`，核心会在打开 transport 前拒绝 `ASRL`、`USB`、`GPIB` 等资源。空 tuple 表示不限制，适用于必须保留多种连接方式的内置兼容实现。当前 V2 外置插件必须使用 `aliases=()`；scope 插件还应准确声明 coupling policy，无法证明输入安全语义时保留 `unknown`，核心会默认拒绝采集。
 
 需要支持重复 `--channel` 的 scope 插件还必须声明 `scope.capture_waveforms` 并实现同名方法。该方法的语义固定为：先配置全部目标通道，只执行一次 acquisition / OPC 等待，再逐通道读取；不得静默退回逐通道重复触发。不声明该能力的插件仍可执行单通道 `scope.capture_waveform`，多通道操作会在打开 transport 前明确拒绝。
 
@@ -128,7 +129,7 @@ factory 返回对象缺少已声明 capability 对应的方法时，核心会拒
 
 DS1000Z 试点保留内置 fallback，因此旧配置 alias `ds1104` / `ds1000z` 继续选择内置实现；安装试点 wheel 后，使用 canonical `rigol.ds1000z` 才会显式选择外部包。这避免外部包覆盖内置 alias，也便于卸载后安全恢复。
 
-迁移槽位是核心内置的窄白名单，不是插件可自行请求的权限。首个槽位只允许 distribution `wavebench-rigol-dg4000` 通过 canonical ID `rigol.dg4202` 接管同名内置实现；短 alias `dg4202` 始终选择内置 fallback，卸载外置包后 canonical ID 也恢复到内置实现。distribution、canonical ID 或 alias 任一不匹配都会按普通冲突拒绝。
+迁移槽位是核心内置的窄白名单，不是插件可自行请求的权限。当前允许 `wavebench-rigol-dg4000` 通过 canonical ID `rigol.dg4202` 接管同名内置实现；短 alias `dg4202` 始终选择内置 fallback。`wavebench-rigol-dm3000` 也可通过 canonical ID `rigol.dm3000` 接管 LAN-only 实现；短 alias `dm3000` / `dm3058` 始终保留内置 serial + PyVISA fallback。卸载外置包后 canonical ID 均恢复到内置实现。distribution、canonical ID 或 alias 任一不匹配都会按普通冲突拒绝。
 
 ## 测试门槛
 

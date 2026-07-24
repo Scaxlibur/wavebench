@@ -42,7 +42,7 @@ WaveBench 的受管插件命令只允许在当前 venv 中运行，拒绝系统 
 
 当前 V2 外置插件只接受 entry point 对应的 canonical ID，不解析插件自定义 alias。除 WaveBench 核心显式列出的迁移槽位外，外置插件不能覆盖内置 canonical ID 或 alias。
 
-迁移槽位按 canonical ID 与 distribution 双重白名单控制。例如安装受支持的 `wavebench-rigol-dg4000` 后，显式 canonical `rigol.dg4202` 选择外置实现，短 alias `dg4202` 仍选择内置兼容实现；卸载外置包后 canonical 也自动回退到内置实现。其他同名覆盖请求仍会被安装器拒绝。
+迁移槽位按 canonical ID 与 distribution 双重白名单控制。例如安装受支持的 `wavebench-rigol-dg4000` 后，显式 canonical `rigol.dg4202` 选择外置实现，短 alias `dg4202` 仍选择内置兼容实现；安装 `wavebench-rigol-dm3000` 后，显式 canonical `rigol.dm3000` 选择 LAN-only 外置实现，且 descriptor 的 `resource_schemes=("tcpip",)` 会在 transport 打开前拒绝 `ASRL`、`USB` 和 `GPIB` VISA resource。短 alias `dm3000` / `dm3058` 保留内置的 serial + PyVISA 兼容实现。卸载外置包后 canonical 均自动回退到内置实现。其他同名覆盖请求仍会被安装器拒绝。
 
 ## 配置
 
@@ -85,7 +85,7 @@ max_chunk_points = 250000
 
 只有能证明环境处于精确旧态或精确目标态时才会自动恢复；状态不唯一时会停止并要求人工检查。不要通过手工删除账本或 journal 来掩盖未知状态。
 
-卸载后使用 canonical `rigol.ds1000z` 的配置会给出“driver 未安装”提示。可重新安装固定版本，或把配置改回受支持的内置 alias `ds1104` / `ds1000z`。
+卸载 `wavebench-rigol-dg4000` 或 `wavebench-rigol-dm3000` 后，对应已迁移的 canonical ID 会自动恢复为内置实现。DS1000Z 的 `rigol.ds1000z` 是独立插件 canonical ID，卸载后会提示 driver 未安装；可重新安装固定版本，或把配置改为内置 alias `ds1104` / `ds1000z`。其余内置兼容路径为 DG4000 的 `dg4202` 和 DM3000/DM3058 的 `dm3000` / `dm3058`；其中只有 DM3000 内置 alias 保留 serial backend。
 
 ## 常见问题
 
