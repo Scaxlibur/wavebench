@@ -11,11 +11,11 @@ from wavebench.logging import CommandLogger
 
 class FakeEntryPoint:
     group = "wavebench.instruments"
-    dist = None
 
-    def __init__(self, name, loaded):
+    def __init__(self, name, loaded, *, dist=None):
         self.name = name
         self.loaded = loaded
+        self.dist = dist
         self.load_count = 0
 
     def load(self):
@@ -28,6 +28,14 @@ class FakeEntryPoint:
 class FakeEntryPoints(list):
     def select(self, *, group):
         return [item for item in self if item.group == group]
+
+
+class FakeDistribution:
+    def __init__(self, root):
+        self.root = root
+
+    def locate_file(self, path):
+        return self.root / path
 
 
 def make_descriptor(driver_id="example.scope", **changes):
@@ -99,6 +107,30 @@ def test_registry_does_not_load_unselected_entry_points(monkeypatch):
     assert descriptor.driver_id == "example.scope"
     assert selected.load_count == 1
     assert broken.load_count == 0
+
+
+def test_registry_ignores_entry_points_from_another_environment(monkeypatch, tmp_path):
+    environment = tmp_path / "current-venv"
+    local = FakeEntryPoint(
+        "local.scope",
+        make_descriptor(driver_id="local.scope"),
+        dist=FakeDistribution(environment / "lib/python/site-packages"),
+    )
+    inherited = FakeEntryPoint(
+        "inherited.scope",
+        make_descriptor(driver_id="inherited.scope"),
+        dist=FakeDistribution(tmp_path / "parent-venv/lib/python/site-packages"),
+    )
+    monkeypatch.setattr(
+        "wavebench.instruments.registry.entry_points",
+        lambda: FakeEntryPoints([local, inherited]),
+    )
+    monkeypatch.setattr("wavebench.instruments.registry.sys.prefix", str(environment))
+
+    registry = build_instrument_registry()
+
+    assert registry.has_reference("local.scope")
+    assert not registry.has_reference("inherited.scope")
 
 
 def test_selected_entry_point_failures_are_actionable_and_isolated():

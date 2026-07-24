@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from importlib.metadata import EntryPoint, entry_points
+from pathlib import Path
 import re
+import sys
 
 from packaging.utils import canonicalize_name
 
@@ -282,8 +284,23 @@ def _entry_point_distribution(
 def _select_instrument_entry_points() -> list[EntryPoint]:
     discovered = entry_points()
     if hasattr(discovered, "select"):
-        return list(discovered.select(group=ENTRY_POINT_GROUP))
-    return list(discovered.get(ENTRY_POINT_GROUP, ()))
+        selected = discovered.select(group=ENTRY_POINT_GROUP)
+    else:
+        selected = discovered.get(ENTRY_POINT_GROUP, ())
+    return [item for item in selected if _entry_point_belongs_to_current_environment(item)]
+
+
+def _entry_point_belongs_to_current_environment(entry_point: EntryPoint) -> bool:
+    distribution = getattr(entry_point, "dist", None)
+    if distribution is None:
+        return True
+    try:
+        distribution_root = Path(distribution.locate_file("")).resolve()
+        environment_root = Path(sys.prefix).resolve()
+        distribution_root.relative_to(environment_root)
+    except (AttributeError, OSError, TypeError, ValueError):
+        return False
+    return True
 
 
 def _version_tuple(value: str) -> tuple[int, ...]:
