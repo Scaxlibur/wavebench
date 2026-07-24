@@ -141,7 +141,7 @@ class CliTests(unittest.TestCase):
             "--timeout-ms",
             "500",
             "--discover-subnet",
-            "192.168.1.0/24",
+            "192.0.2.0/24",
             "--discover-ports",
             "5025,111",
             "--discover-timeout-ms",
@@ -155,7 +155,7 @@ class CliTests(unittest.TestCase):
         self.assertEqual(args.domain, "doctor")
         self.assertEqual(args.config, "bench.toml")
         self.assertEqual(args.timeout_ms, 500)
-        self.assertEqual(args.discover_subnet, "192.168.1.0/24")
+        self.assertEqual(args.discover_subnet, "192.0.2.0/24")
         self.assertEqual(args.discover_ports, "5025,111")
         self.assertEqual(args.discover_timeout_ms, 300)
         self.assertEqual(args.discover_workers, 8)
@@ -167,7 +167,7 @@ class CliTests(unittest.TestCase):
             severity = "error"
             target = "scope"
             driver = "rtm2032"
-            resource = "TCPIP::192.168.1.115::INSTR"
+            resource = "TCPIP::192.0.2.115::INSTR"
             idn = None
             message = "no *IDN? response / 没有 *IDN? 响应"
             suggestion = "check cable / 检查网线"
@@ -405,7 +405,7 @@ max_source_vpp = 2.0
             "sweep", "discrete",
             "--source-channel", "2",
             "--scope-channel", "1",
-            "--source-resource", "TCPIP::192.168.123.3::INSTR",
+            "--source-resource", "TCPIP::198.51.100.3::INSTR",
             "--frequencies", "1000,2000,5000",
             "--target-cycles", "8",
             "--frequency-tolerance", "0.02",
@@ -418,7 +418,7 @@ max_source_vpp = 2.0
         self.assertEqual(args.command, "discrete")
         self.assertEqual(args.source_channel, 2)
         self.assertEqual(args.scope_channel, 1)
-        self.assertEqual(args.source_resource, "TCPIP::192.168.123.3::INSTR")
+        self.assertEqual(args.source_resource, "TCPIP::198.51.100.3::INSTR")
         self.assertEqual(args.frequencies, "1000,2000,5000")
         self.assertEqual(args.target_cycles, 8.0)
         self.assertEqual(args.frequency_tolerance, 0.02)
@@ -776,7 +776,7 @@ max_source_vpp = 2.0
     def test_net_discover_accepts_scan_options(self):
         args = build_parser().parse_args([
             "net", "discover",
-            "--subnet", "192.168.1.0/24",
+            "--subnet", "192.0.2.0/24",
             "--ports", "5025,5555,111",
             "--timeout-ms", "200",
             "--workers", "8",
@@ -787,7 +787,7 @@ max_source_vpp = 2.0
         ])
         self.assertEqual(args.domain, "net")
         self.assertEqual(args.command, "discover")
-        self.assertEqual(args.subnet, "192.168.1.0/24")
+        self.assertEqual(args.subnet, "192.0.2.0/24")
         self.assertEqual(args.ports, "5025,5555,111")
         self.assertEqual(args.timeout_ms, 200)
         self.assertEqual(args.workers, 8)
@@ -798,12 +798,12 @@ max_source_vpp = 2.0
 
     def test_net_discover_prints_results(self):
         class StubResult:
-            address = "192.168.1.161"
+            address = "192.0.2.161"
             port = 5025
             status = "idn"
             protocol = "scpi-socket"
             source = "network"
-            resource = "TCPIP::192.168.1.161::5025::SOCKET"
+            resource = "TCPIP::192.0.2.161::5025::SOCKET"
             idn = "RIGOL TECHNOLOGIES,DP832,DP8A000000000,00.01.16"
             note = ""
 
@@ -811,12 +811,12 @@ max_source_vpp = 2.0
         with patch("wavebench.cli.discover_instruments", return_value=[StubResult()]):
             with redirect_stdout(stdout):
                 code = main([
-                    "net", "discover", "--subnet", "192.168.1.0/24", "--timeout-ms", "10", "--no-visa"
+                    "net", "discover", "--subnet", "192.0.2.0/24", "--timeout-ms", "10", "--no-visa"
                 ])
         self.assertEqual(code, 0)
         output = stdout.getvalue()
         self.assertIn("address	port	status	protocol", output)
-        self.assertIn("192.168.1.161", output)
+        self.assertIn("192.0.2.161", output)
         self.assertIn("RIGOL TECHNOLOGIES,DP832", output)
 
 

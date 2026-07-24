@@ -304,6 +304,9 @@ if _TEXTUAL_IMPORT_ERROR is None:
             close_dmm = getattr(self.dmm_adapter, "close", None)
             if close_dmm is not None:
                 close_dmm()
+            close_source = getattr(self.source_adapter, "close", None)
+            if close_source is not None:
+                close_source()
             self._append_persistent_log_line("TUI session stopping / TUI 会话停止")
             self.exit()
 

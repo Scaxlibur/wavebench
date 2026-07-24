@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "wavebench"
-version = "0.7.0"
+version = "0.8.0"
 description = "Lightweight VISA/SCPI measurement bench for contest debugging"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -18,6 +18,12 @@ tui = ["textual>=0.86.0"]
 
 [project.scripts]
 wavebench = "wavebench.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/wavebench"]
+
+[tool.hatch.build.targets.sdist]
+exclude = ["/doc/instruments"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]

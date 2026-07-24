@@ -14,11 +14,11 @@ from wavebench.discovery import DiscoveryResult
 from wavebench.doctor import doctor_records, has_doctor_errors
 
 
-def make_config(*, source_resource="TCPIP::192.168.1.127::INSTR"):
+def make_config(*, source_resource="TCPIP::192.0.2.127::INSTR"):
     return WaveBenchConfig(
         connection=ConnectionConfig(
             backend="lan",
-            resource="TCPIP::192.168.1.115::INSTR",
+            resource="TCPIP::192.0.2.115::INSTR",
             timeout_ms=1000,
             opc_timeout_ms=30000,
         ),
@@ -54,8 +54,8 @@ def make_config(*, source_resource="TCPIP::192.168.1.127::INSTR"):
 
 def test_doctor_reports_configured_instruments_ok():
     idns = {
-        "TCPIP::192.168.1.115::INSTR": "Rohde&Schwarz,RTM2032,123,06.010",
-        "TCPIP::192.168.1.127::INSTR": "Rigol Technologies,DG4202,DG4E,00.01.14",
+        "TCPIP::192.0.2.115::INSTR": "Rohde&Schwarz,RTM2032,123,06.010",
+        "TCPIP::192.0.2.127::INSTR": "Rigol Technologies,DG4202,DG4E,00.01.14",
     }
 
     records = doctor_records(make_config(), idn_probe=lambda resource, timeout_ms: idns.get(resource))
@@ -89,22 +89,22 @@ def test_doctor_reports_idn_mismatch_as_warning():
 
 def test_doctor_appends_candidate_for_unreachable_matching_idn():
     def discoverer(**kwargs):
-        assert kwargs["subnet"] == "192.168.1.0/24"
+        assert kwargs["subnet"] == "192.0.2.0/24"
         return [
             DiscoveryResult(
-                address="192.168.1.225",
+                address="192.0.2.225",
                 port=None,
                 protocol="visa",
-                resource="TCPIP::192.168.1.225::INSTR",
+                resource="TCPIP::192.0.2.225::INSTR",
                 source="network",
                 status="idn",
                 idn="Rigol Technologies,DG4202,DG4E,00.01.14",
             ),
             DiscoveryResult(
-                address="192.168.1.226",
+                address="192.0.2.226",
                 port=None,
                 protocol="visa",
-                resource="TCPIP::192.168.1.226::INSTR",
+                resource="TCPIP::192.0.2.226::INSTR",
                 source="network",
                 status="idn",
                 idn="Rohde&Schwarz,RTM2032,123,06.010",
@@ -114,14 +114,14 @@ def test_doctor_appends_candidate_for_unreachable_matching_idn():
     records = doctor_records(
         make_config(),
         idn_probe=lambda resource, timeout_ms: None,
-        discover_subnet="192.168.1.0/24",
+        discover_subnet="192.0.2.0/24",
         discoverer=discoverer,
     )
 
     candidates = [record for record in records if record.severity == "candidate"]
     assert [(record.target, record.resource) for record in candidates] == [
-        ("scope", "TCPIP::192.168.1.226::INSTR"),
-        ("source", "TCPIP::192.168.1.225::INSTR"),
+        ("scope", "TCPIP::192.0.2.226::INSTR"),
+        ("source", "TCPIP::192.0.2.225::INSTR"),
     ]
 
 
@@ -129,13 +129,13 @@ def test_doctor_does_not_suggest_candidate_for_healthy_target():
     records = doctor_records(
         make_config(),
         idn_probe=lambda resource, timeout_ms: "Rigol Technologies,DG4202,DG4E,00.01.14",
-        discover_subnet="192.168.1.0/24",
+        discover_subnet="192.0.2.0/24",
         discoverer=lambda **kwargs: [
             DiscoveryResult(
-                address="192.168.1.225",
+                address="192.0.2.225",
                 port=None,
                 protocol="visa",
-                resource="TCPIP::192.168.1.225::INSTR",
+                resource="TCPIP::192.0.2.225::INSTR",
                 source="network",
                 status="idn",
                 idn="Rigol Technologies,DG4202,DG4E,00.01.14",

@@ -123,13 +123,13 @@ data/
 如果用户传参：
 
 ```bash
-wavebench scope capture --out D:\WaveBenchData
+wavebench scope capture --out data/captures
 ```
 
 则采集包放入指定目录下：
 
 ```text
-D:\WaveBenchData\20260429_011530_ch1\
+data/captures/20260429_011530_ch1/
 ```
 
 ## CSV 文件

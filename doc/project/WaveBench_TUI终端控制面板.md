@@ -1,6 +1,14 @@
 # WaveBench TUI 终端控制面板
 
-WaveBench TUI 是实验性的终端控制面板，用于在实验台前快速查看和操作常用仪器。它不是图形 GUI，也不是 LabVIEW 式流程编排器。
+WaveBench TUI 是可选的实验性终端控制面板，用于在实验台前快速查看和操作常用仪器。它不是图形 GUI，也不是 LabVIEW 式流程编排器。
+
+TUI 通过 `wavebench[tui]` optional extra 提供。源码环境先安装界面依赖：
+
+```text
+python -m pip install -e ".[tui]"
+```
+
+产品范围冻结为现有的电源、万用表和信号源三个面板。新仪器能力默认先进入 CLI、Service 和 run plan；TUI 不扩展为 run-plan 编辑器、插件管理器、完整示波器波形查看器或报告系统。
 
 ## 当前范围
 

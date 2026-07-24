@@ -7,6 +7,9 @@ WaveBench 支持两条互不替代的插件路径：
 
 V2 插件只替换设备差异层。transport 创建、resource、timeout、命令日志、安全限制、Service、run plan 和 artifact 仍由 WaveBench 核心掌握。声明式 SCPI TOML 仍只用于校验和显式只读 IDN probe，不能进入真实执行路径。
 
+> [!IMPORTANT]
+> Instrument API V2 与受管插件生命周期从 `v0.8.0` 起正式提供；配套插件必须声明 `wavebench>=0.8,<0.9`，不能与 `v0.7.0` 配套运行。开发和发布插件时仍应使用同一核心版本完成离线 wheel 与生命周期门禁。
+
 ## 最小目录
 
 独立插件源码仓库中的 DS1000Z 包可作为完整模板；WaveBench 核心仓库不再复制厂商插件源码：
@@ -31,7 +34,7 @@ build-backend = "hatchling.build"
 name = "wavebench-example-scope"
 version = "0.1.0"
 requires-python = ">=3.11"
-dependencies = ["wavebench>=0.7,<1"]
+dependencies = ["wavebench>=0.8,<0.9"]
 
 [project.entry-points."wavebench.instruments"]
 "example.scope" = "wavebench_example_scope:descriptor"
@@ -72,8 +75,8 @@ def descriptor():
         option_specs=(OptionSpec("block_points", int, default=250000, minimum=1),),
         permissions=("instrument.io", "configured-resource-only"),
         factory=_open_driver,
-        wavebench_min_version="0.7.0",
-        wavebench_max_version="1.0.0",
+        wavebench_min_version="0.8.0",
+        wavebench_max_version="0.9.0",
         scope_coupling_policy="unknown",
     )
 ```

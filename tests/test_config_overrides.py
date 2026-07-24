@@ -371,7 +371,7 @@ save_screenshot = false
 
 [source]
 driver = "dg4202"
-resource = "TCPIP::192.168.123.3::INSTR"
+resource = "TCPIP::198.51.100.3::INSTR"
 default_channel = 2
 settle_ms_after_set_frequency = 500
 """, encoding="utf-8")
@@ -418,7 +418,7 @@ save_screenshot = false
 
 [power]
 driver = "dp800"
-resource = "TCPIP::192.168.123.4::INSTR"
+resource = "TCPIP::198.51.100.4::INSTR"
 default_channel = 1
 check_errors = true
 settle_ms_after_set = 2000
@@ -426,12 +426,12 @@ settle_ms_after_output = 1000
 """, encoding="utf-8")
             config = load_config(path)
             self.assertIsNotNone(config.power)
-            self.assertEqual(config.power.resource, "TCPIP::192.168.123.4::INSTR")
+            self.assertEqual(config.power.resource, "TCPIP::198.51.100.4::INSTR")
             self.assertEqual(config.power.default_channel, 1)
             self.assertEqual(config.power.settle_ms_after_set, 2000)
             self.assertEqual(config.power.settle_ms_after_output, 1000)
-            updated = config.with_power_resource("TCPIP::192.168.1.50::INSTR")
-            self.assertEqual(updated.power.resource, "TCPIP::192.168.1.50::INSTR")
+            updated = config.with_power_resource("TCPIP::192.0.2.50::INSTR")
+            self.assertEqual(updated.power.resource, "TCPIP::192.0.2.50::INSTR")
 
 class DmmConfigTests(unittest.TestCase):
     def test_loads_dm3058_serial_line_endings_and_flow_control(self):
@@ -509,7 +509,7 @@ resource = "TCPIP::scope::INSTR"
 [dmm]
 driver = "dm3058"
 backend = "lan"
-resource = "TCPIP::192.168.123.5::INSTR"
+resource = "TCPIP::198.51.100.5::INSTR"
 timeout_ms = 3000
 settle_ms_before_read = 250
 settle_ms_after_function_change = 750
@@ -517,7 +517,7 @@ settle_ms_after_function_change = 750
             config = load_config(path)
             self.assertEqual(config.dmm.driver, "dm3058")
             self.assertEqual(config.dmm.backend, "lan")
-            self.assertEqual(config.dmm.resource, "TCPIP::192.168.123.5::INSTR")
+            self.assertEqual(config.dmm.resource, "TCPIP::198.51.100.5::INSTR")
             self.assertEqual(config.dmm.settle_ms_before_read, 250)
             self.assertEqual(config.dmm.settle_ms_after_function_change, 750)
 
@@ -531,7 +531,7 @@ resource = "TCPIP::scope::INSTR"
 [dmm]
 driver = "dm3058"
 backend = "lan"
-resource = "TCPIP::192.168.123.5::INSTR"
+resource = "TCPIP::198.51.100.5::INSTR"
 settle_ms_before_read = -1
 ''', encoding="utf-8")
             with self.assertRaisesRegex(Exception, "dmm.settle_ms_before_read"):
@@ -547,7 +547,7 @@ resource = "TCPIP::scope::INSTR"
 [dmm]
 driver = "dm3058"
 backend = "lan"
-resource = "TCPIP::192.168.123.5::INSTR"
+resource = "TCPIP::198.51.100.5::INSTR"
 settle_ms_after_function_change = -1
 ''', encoding="utf-8")
             with self.assertRaisesRegex(Exception, "dmm.settle_ms_after_function_change"):
@@ -562,7 +562,7 @@ settle_ms_after_function_change = -1
             output=OutputConfig(Path("data/raw"), "timestamp_label", True, True, True, True, False),
             source_path=Path("test.toml"),
         )
-        updated = config.with_dmm_resource("TCPIP::192.168.123.5::INSTR")
+        updated = config.with_dmm_resource("TCPIP::198.51.100.5::INSTR")
         self.assertEqual(updated.dmm.driver, "dm3058")
         self.assertEqual(updated.dmm.backend, "lan")
 
@@ -576,7 +576,7 @@ settle_ms_after_function_change = -1
             source_path=Path("test.toml"),
             dmm=DmmConfig("dm3000", "/dev/ttyUSB0", "serial", 9600, 8, "N", 1, 1000),
         )
-        updated = config.with_dmm_resource("TCPIP::192.168.123.5::INSTR")
+        updated = config.with_dmm_resource("TCPIP::198.51.100.5::INSTR")
         self.assertEqual(updated.dmm.driver, "dm3058")
         self.assertEqual(updated.dmm.backend, "lan")
 
@@ -590,7 +590,7 @@ settle_ms_after_function_change = -1
             source_path=Path("test.toml"),
             dmm=DmmConfig("dm3058", "TCPIP::old::INSTR", "lan", 9600, 8, "N", 1, 1000, 500, 750),
         )
-        updated = config.with_dmm_resource("TCPIP::192.168.123.5::INSTR")
+        updated = config.with_dmm_resource("TCPIP::198.51.100.5::INSTR")
         self.assertEqual(updated.dmm.settle_ms_before_read, 500)
         self.assertEqual(updated.dmm.settle_ms_after_function_change, 750)
 

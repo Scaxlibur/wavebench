@@ -59,7 +59,7 @@ def _plugin_wheel(
         f"Name: {distribution}\n"
         f"Version: {version}\n"
         "Requires-Python: >=3.11\n"
-        "Requires-Dist: wavebench>=0.7,<1\n\n"
+        "Requires-Dist: wavebench>=0.8,<0.9\n\n"
     ).encode()
     if broken_descriptor:
         package = b"def descriptor():\n    raise RuntimeError('broken descriptor')\n"
@@ -146,7 +146,7 @@ build-backend = "hatchling.build"
 name = "wavebench-source-scope"
 version = "0.1.0"
 requires-python = ">=3.11"
-dependencies = ["wavebench>=0.7,<1"]
+dependencies = ["wavebench>=0.8,<0.9"]
 
 [project.entry-points."wavebench.instruments"]
 "example.source-scope" = "wavebench_source_scope:descriptor"

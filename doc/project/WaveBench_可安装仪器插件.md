@@ -2,14 +2,19 @@
 
 可执行仪器插件是普通 Python wheel，通过 `wavebench.instruments` entry point 接入。它是可信代码扩展，不是安全沙箱；只安装来源和版本都可信的包。
 
+> [!IMPORTANT]
+> 本指南描述 `v0.8.0` 发布的 Instrument API V2 与受管插件生命周期。`v0.7.0` 只有 V1 只读 metadata、声明式 SCPI 检查和本地只读市场索引，不包含 `wavebench.instruments`、`plugin package/install/upgrade/remove/recover` 或覆盖槽位。配套外置插件要求 `wavebench>=0.8,<0.9`，不能与 `v0.7.0` 配套运行。
+
 ## 推荐环境
 
 每套实验环境使用独立 venv，并同时固定 WaveBench 与插件版本：
 
 ```bash
 python -m venv .venv
-.venv/bin/python -m pip install "wavebench==0.7.0"
+.venv/bin/python -m pip install -e ".[dev]"
 ```
+
+上例从 `v0.8.0` 源码树建立开发环境。不要用 `wavebench==0.7.0` 运行本指南中的 V2 插件命令。
 
 WaveBench 的受管插件命令只允许在当前 venv 中运行，拒绝系统 Python。它只接受用户明确指定的本地源码目录或 wheel，不联网、不自动安装依赖，也不修改 `wavebench.toml`。
 

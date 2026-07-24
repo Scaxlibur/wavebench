@@ -8,7 +8,7 @@ from .mcp_http import DEFAULT_MCP_HOST, DEFAULT_MCP_PORT, DEFAULT_MCP_TOKEN_ENV
 
 def add_runtime_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--config", default="wavebench.toml", help="Path to wavebench TOML config")
-    parser.add_argument("--resource", help="Override VISA resource, e.g. TCPIP::192.168.1.100::INSTR")
+    parser.add_argument("--resource", help="Override VISA resource, e.g. TCPIP::192.0.2.100::INSTR")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -266,7 +266,7 @@ def build_parser() -> argparse.ArgumentParser:
         "discover",
         help="Read-only scan for LAN SCPI/VISA instruments / 只读扫描局域网 SCPI/VISA 仪器",
     )
-    net_discover.add_argument("--subnet", required=True, help="Subnet to scan, e.g. 192.168.1.0/24")
+    net_discover.add_argument("--subnet", required=True, help="Subnet to scan, e.g. 192.0.2.0/24")
     net_discover.add_argument(
         "--ports",
         default=",".join(str(port) for port in DEFAULT_DISCOVERY_PORTS),

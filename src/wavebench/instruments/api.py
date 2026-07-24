@@ -74,10 +74,10 @@ class InstrumentDescriptor:
     factory: DriverFactory = field(repr=False, compare=False)
     summary: str = ""
     api_version: str = EXECUTABLE_PLUGIN_API_VERSION
-    wavebench_min_version: str = "0.7.0"
-    wavebench_max_version: str = "1.0.0"
+    wavebench_min_version: str = "0.8.0"
+    wavebench_max_version: str = "0.9.0"
     distribution: str = "wavebench"
-    version: str = "0.7.0"
+    version: str = "0.8.0"
     source: str = "builtin"
     origin: PluginOrigin = "builtin"
     scope_coupling_policy: ScopeCouplingPolicy = "unknown"
