@@ -634,6 +634,7 @@ max_source_vpp = 2.0
         self.assertIn("driver_id=rigol.ds1104", output)
         self.assertIn("aliases=ds1104, ds1000z", output)
         self.assertIn("executable_api=wavebench.instrument.v2", output)
+        self.assertIn("resource_schemes=any", output)
 
     def test_executable_plugin_doctor_loads_descriptors(self):
         stdout = io.StringIO()

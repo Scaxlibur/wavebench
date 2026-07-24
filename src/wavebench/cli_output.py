@@ -104,6 +104,10 @@ def _print_instrument_descriptor(descriptor: InstrumentDescriptor) -> None:
     _print_plugin_info(descriptor.to_metadata())
     print("aliases=" + ", ".join(descriptor.aliases))
     print("backends=" + ", ".join(descriptor.backends))
+    print(
+        "resource_schemes="
+        + (", ".join(descriptor.resource_schemes) if descriptor.resource_schemes else "any")
+    )
     print(f"executable_api={descriptor.api_version}")
     print(
         "wavebench_compat="

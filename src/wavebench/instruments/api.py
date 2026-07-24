@@ -82,6 +82,7 @@ class InstrumentDescriptor:
     origin: PluginOrigin = "builtin"
     scope_coupling_policy: ScopeCouplingPolicy = "unknown"
     config_fields: tuple[str, ...] = ()
+    resource_schemes: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.driver_id or self.driver_id.strip() != self.driver_id:
@@ -96,6 +97,17 @@ class InstrumentDescriptor:
             raise ValueError(f"instrument {self.driver_id!r} must declare capabilities")
         if not self.backends:
             raise ValueError(f"instrument {self.driver_id!r} must declare at least one backend")
+        if any(
+            not scheme
+            or scheme != scheme.strip().lower()
+            or not scheme.replace("-", "").isalnum()
+            for scheme in self.resource_schemes
+        ):
+            raise ValueError(
+                f"instrument {self.driver_id!r} resource schemes must be lowercase tokens"
+            )
+        if len(set(self.resource_schemes)) != len(self.resource_schemes):
+            raise ValueError(f"instrument {self.driver_id!r} has duplicate resource schemes")
         if not callable(self.factory):
             raise TypeError(f"instrument {self.driver_id!r} factory must be callable")
 

@@ -71,6 +71,7 @@ def make_external_dm3000_descriptor(**changes):
         builtin,
         aliases=(),
         backends=("pyvisa",),
+        resource_schemes=("tcpip",),
         **changes,
     )
 
@@ -164,6 +165,7 @@ def test_dm3000_migration_is_lan_only_while_aliases_keep_builtin_fallback():
 
     assert canonical.origin == "entry_point"
     assert canonical.backends == ("pyvisa",)
+    assert canonical.resource_schemes == ("tcpip",)
     assert dm3000_alias.origin == "builtin"
     assert dm3058_alias.origin == "builtin"
     assert dm3000_alias.backends == ("serial", "pyvisa")
@@ -255,6 +257,14 @@ def test_descriptor_validates_restricted_options_and_exports_v1_metadata():
     with pytest.raises(ValueError, match="unknown option"):
         descriptor.validate_options({"raw_scpi": True})
     assert descriptor.to_metadata().driver_id == descriptor.driver_id
+
+
+def test_descriptor_validates_resource_scheme_tokens():
+    assert make_descriptor(resource_schemes=("tcpip",)).resource_schemes == ("tcpip",)
+    with pytest.raises(ValueError, match="resource schemes must be lowercase tokens"):
+        make_descriptor(resource_schemes=("TCPIP",))
+    with pytest.raises(ValueError, match="duplicate resource schemes"):
+        make_descriptor(resource_schemes=("tcpip", "tcpip"))
 
 
 def test_driver_context_exposes_only_fixed_resource_and_transport_factory():
@@ -380,6 +390,94 @@ def test_core_factory_rejects_explicit_serial_for_lan_only_driver(monkeypatch):
             read_retry_delay_ms=10,
             logger=CommandLogger(),
         )
+
+
+@pytest.mark.parametrize("configured_backend", ["lan", "visa", "pyvisa"])
+@pytest.mark.parametrize(
+    "resource",
+    [
+        "ASRL/dev/ttyUSB0::INSTR",
+        "ASRL1::INSTR",
+        "USB0::0x1234::0x5678::INSTR",
+        "GPIB0::10::INSTR",
+    ],
+)
+def test_core_factory_rejects_non_tcpip_visa_resources_for_lan_only_driver(
+    monkeypatch,
+    configured_backend,
+    resource,
+):
+    descriptor = make_descriptor(
+        backends=("pyvisa",),
+        resource_schemes=("tcpip",),
+        option_specs=(),
+    )
+    monkeypatch.setattr(
+        "wavebench.instruments.factory.resolve_instrument_descriptor",
+        lambda reference, expected_kind: descriptor,
+    )
+
+    with pytest.raises(ConfigError, match="resource scheme.*is not supported.*tcpip"):
+        open_instrument_driver(
+            driver_reference="example.scope",
+            expected_kind="scope",
+            resource=resource,
+            configured_backend=configured_backend,
+            timeout_ms=1000,
+            opc_timeout_ms=2000,
+            read_retry_attempts=1,
+            read_retry_delay_ms=10,
+            logger=CommandLogger(),
+        )
+
+
+@pytest.mark.parametrize("configured_backend", ["lan", "visa", "pyvisa"])
+@pytest.mark.parametrize(
+    "resource",
+    ["TCPIP::192.0.2.40::INSTR", "TCPIP0::192.0.2.40::5025::SOCKET"],
+)
+def test_core_factory_accepts_tcpip_resources_for_lan_only_driver(
+    monkeypatch,
+    configured_backend,
+    resource,
+):
+    transport = object()
+
+    class MinimalIdnDriver:
+        def idn(self):
+            return "EXAMPLE,EX1"
+
+        def close(self):
+            pass
+
+    descriptor = make_descriptor(
+        backends=("pyvisa",),
+        resource_schemes=("tcpip",),
+        factory=lambda context: (context.open_transport(), MinimalIdnDriver())[1],
+        option_specs=(),
+    )
+    monkeypatch.setattr(
+        "wavebench.instruments.factory.resolve_instrument_descriptor",
+        lambda reference, expected_kind: descriptor,
+    )
+    monkeypatch.setattr(
+        "wavebench.instruments.factory.PyVisaTransport.open",
+        lambda connection, logger: transport,
+    )
+
+    opened = open_instrument_driver(
+        driver_reference="example.scope",
+        expected_kind="scope",
+        resource=resource,
+        configured_backend=configured_backend,
+        timeout_ms=1000,
+        opc_timeout_ms=2000,
+        read_retry_attempts=1,
+        read_retry_delay_ms=10,
+        logger=CommandLogger(),
+    )
+
+    assert opened.driver.idn() == "EXAMPLE,EX1"
 
 
 def test_core_factory_accepts_minimal_driver_for_declared_capabilities(monkeypatch):

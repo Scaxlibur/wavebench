@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Mapping, cast
 
@@ -44,6 +45,7 @@ def open_instrument_driver(
         expected_kind=expected_kind,
     )
     backend = _select_backend(configured_backend, descriptor.backends)
+    _validate_resource_scheme(resource, descriptor.resource_schemes)
     try:
         validated_options = descriptor.validate_options(options or {})
     except (TypeError, ValueError) as exc:
@@ -108,6 +110,19 @@ def _select_backend(configured_backend: str, supported: tuple[str, ...]) -> str:
         return supported[0]
     raise ConfigError(
         f"configured backend {configured_backend!r} is not supported; "
+        f"driver supports: {', '.join(supported)}"
+    )
+
+
+def _validate_resource_scheme(resource: str, supported: tuple[str, ...]) -> None:
+    if not supported:
+        return
+    match = re.match(r"[A-Za-z]+", resource.strip())
+    configured = match.group(0).lower() if match is not None else "unknown"
+    if configured in supported:
+        return
+    raise ConfigError(
+        f"configured resource scheme {configured!r} is not supported; "
         f"driver supports: {', '.join(supported)}"
     )
 
