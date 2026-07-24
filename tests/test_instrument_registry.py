@@ -97,6 +97,19 @@ def make_external_dp800_descriptor(**changes):
     )
 
 
+def make_external_rtm2032_descriptor(**changes):
+    builtin = build_instrument_registry(include_entry_points=False).resolve(
+        "rohde-schwarz.rtm2032",
+        expected_kind="scope",
+    )
+    changes.setdefault("distribution", "wavebench-rohde-schwarz-rtm2000")
+    return replace(
+        builtin,
+        aliases=(),
+        **changes,
+    )
+
+
 def test_builtin_aliases_and_canonical_ids_resolve_to_same_descriptor():
     registry = build_instrument_registry(include_entry_points=False)
 
@@ -239,6 +252,29 @@ def test_dp800_migration_prefers_external_while_alias_keeps_builtin_fallback():
     assert loaded.load_errors == ()
 
 
+def test_rtm2032_migration_prefers_external_while_alias_keeps_builtin_fallback():
+    entry_point = FakeEntryPoint(
+        "rohde-schwarz.rtm2032",
+        make_external_rtm2032_descriptor(),
+    )
+    registry = InstrumentRegistry(external_entry_points=(entry_point,))
+
+    canonical = registry.resolve("rohde-schwarz.rtm2032", expected_kind="scope")
+    alias = registry.resolve("rtm2032", expected_kind="scope")
+    loaded = registry.load_all()
+
+    assert canonical.origin == "entry_point"
+    assert canonical.distribution == "wavebench-rohde-schwarz-rtm2000"
+    assert alias.origin == "builtin"
+    assert alias.driver_id == "rohde-schwarz.rtm2032"
+    assert [
+        item.origin
+        for item in loaded.descriptors
+        if item.driver_id == "rohde-schwarz.rtm2032"
+    ] == ["entry_point"]
+    assert loaded.load_errors == ()
+
+
 def test_migration_canonical_falls_back_to_builtin_when_external_is_absent():
     descriptor = build_instrument_registry(include_entry_points=False).resolve(
         "rigol.dg4202",
@@ -304,6 +340,20 @@ def test_dp800_migration_slot_rejects_wrong_distribution():
     loaded = InstrumentRegistry(external_entry_points=(entry_point,)).load_all()
 
     matches = [item for item in loaded.descriptors if item.driver_id == "rigol.dp800"]
+    assert [item.origin for item in matches] == ["builtin"]
+    assert len(loaded.load_errors) == 1
+    assert "conflicts with built-in" in loaded.load_errors[0].message
+
+
+def test_rtm2032_migration_slot_rejects_wrong_distribution():
+    descriptor = make_external_rtm2032_descriptor(distribution="not-the-allowed-package")
+    entry_point = FakeEntryPoint("rohde-schwarz.rtm2032", descriptor)
+
+    loaded = InstrumentRegistry(external_entry_points=(entry_point,)).load_all()
+
+    matches = [
+        item for item in loaded.descriptors if item.driver_id == "rohde-schwarz.rtm2032"
+    ]
     assert [item.origin for item in matches] == ["builtin"]
     assert len(loaded.load_errors) == 1
     assert "conflicts with built-in" in loaded.load_errors[0].message

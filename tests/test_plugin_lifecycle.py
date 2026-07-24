@@ -270,6 +270,14 @@ def test_lifecycle_allows_only_the_declared_builtin_migration_canonical(tmp_path
         kind="power",
         capabilities=("power.idn",),
     )
+    rtm2032_migration = _plugin_wheel(
+        tmp_path,
+        version="0.1.0",
+        driver_id="rohde-schwarz.rtm2032",
+        distribution="wavebench-rohde-schwarz-rtm2000",
+        kind="scope",
+        capabilities=("scope.idn",),
+    )
     forbidden = _plugin_wheel(
         tmp_path,
         version="0.1.0",
@@ -281,6 +289,7 @@ def test_lifecycle_allows_only_the_declared_builtin_migration_canonical(tmp_path
     assert lifecycle.install(migration, dry_run=True).status == "would-install"
     assert lifecycle.install(dm3000_migration, dry_run=True).status == "would-install"
     assert lifecycle.install(dp800_migration, dry_run=True).status == "would-install"
+    assert lifecycle.install(rtm2032_migration, dry_run=True).status == "would-install"
     with pytest.raises(ConfigError, match="conflicts with built-in"):
         lifecycle.install(forbidden, dry_run=True)
 
@@ -376,6 +385,37 @@ print(canonical.origin, canonical.distribution, alias.origin, canonical.driver_i
     assert lifecycle.remove("rigol.dp800").status == "removed"
     removed = _run([str(python), "-I", "-c", resolve_script]).stdout.strip()
     assert removed == "builtin wavebench builtin rigol.dp800"
+
+
+def test_rtm2032_migration_install_routes_canonical_and_preserves_alias(tmp_path):
+    python = _target_venv(tmp_path)
+    wheel = _plugin_wheel(
+        tmp_path,
+        version="0.1.0",
+        driver_id="rohde-schwarz.rtm2032",
+        distribution="wavebench-rohde-schwarz-rtm2000",
+        kind="scope",
+        capabilities=("scope.idn",),
+    )
+    lifecycle = PluginLifecycle(python_executable=python)
+    resolve_script = """
+from wavebench.instruments.registry import build_instrument_registry
+registry = build_instrument_registry()
+canonical = registry.resolve('rohde-schwarz.rtm2032', expected_kind='scope')
+alias = registry.resolve('rtm2032', expected_kind='scope')
+print(canonical.origin, canonical.distribution, alias.origin, canonical.driver_id)
+"""
+
+    assert lifecycle.install(wheel).status == "installed"
+    installed = _run([str(python), "-I", "-c", resolve_script]).stdout.strip()
+    assert installed == (
+        "entry_point wavebench-rohde-schwarz-rtm2000 builtin "
+        "rohde-schwarz.rtm2032"
+    )
+
+    assert lifecycle.remove("rohde-schwarz.rtm2032").status == "removed"
+    removed = _run([str(python), "-I", "-c", resolve_script]).stdout.strip()
+    assert removed == "builtin wavebench builtin rohde-schwarz.rtm2032"
 
 
 def test_install_status_and_remove_round_trip(tmp_path):
