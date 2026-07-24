@@ -318,7 +318,11 @@ def test_core_factory_builds_context_and_validates_driver_contract(monkeypatch):
     assert captured["context"].settings == {"check_errors": True}
 
 
-def test_core_factory_maps_generic_lan_to_single_rsinstrument_backend(monkeypatch):
+@pytest.mark.parametrize("configured_backend", ["lan", "visa", "pyvisa"])
+def test_core_factory_maps_lan_backends_to_single_rsinstrument_backend(
+    monkeypatch,
+    configured_backend,
+):
     captured = {}
     transport = object()
 
@@ -341,7 +345,17 @@ def test_core_factory_maps_generic_lan_to_single_rsinstrument_backend(monkeypatc
         lambda connection, logger: transport,
     )
 
-    opened = _open_example_scope()
+    opened = open_instrument_driver(
+        driver_reference="example.scope",
+        expected_kind="scope",
+        resource="configured-resource",
+        configured_backend=configured_backend,
+        timeout_ms=1000,
+        opc_timeout_ms=2000,
+        read_retry_attempts=1,
+        read_retry_delay_ms=10,
+        logger=CommandLogger(),
+    )
 
     assert opened.driver.__class__ is _ScopeDriver
     assert captured == {"backend": "rsinstrument", "transport": transport}

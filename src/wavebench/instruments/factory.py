@@ -101,7 +101,7 @@ def _select_backend(configured_backend: str, supported: tuple[str, ...]) -> str:
     normalized = aliases.get(configured, configured)
     if normalized in supported:
         return normalized
-    if configured == "lan" and len(supported) == 1 and supported[0] in {
+    if configured in {"lan", "visa", "pyvisa"} and len(supported) == 1 and supported[0] in {
         "pyvisa",
         "rsinstrument",
     }:
