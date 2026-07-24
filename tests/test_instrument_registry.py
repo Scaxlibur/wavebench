@@ -318,6 +318,56 @@ def test_core_factory_builds_context_and_validates_driver_contract(monkeypatch):
     assert captured["context"].settings == {"check_errors": True}
 
 
+def test_core_factory_maps_generic_lan_to_single_rsinstrument_backend(monkeypatch):
+    captured = {}
+    transport = object()
+
+    def factory(context):
+        captured["backend"] = context.backend
+        captured["transport"] = context.open_transport()
+        return _ScopeDriver()
+
+    descriptor = make_descriptor(
+        backends=("rsinstrument",),
+        factory=factory,
+        option_specs=(),
+    )
+    monkeypatch.setattr(
+        "wavebench.instruments.factory.resolve_instrument_descriptor",
+        lambda reference, expected_kind: descriptor,
+    )
+    monkeypatch.setattr(
+        "wavebench.instruments.factory.RsInstrumentTransport.open",
+        lambda connection, logger: transport,
+    )
+
+    opened = _open_example_scope()
+
+    assert opened.driver.__class__ is _ScopeDriver
+    assert captured == {"backend": "rsinstrument", "transport": transport}
+
+
+def test_core_factory_rejects_explicit_serial_for_lan_only_driver(monkeypatch):
+    descriptor = make_descriptor(backends=("pyvisa",), option_specs=())
+    monkeypatch.setattr(
+        "wavebench.instruments.factory.resolve_instrument_descriptor",
+        lambda reference, expected_kind: descriptor,
+    )
+
+    with pytest.raises(ConfigError, match="configured backend 'serial'.*supports: pyvisa"):
+        open_instrument_driver(
+            driver_reference="example.scope",
+            expected_kind="scope",
+            resource="/dev/serial/by-id/example",
+            configured_backend="serial",
+            timeout_ms=1000,
+            opc_timeout_ms=2000,
+            read_retry_attempts=1,
+            read_retry_delay_ms=10,
+            logger=CommandLogger(),
+        )
+
+
 def test_core_factory_accepts_minimal_driver_for_declared_capabilities(monkeypatch):
     class MinimalIdnDriver:
         def idn(self):

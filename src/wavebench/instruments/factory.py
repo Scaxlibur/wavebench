@@ -96,11 +96,15 @@ def open_instrument_driver(
 
 
 def _select_backend(configured_backend: str, supported: tuple[str, ...]) -> str:
+    configured = configured_backend.strip().lower()
     aliases = {"lan": "pyvisa", "visa": "pyvisa", "pyvisa": "pyvisa"}
-    normalized = aliases.get(configured_backend.strip().lower(), configured_backend.strip().lower())
+    normalized = aliases.get(configured, configured)
     if normalized in supported:
         return normalized
-    if len(supported) == 1:
+    if configured == "lan" and len(supported) == 1 and supported[0] in {
+        "pyvisa",
+        "rsinstrument",
+    }:
         return supported[0]
     raise ConfigError(
         f"configured backend {configured_backend!r} is not supported; "
