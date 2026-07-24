@@ -8,5 +8,6 @@ BUILTIN_MIGRATION_DISTRIBUTIONS: Final[Mapping[str, str]] = MappingProxyType(
     {
         "rigol.dg4202": "wavebench-rigol-dg4000",
         "rigol.dm3000": "wavebench-rigol-dm3000",
+        "rigol.dp800": "wavebench-rigol-dp800",
     }
 )

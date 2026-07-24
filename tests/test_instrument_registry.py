@@ -84,6 +84,19 @@ def make_external_dm3000_descriptor(**changes):
     )
 
 
+def make_external_dp800_descriptor(**changes):
+    builtin = build_instrument_registry(include_entry_points=False).resolve(
+        "rigol.dp800",
+        expected_kind="power",
+    )
+    changes.setdefault("distribution", "wavebench-rigol-dp800")
+    return replace(
+        builtin,
+        aliases=(),
+        **changes,
+    )
+
+
 def test_builtin_aliases_and_canonical_ids_resolve_to_same_descriptor():
     registry = build_instrument_registry(include_entry_points=False)
 
@@ -208,6 +221,24 @@ def test_dm3000_migration_is_lan_only_while_aliases_keep_builtin_fallback():
     assert loaded.load_errors == ()
 
 
+def test_dp800_migration_prefers_external_while_alias_keeps_builtin_fallback():
+    entry_point = FakeEntryPoint("rigol.dp800", make_external_dp800_descriptor())
+    registry = InstrumentRegistry(external_entry_points=(entry_point,))
+
+    canonical = registry.resolve("rigol.dp800", expected_kind="power")
+    alias = registry.resolve("dp800", expected_kind="power")
+    loaded = registry.load_all()
+
+    assert canonical.origin == "entry_point"
+    assert canonical.distribution == "wavebench-rigol-dp800"
+    assert alias.origin == "builtin"
+    assert alias.driver_id == "rigol.dp800"
+    assert [item.origin for item in loaded.descriptors if item.driver_id == "rigol.dp800"] == [
+        "entry_point"
+    ]
+    assert loaded.load_errors == ()
+
+
 def test_migration_canonical_falls_back_to_builtin_when_external_is_absent():
     descriptor = build_instrument_registry(include_entry_points=False).resolve(
         "rigol.dg4202",
@@ -261,6 +292,18 @@ def test_dm3000_migration_slot_rejects_wrong_distribution():
     loaded = InstrumentRegistry(external_entry_points=(entry_point,)).load_all()
 
     matches = [item for item in loaded.descriptors if item.driver_id == "rigol.dm3000"]
+    assert [item.origin for item in matches] == ["builtin"]
+    assert len(loaded.load_errors) == 1
+    assert "conflicts with built-in" in loaded.load_errors[0].message
+
+
+def test_dp800_migration_slot_rejects_wrong_distribution():
+    descriptor = make_external_dp800_descriptor(distribution="not-the-allowed-package")
+    entry_point = FakeEntryPoint("rigol.dp800", descriptor)
+
+    loaded = InstrumentRegistry(external_entry_points=(entry_point,)).load_all()
+
+    matches = [item for item in loaded.descriptors if item.driver_id == "rigol.dp800"]
     assert [item.origin for item in matches] == ["builtin"]
     assert len(loaded.load_errors) == 1
     assert "conflicts with built-in" in loaded.load_errors[0].message
