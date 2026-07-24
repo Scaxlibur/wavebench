@@ -137,15 +137,15 @@ factory 返回对象缺少已声明 capability 对应的方法时，核心会拒
 ## ID、alias 与兼容
 
 - 当前 V2 外置插件只支持 canonical ID，不接受 alias；内置 driver 可继续保留兼容 alias。
-- 除核心显式声明的迁移槽位外，外部插件不能覆盖内置 canonical ID 或 alias。
+- 除核心显式声明的可选覆盖槽位外，外部插件不能覆盖内置 canonical ID 或 alias；源码中的历史名称 `migration slot` 不表示内置驱动将被移除。
 - entry point 名与 descriptor `driver_id` 必须一致。
 - `kind` 必须与配置槽位一致。
 - 当前 WaveBench 版本必须落在插件声明的半开兼容区间内。
 - 第一阶段不解决同一 Python 环境中互斥 vendor SDK 依赖；出现真实需求后再评估独立进程或 RPC。
 
-DS1000Z 试点保留内置 fallback，因此旧配置 alias `ds1104` / `ds1000z` 继续选择内置实现；安装试点 wheel 后，使用 canonical `rigol.ds1000z` 才会显式选择外部包。这避免外部包覆盖内置 alias，也便于卸载后安全恢复。
+WaveBench 主包长期预装 RTM2000、DS1000Z、DG4000、DP800 和 DM3000 五个仪器族。DS1000Z 外置包使用独立 canonical `rigol.ds1000z`；配置 alias `ds1104` / `ds1000z` 继续选择内置实现。这避免外部包覆盖内置 alias，也便于卸载后安全恢复。
 
-迁移槽位是核心内置的窄白名单，不是插件可自行请求的权限。当前允许 `wavebench-rigol-dg4000` 通过 canonical ID `rigol.dg4202` 接管同名内置实现；短 alias `dg4202` 始终选择内置 fallback。`wavebench-rigol-dm3000` 也可通过 canonical ID `rigol.dm3000` 接管 LAN-only 实现；短 alias `dm3000` / `dm3058` 始终保留内置 serial + PyVISA fallback。卸载外置包后 canonical ID 均恢复到内置实现。distribution、canonical ID 或 alias 任一不匹配都会按普通冲突拒绝。
+可选覆盖槽位是核心内置的窄白名单，不是插件可自行请求的权限。当前共享 canonical ID 的绑定为：`wavebench-rigol-dg4000` / `rigol.dg4202`、`wavebench-rigol-dm3000` / `rigol.dm3000`、`wavebench-rigol-dp800` / `rigol.dp800`、`wavebench-rohde-schwarz-rtm2000` / `rohde-schwarz.rtm2032`。对应短 alias `dg4202`、`dm3000` / `dm3058`、`dp800`、`rtm2032` 始终选择内置基线；卸载外置包后 canonical ID 恢复到内置实现。distribution、canonical ID 或 alias 任一不匹配都会按普通冲突拒绝。
 
 ## 测试门槛
 

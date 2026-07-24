@@ -4,7 +4,7 @@
 
 WaveBench is a lightweight Python measurement bench for explicit, reproducible control of laboratory instruments. It currently covers oscilloscope capture, signal-generator and power-supply control, digital-multimeter reads, multi-instrument run plans, offline reports, and trusted executable instrument plugins.
 
-The WaveBench distribution includes built-in drivers for the RTM2000/RTM2032, DS1104Z/DS1000Z, DG4000/DG4202, DP800, and DM3000/DM3058 families. First use does not require an external plugin: copy the example configuration and set the real instrument resource. External plugins are explicitly selected optional upgrades or extensions and do not replace the built-in short names used by the example configuration.
+The WaveBench distribution includes built-in drivers for the RTM2000/RTM2032, DS1104Z/DS1000Z, DG4000/DG4202, DP800, and DM3000/DM3058 families. These five families are the permanent bundled baseline: first use does not require an external plugin, and they are not scheduled for removal from the main package. External packages are optional, independently released upgrades or extensions. A narrowly allowlisted package may take over a canonical ID, while built-in short names remain pinned to the bundled implementation and uninstalling the package restores the bundled canonical implementation where the IDs are shared.
 
 > Warning: WaveBench communicates with real laboratory equipment. Review the active configuration, wiring, voltage/current limits, input impedance, and output state before running any command that can change an instrument.
 
@@ -39,7 +39,7 @@ Source-directory inspection executes the package's declared build backend in a s
 
 The local marketplace index remains read-only. It does not download or install plugins.
 
-Executable plugins use canonical IDs and cannot define aliases. Built-in IDs are protected except for narrowly allowlisted migration slots that bind one canonical ID to one distribution. For the DG4000 migration slot, `wavebench-rigol-dg4000` may provide `rigol.dg4202`; the short `dg4202` alias always selects the built-in fallback, and uninstalling the external distribution restores the built-in canonical implementation. DG4000 source plugins may import the stable `DG4000DacBlock` and `DG4000ByteOrder` types from `wavebench.instruments`; waveform loading, normalization, DAC14 encoding, services, and safety policy remain core responsibilities.
+Executable plugins use canonical IDs and cannot define aliases. Built-in IDs are protected except for narrowly allowlisted optional-override slots that bind one canonical ID to one distribution. The current shared-ID slots cover DG4000, DM3000, DP800, and RTM2000. Their built-in short aliases always select the bundled baseline, and uninstalling the external distribution restores the bundled canonical implementation. DS1000Z uses the separate external canonical ID `rigol.ds1000z`; its built-in `ds1104` and `ds1000z` aliases remain available without the package. DG4000 source plugins may import the stable `DG4000DacBlock` and `DG4000ByteOrder` types from `wavebench.instruments`; waveform loading, normalization, DAC14 encoding, services, and safety policy remain core responsibilities. The source code retains the historical term `migration slot` for this allowlist, but it does not imply deprecating the bundled drivers.
 
 ## Safety defaults
 
